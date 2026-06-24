@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UAT Executive Brief</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink:       #0F1117;
+    --ink-mid:   #4A4F5E;
+    --ink-faint: #8A8F9E;
+    --paper:     #F7F8FA;
+    --white:     #FFFFFF;
+    --rule:      #E2E4EA;
+    --accent:    #1C3FAA;
+    --accent-lt: #EEF2FF;
+    --red:       #C0392B;
+    --amber:     #D97706;
+    --green:     #1A7F4B;
+    --red-lt:    #FEF2F2;
+    --amber-lt:  #FFFBEB;
+    --green-lt:  #F0FDF6;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Page wrapper ── */
+  .page {
+    max-width: 860px;
+    margin: 48px auto;
+    background: var(--white);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  /* ── Cover band ── */
+  .cover {
+    background: var(--accent);
+    padding: 48px 56px 40px;
+    position: relative;
+    overflow: hidden;
+  }
+  .cover::after {
+    content: '';
+    position: absolute;
+    right: -60px; top: -60px;
+    width: 340px; height: 340px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.04);
+    pointer-events: none;
+  }
+  .cover-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,.55);
+    margin-bottom: 14px;
+  }
+  .cover h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 42px;
+    font-weight: 400;
+    color: #fff;
+    line-height: 1.15;
+    margin-bottom: 10px;
+  }
+  .cover-sub {
+    font-size: 15px;
+    color: rgba(255,255,255,.65);
+    font-weight: 400;
+  }
+  .cover-meta {
+    margin-top: 32px;
+    display: flex;
+    gap: 32px;
+  }
+  .cover-meta-item { }
+  .cover-meta-item .label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,.45);
+    margin-bottom: 3px;
+  }
+  .cover-meta-item .value {
+    font-size: 15px;
+    color: rgba(255,255,255,.85);
+    font-weight: 500;
+  }
+
+  /* ── Body ── */
+  .body {
+    padding: 48px 56px;
+  }
+
+  /* ── Section ── */
+  .section {
+    margin-bottom: 44px;
+  }
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 18px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .section-header h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 22px;
+    font-weight: 400;
+    color: var(--ink);
+  }
+  .section-header .tag {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  /* ── Purpose callout ── */
+  .callout {
+    background: var(--accent-lt);
+    border-left: 3px solid var(--accent);
+    padding: 16px 20px;
+    border-radius: 0 4px 4px 0;
+    font-size: 15.5px;
+    line-height: 1.65;
+    color: var(--ink);
+  }
+  .callout strong {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* ── Three-week timeline ── */
+  .timeline {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+    margin-top: 4px;
+  }
+  .week-card {
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .week-card-head {
+    background: var(--ink);
+    color: #fff;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+  .week-card-head span {
+    display: block;
+    font-size: 12px;
+    font-weight: 400;
+    color: rgba(255,255,255,.5);
+    letter-spacing: .05em;
+    margin-top: 1px;
+  }
+  .week-card-body {
+    padding: 14px 16px;
+  }
+  .week-item {
+    font-size: 14.5px;
+    color: var(--ink-mid);
+    padding: 5px 0;
+    border-bottom: 1px solid var(--paper);
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    line-height: 1.45;
+  }
+  .week-item:last-child { border-bottom: none; }
+  .week-item::before {
+    content: '→';
+    color: var(--accent);
+    font-size: 13px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  /* ── Deliverables table ── */
+  .deliverables {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 15px;
+  }
+  .deliverables thead tr {
+    background: var(--paper);
+  }
+  .deliverables th {
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .deliverables td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+    line-height: 1.5;
+    color: var(--ink-mid);
+  }
+  .deliverables tr:last-child td { border-bottom: none; }
+  .deliverables td:first-child {
+    font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+    font-size: 14.5px;
+  }
+  .deliverables td:nth-child(3) {
+    white-space: nowrap;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .04em;
+  }
+  .badge-w1 { background: #EEF2FF; color: var(--accent); }
+  .badge-w2 { background: #F0F9FF; color: #0369A1; }
+  .badge-w3 { background: #F0FDF6; color: var(--green); }
+
+  /* ── Sign-off criteria ── */
+  .criteria-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .criterion {
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 14px 16px;
+  }
+  .criterion-title {
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .criterion-title::before {
+    content: '';
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+  .criterion p {
+    font-size: 14px;
+    color: var(--ink-mid);
+    line-height: 1.55;
+  }
+
+  /* ── Defect disposition ── */
+  .defect-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14.5px;
+  }
+  .defect-table th {
+    background: var(--paper);
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .defect-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: middle;
+    color: var(--ink-mid);
+    line-height: 1.4;
+  }
+  .defect-table tr:last-child td { border-bottom: none; }
+  .sev { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 12.5px; font-weight: 600; }
+  .sev-critical { background: var(--red-lt); color: var(--red); }
+  .sev-major    { background: var(--amber-lt); color: var(--amber); }
+  .sev-minor    { background: var(--green-lt); color: var(--green); }
+
+  /* ── Risk box ── */
+  .risk-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .risk-card {
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 14px 16px;
+  }
+  .risk-card-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    margin-bottom: 7px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .risk-card-title.red  { color: var(--red); }
+  .risk-card-title.amber { color: var(--amber); }
+  .risk-card ul {
+    list-style: none;
+    padding: 0;
+  }
+  .risk-card ul li {
+    font-size: 14px;
+    color: var(--ink-mid);
+    padding: 4px 0;
+    border-bottom: 1px solid var(--paper);
+    padding-left: 12px;
+    position: relative;
+    line-height: 1.45;
+  }
+  .risk-card ul li::before {
+    content: '–';
+    position: absolute;
+    left: 0;
+    color: var(--ink-faint);
+  }
+  .risk-card ul li:last-child { border-bottom: none; }
+
+  /* ── Footer ── */
+  .footer {
+    padding: 18px 56px;
+    border-top: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .footer-note {
+    font-size: 13px;
+    color: var(--ink-faint);
+  }
+  .footer-note strong {
+    color: var(--ink-mid);
+    font-weight: 600;
+  }
+
+  @media print {
+    body { background: #fff; }
+    .page { margin: 0; border: none; }
+  }
+
+  @media (max-width: 680px) {
+    .cover, .body { padding: 32px 24px; }
+    .timeline { grid-template-columns: 1fr; }
+    .criteria-grid { grid-template-columns: 1fr; }
+    .risk-row { grid-template-columns: 1fr; }
+    .cover-meta { flex-direction: column; gap: 14px; }
+    .footer { flex-direction: column; gap: 8px; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- COVER -->
+  <div class="cover">
+    <div class="cover-label">Project Governance · Testing Phase</div>
+    <h1>User Acceptance<br>Testing Brief</h1>
+    <div class="cover-sub">Purpose, Execution Plan & Sign-Off Requirements</div>
+    <div class="cover-meta">
+      <div class="cover-meta-item">
+        <div class="label">Duration</div>
+        <div class="value">3 Weeks</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="label">Audience</div>
+        <div class="value">Executive Stakeholders</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="label">Prepared</div>
+        <div class="value">June 2026</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div class="body">
+
+    <!-- PURPOSE -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Purpose</h2>
+        <span class="tag">Why it matters</span>
+      </div>
+      <div class="callout">
+        UAT is the <strong>final validation gate before go-live</strong>. Its job is not to find technical bugs — that is the responsibility of QA. UAT answers one question: <em>does this system do what the business actually needs it to do?</em> It is conducted by business users, not developers. A system that passes every technical test can still fail UAT. Without formal sign-off, there is no accountability trail, no audit evidence, and no defensible basis for release.
+      </div>
+    </div>
+
+    <!-- TIMELINE -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Three-Week Execution Plan</h2>
+        <span class="tag">Schedule</span>
+      </div>
+      <div class="timeline">
+        <div class="week-card">
+          <div class="week-card-head">Week 1 <span>Setup &amp; Kick-off</span></div>
+          <div class="week-card-body">
+            <div class="week-item">Lock scope and out-of-scope list in writing — signed by client</div>
+            <div class="week-item">Agree acceptance criteria per workflow before testing starts</div>
+            <div class="week-item">Validate UAT environment mirrors production</div>
+            <div class="week-item">Load realistic, production-volume test data</div>
+            <div class="week-item">Brief client testers: they validate workflows, not technicalities</div>
+          </div>
+        </div>
+        <div class="week-card">
+          <div class="week-card-head">Week 2 <span>Execution &amp; Triage</span></div>
+          <div class="week-card-body">
+            <div class="week-item">Execute all test scenarios end-to-end in business language</div>
+            <div class="week-item">Track pass / fail / blocked daily</div>
+            <div class="week-item">Triage defects every day; critical ones resolved within the week</div>
+            <div class="week-item">Assign disposition to every open defect: fix, defer, or accept</div>
+            <div class="week-item">No undocumented "we'll fix it later" agreements</div>
+          </div>
+        </div>
+        <div class="week-card">
+          <div class="week-card-head">Week 3 <span>Re-test &amp; Sign-Off</span></div>
+          <div class="week-card-body">
+            <div class="week-item">Re-execute all failed and blocked scenarios after fixes</div>
+            <div class="week-item">Assemble complete sign-off package (see deliverables)</div>
+            <div class="week-item">Formally document any unexecuted tests and the reason</div>
+            <div class="week-item">Hold sign-off meeting — not an email or Slack message</div>
+            <div class="week-item">Obtain named signatures from named approvers</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DELIVERABLES -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Required Deliverables</h2>
+        <span class="tag">Sign-off package</span>
+      </div>
+      <table class="deliverables">
+        <thead>
+          <tr>
+            <th>Deliverable</th>
+            <th>What it must contain</th>
+            <th>When</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Agreed Acceptance Criteria</td>
+            <td>Given / When / Then format per workflow. Measurable and unambiguous — "loads in under 5 seconds," not "system is fast." Client-signed before Week 1 testing begins.</td>
+            <td><span class="badge badge-w1">Week 1</span></td>
+          </tr>
+          <tr>
+            <td>Scope &amp; Out-of-Scope Doc</td>
+            <td>Explicit list of features included and explicitly excluded. Prevents scope disputes and moving goalposts in Week 3.</td>
+            <td><span class="badge badge-w1">Week 1</span></td>
+          </tr>
+          <tr>
+            <td>Test Execution Report</td>
+            <td>Scenarios executed, passed, failed, blocked. Daily progress tracking visible to client throughout Week 2.</td>
+            <td><span class="badge badge-w2">Week 2</span></td>
+          </tr>
+          <tr>
+            <td>Defect Disposition Log</td>
+            <td>Every defect with severity, status, and agreed disposition. Deferred items must have a target sprint and date — not "next release."</td>
+            <td><span class="badge badge-w2">Week 2</span></td>
+          </tr>
+          <tr>
+            <td>Sign-Off Document</td>
+            <td>Release version, environment tested, acceptance criteria pass/fail with evidence, testing summary, known risks, rollback plan, 72-hour monitoring plan. Named approvers with signatures.</td>
+            <td><span class="badge badge-w3">Week 3</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- DEFECT POLICY -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Defect Severity &amp; Disposition Policy</h2>
+        <span class="tag">How to handle open issues at sign-off</span>
+      </div>
+      <table class="defect-table">
+        <thead>
+          <tr>
+            <th>Severity</th>
+            <th>Definition</th>
+            <th>Disposition at Sign-Off</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="sev sev-critical">Critical</span></td>
+            <td>Blocks a core workflow; no viable workaround exists</td>
+            <td>Must be fixed before sign-off. No exceptions.</td>
+          </tr>
+          <tr>
+            <td><span class="sev sev-major">Major</span></td>
+            <td>Impacts a workflow but a documented workaround exists</td>
+            <td>Conditional sign-off with explicit risk acceptance from client stakeholder and a committed fix date.</td>
+          </tr>
+          <tr>
+            <td><span class="sev sev-minor">Minor</span></td>
+            <td>Cosmetic or low-impact; does not affect business outcomes</td>
+            <td>Deferred with a named sprint target. Recorded in disposition log.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SIGN-OFF CRITERIA -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Sign-Off Criteria</h2>
+        <span class="tag">What "done" looks like</span>
+      </div>
+      <div class="criteria-grid">
+        <div class="criterion">
+          <div class="criterion-title">All acceptance criteria met</div>
+          <p>Every agreed Given / When / Then scenario passes, or has a documented, client-approved conditional disposition.</p>
+        </div>
+        <div class="criterion">
+          <div class="criterion-title">Zero open critical defects</div>
+          <p>No blocking issues remain unresolved. All criticals are closed or re-classified with stakeholder agreement.</p>
+        </div>
+        <div class="criterion">
+          <div class="criterion-title">Defect log complete</div>
+          <p>Every defect has a severity, status, and disposition. Nothing is in an undefined state.</p>
+        </div>
+        <div class="criterion">
+          <div class="criterion-title">Unexecuted tests declared</div>
+          <p>Any skipped test cases are explicitly listed with reasons. Client knowingly accepts the untested risk — it is documented.</p>
+        </div>
+        <div class="criterion">
+          <div class="criterion-title">Named approvers sign</div>
+          <p>Business owner, client representative, and QA lead each sign individually. Group approval or email acknowledgement is not sufficient.</p>
+        </div>
+        <div class="criterion">
+          <div class="criterion-title">Rollback plan confirmed</div>
+          <p>A tested rollback procedure is documented and agreed with operations before the sign-off meeting.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- RISK: DIFFICULT CLIENT -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Managing a Difficult Client</h2>
+        <span class="tag">Protective measures</span>
+      </div>
+      <div class="risk-row">
+        <div class="risk-card">
+          <div class="risk-card-title red">Risks to Watch</div>
+          <ul>
+            <li>Scope expansion in Week 3 — prevented by the signed scope document from Week 1</li>
+            <li>Vague refusal ("it's not ready") — counter with: which criterion failed, exactly?</li>
+            <li>Silence treated as acceptance — every disposition requires explicit written agreement</li>
+            <li>Deadline pressure to approve — conditional sign-off exists precisely for this situation</li>
+          </ul>
+        </div>
+        <div class="risk-card">
+          <div class="risk-card-title amber">Non-Negotiable Rules</div>
+          <ul>
+            <li>Never sign off before all scenarios are executed</li>
+            <li>Refused sign-off must cite specific failed criteria — not a general objection</li>
+            <li>Re-sign-off path must be defined in writing: which tests to re-run, by whom</li>
+            <li>"We'll hotfix in production" is not an acceptable resolution strategy</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /body -->
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <div class="footer-note"><strong>Confidential</strong> — For internal and client stakeholder use only</div>
+    <div class="footer-note">UAT Executive Brief · June 2026</div>
+  </div>
+
+</div>
+</body>
+</html>
