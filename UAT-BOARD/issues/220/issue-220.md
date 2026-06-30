@@ -342,15 +342,3 @@ Given the 3-day UAT deadline:
 - [ ] All existing tests pass; new unit tests cover `determineSlaState()` pure function across all four states.
 
 ---
-
-## Key File Reference
-
-| File | Role in the defect |
-|---|---|
-| [alert-priority.service.ts](../case-management-system/backend/src/modules/alert-priority/alert-priority.service.ts) | The original sin — writes `case.priority` from SLA time ratio every cron tick |
-| [alert-priority.task.ts](../case-management-system/backend/src/modules/alert-priority/alert-priority.task.ts) | Cron trigger — default `0 * * * *` (hourly) |
-| [case-priority.util.ts](../case-management-system/backend/src/modules/shared/utils/case-priority.util.ts) | Shared mapper used at both creation and in the cron — must become 3-bucket severity mapper |
-| [schema.prisma:241–245](../case-management-system/backend/prisma/schema.prisma) | `Priority` enum definition; `sla_deadline` / `sla_duration_hours` already present but unused by cron |
-| [report.service.ts:470–491](../case-management-system/backend/src/modules/report/report.service.ts) | Workload report silently re-maps 4-value enum to 3-bucket labels — accidentally correct model, wrong source values |
-| [casesTable.utils.ts:62–69](../case-management-system/frontend/src/features/cases/components/casesTable.utils.ts) | Frontend badge colours hardcoded to `NEW/URGENT/CRITICAL/BREACH` |
-| [CaseFilters.tsx:87–90](../case-management-system/frontend/src/features/cases/components/CaseFilters.tsx) | Frontend filter dropdown hardcoded to `NEW/URGENT/CRITICAL/BREACH` |

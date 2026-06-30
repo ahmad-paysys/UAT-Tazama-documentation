@@ -313,3 +313,5 @@ Per the recommended solution in the issue:
 4. **Retire STATUS_84** — only safe after Track B is in production; needs a migration to handle any existing rows
 
 > **Do not retire `STATUS_84` before Track B ships** — it is currently load-bearing for container closure. Any data migration must also handle existing container `Case` rows (set them to `STATUS_83_CLOSED_INCONCLUSIVE` or archive them before the enum is dropped).
+
+---

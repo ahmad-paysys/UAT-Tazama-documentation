@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Issue #214 — Path 2: Flowable Parallel Join</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #24292e;
+    --h1: #0d1b3e;
+    --h2: #1a3a6b;
+    --h3: #2563a8;
+    --border: #d0d7de;
+    --border-soft: #e1e4e8;
+    --code-bg: #f6f8fa;
+    --table-head-bg: #0d1b3e;
+    --table-head-fg: #ffffff;
+    --table-head-border: #1a3a6b;
+    --row-even: #f3f5f8;
+    --row-odd: #ffffff;
+    --link: #1a3a6b;
+    --link-hover: #2563a8;
+    --bar-bg: #0d1b3e;
+    --bar-fg: #ffffff;
+    --bar-btn-bg: rgba(255,255,255,0.12);
+    --bar-btn-bg-hover: rgba(255,255,255,0.25);
+    --bar-btn-border: rgba(255,255,255,0.25);
+    --bar-btn-active: #2563a8;
+    --details-bg: #fafbfc;
+    --details-border: #d0d7de;
+    --summary-bg: #f3f5f8;
+    --summary-hover: #e9edf2;
+    --badge-green-bg: #d4edda;  --badge-green-fg: #155724;  --badge-green-bd: #b8dfc4;
+    --badge-amber-bg: #fff3cd;  --badge-amber-fg: #856404;  --badge-amber-bd: #f0d88a;
+    --badge-red-bg:   #f8d7da;  --badge-red-fg:   #721c24;  --badge-red-bd:   #f1aeb5;
+    --badge-blue-bg:  #d1ecf1;  --badge-blue-fg:  #0c5460;  --badge-blue-bd:  #a8d9e2;
+  }
+
+  [data-theme="dark"] {
+    --bg: #0d1117;
+    --fg: #c9d1d9;
+    --h1: #79c0ff;
+    --h2: #58a6ff;
+    --h3: #79c0ff;
+    --border: #30363d;
+    --border-soft: #21262d;
+    --code-bg: #161b22;
+    --table-head-bg: #1f6feb;
+    --table-head-fg: #ffffff;
+    --table-head-border: #388bfd;
+    --row-even: #161b22;
+    --row-odd: #0d1117;
+    --link: #58a6ff;
+    --link-hover: #79c0ff;
+    --bar-bg: #161b22;
+    --bar-fg: #c9d1d9;
+    --bar-btn-bg: rgba(255,255,255,0.06);
+    --bar-btn-bg-hover: rgba(255,255,255,0.14);
+    --bar-btn-border: rgba(255,255,255,0.18);
+    --bar-btn-active: #1f6feb;
+    --details-bg: #0d1117;
+    --details-border: #30363d;
+    --summary-bg: #161b22;
+    --summary-hover: #1f242c;
+    --badge-green-bg: #033a16; --badge-green-fg: #7ee787; --badge-green-bd: #196c2e;
+    --badge-amber-bg: #4d3800; --badge-amber-fg: #ffd33d; --badge-amber-bd: #8a6500;
+    --badge-red-bg:   #4c0014; --badge-red-fg:   #ff7b85; --badge-red-bd:   #8a0020;
+    --badge-blue-bg:  #032b40; --badge-blue-fg:  #79c0ff; --badge-blue-bd:  #1f6feb;
+  }
+
+  [data-theme="solar"] {
+    --bg: #fdf6e3;
+    --fg: #586e75;
+    --h1: #073642;
+    --h2: #268bd2;
+    --h3: #b58900;
+    --border: #eee8d5;
+    --border-soft: #eee8d5;
+    --code-bg: #eee8d5;
+    --table-head-bg: #073642;
+    --table-head-fg: #fdf6e3;
+    --table-head-border: #002b36;
+    --row-even: #f5efdc;
+    --row-odd: #fdf6e3;
+    --link: #268bd2;
+    --link-hover: #2aa198;
+    --bar-bg: #073642;
+    --bar-fg: #fdf6e3;
+    --bar-btn-bg: rgba(253,246,227,0.10);
+    --bar-btn-bg-hover: rgba(253,246,227,0.22);
+    --bar-btn-border: rgba(253,246,227,0.30);
+    --bar-btn-active: #b58900;
+    --details-bg: #fbf2d8;
+    --details-border: #eee8d5;
+    --summary-bg: #eee8d5;
+    --summary-hover: #e4dcc1;
+    --badge-green-bg: #dbe9b1; --badge-green-fg: #4d5d10; --badge-green-bd: #b5c97a;
+    --badge-amber-bg: #ffeec2; --badge-amber-fg: #7d5a00; --badge-amber-bd: #e6c970;
+    --badge-red-bg:   #fbd3cb; --badge-red-fg:   #8a1a08; --badge-red-bd:   #e89a8a;
+    --badge-blue-bg:  #cfe6f5; --badge-blue-fg:  #1c5e85; --badge-blue-bd:  #8ec0dc;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--fg);
+    background: var(--bg);
+    margin: 0;
+    padding: 4.5rem 1rem 2rem;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+
+  .page-wrapper { max-width: 960px; margin: 0 auto; }
+
+  .top-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    background: var(--bar-bg);
+    color: var(--bar-fg);
+    padding: 0.55rem 1rem;
+    z-index: 1000;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+  }
+  .top-bar .group { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+  .top-bar .label {
+    font-size: 0.75em;
+    opacity: 0.7;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-right: 0.25rem;
+  }
+  .top-bar button {
+    background: var(--bar-btn-bg);
+    color: var(--bar-fg);
+    border: 1px solid var(--bar-btn-border);
+    border-radius: 5px;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.82em;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s ease;
+  }
+  .top-bar button:hover { background: var(--bar-btn-bg-hover); }
+  .top-bar button.active {
+    background: var(--bar-btn-active);
+    border-color: var(--bar-btn-active);
+  }
+
+  h1 { color: var(--h1); font-size: 2rem; margin-top: 0; margin-bottom: 0.25rem; }
+  h2 { color: var(--h2); font-size: 1.4rem; margin: 0; padding: 0; border: none; }
+  h3 { color: var(--h3); font-size: 1.1rem; margin: 0; padding: 0; }
+
+  .static-section h2 {
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 0.3rem;
+    margin-top: 2.2rem;
+  }
+  .static-section h3 { margin-top: 1.8rem; }
+
+  p { margin: 0.6rem 0; }
+  ul, ol { margin: 0.5rem 0; padding-left: 1.6rem; }
+  li { margin: 0.25rem 0; }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 1.8rem 0; }
+
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.875em;
+    background: var(--code-bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    padding: 0.15em 0.4em;
+  }
+
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    padding: 1rem 1.2rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+  }
+  pre code { background: none; border: none; padding: 0; font-size: 0.85em; line-height: 1.5; }
+
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9em; }
+  thead tr { background: var(--table-head-bg); color: var(--table-head-fg); }
+  thead th {
+    padding: 0.6rem 0.85rem;
+    text-align: left;
+    font-weight: 600;
+    border: 1px solid var(--table-head-border);
+  }
+  tbody tr:nth-child(even) { background: var(--row-even); }
+  tbody tr:nth-child(odd)  { background: var(--row-odd); }
+  tbody td { padding: 0.5rem 0.85rem; border: 1px solid var(--border); vertical-align: top; }
+
+  .badge {
+    display: inline-block;
+    padding: 0.15em 0.6em;
+    border-radius: 999px;
+    font-size: 0.78em;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .badge-green { background: var(--badge-green-bg); color: var(--badge-green-fg); border: 1px solid var(--badge-green-bd); }
+  .badge-amber { background: var(--badge-amber-bg); color: var(--badge-amber-fg); border: 1px solid var(--badge-amber-bd); }
+  .badge-red   { background: var(--badge-red-bg);   color: var(--badge-red-fg);   border: 1px solid var(--badge-red-bd); }
+  .badge-blue  { background: var(--badge-blue-bg);  color: var(--badge-blue-fg);  border: 1px solid var(--badge-blue-bd); }
+
+  strong { font-weight: 600; }
+
+  div.toc {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.1rem 1.4rem;
+    margin: 1.2rem 0 1.8rem;
+  }
+  div.toc p.toc-title {
+    font-weight: 700;
+    font-size: 0.95em;
+    margin: 0 0 0.5rem;
+    color: var(--h1);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  div.toc ol { margin: 0; padding-left: 1.3rem; }
+  div.toc li { margin: 0.2rem 0; font-size: 0.9em; }
+  div.toc ul { margin: 0.15rem 0; padding-left: 1.2rem; list-style: disc; }
+  div.toc a { color: var(--link); text-decoration: none; }
+  div.toc a:hover { text-decoration: underline; color: var(--link-hover); }
+
+  details.section {
+    margin: 1rem 0;
+    border: 1px solid var(--details-border);
+    border-radius: 6px;
+    background: var(--details-bg);
+    overflow: hidden;
+  }
+  details.section > summary {
+    cursor: pointer;
+    padding: 0.7rem 1rem;
+    background: var(--summary-bg);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    user-select: none;
+    transition: background 0.15s ease;
+  }
+  details.section > summary:hover { background: var(--summary-hover); }
+  details.section > summary::-webkit-details-marker { display: none; }
+  details.section > summary::before {
+    content: "▶";
+    font-size: 0.7em;
+    color: var(--h2);
+    transition: transform 0.2s ease;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  details.section[open] > summary::before { transform: rotate(90deg); }
+  details.section .section-body { padding: 0.4rem 1.2rem 1rem; }
+
+  details.subsection {
+    margin: 0.6rem 0;
+    border: 1px solid var(--details-border);
+    border-radius: 5px;
+    background: var(--bg);
+  }
+  details.subsection > summary {
+    cursor: pointer;
+    padding: 0.5rem 0.85rem;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    user-select: none;
+    background: transparent;
+    transition: background 0.15s ease;
+  }
+  details.subsection > summary:hover { background: var(--summary-hover); }
+  details.subsection > summary::-webkit-details-marker { display: none; }
+  details.subsection > summary::before {
+    content: "▶";
+    font-size: 0.65em;
+    color: var(--h3);
+    transition: transform 0.2s ease;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  details.subsection[open] > summary::before { transform: rotate(90deg); }
+  details.subsection .subsection-body { padding: 0.2rem 1rem 0.8rem; }
+
+  html { scroll-behavior: smooth; scroll-padding-top: 70px; }
+
+  .diagram-wrap {
+    position: relative;
+    margin: 1.4rem -1rem 0.6rem;
+    border-top: 1px solid var(--details-border);
+    border-bottom: 1px solid var(--details-border);
+    background: var(--details-bg);
+    padding: 1.4rem 1.2rem;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    cursor: grab;
+  }
+  .diagram-wrap:active { cursor: grabbing; }
+  .diagram-wrap .mermaid { display: block; }
+  .diagram-wrap .mermaid svg { display: block; max-width: none !important; height: auto !important; min-height: 200px; }
+
+  .callout {
+    border-left: 4px solid var(--h3);
+    background: var(--code-bg);
+    border-radius: 0 6px 6px 0;
+    padding: 0.7rem 1rem;
+    margin: 1rem 0;
+  }
+  .callout.amber { border-color: #b08000; }
+  .callout.green { border-color: #155724; }
+  .callout.red   { border-color: #721c24; }
+</style>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  function getMermaidTheme() {
+    const t = document.documentElement.getAttribute('data-theme');
+    if (t === 'dark') return 'dark';
+    return 'base';
+  }
+  function initMermaid() {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: getMermaidTheme(),
+      themeVariables: (function() {
+        const t = document.documentElement.getAttribute('data-theme');
+        if (t === 'dark') return {};
+        if (t === 'solar') return { primaryColor: '#eee8d5', primaryTextColor: '#586e75', primaryBorderColor: '#93a1a1', lineColor: '#586e75', background: '#fdf6e3', mainBkg: '#fdf6e3', nodeBorder: '#93a1a1', clusterBkg: '#f5efdc', titleColor: '#073642', edgeLabelBackground: '#fdf6e3' };
+        return { primaryColor: '#f3f5f8', primaryTextColor: '#24292e', primaryBorderColor: '#8a95a3', lineColor: '#6b7a8d', background: '#ffffff', mainBkg: '#f3f5f8', nodeBorder: '#8a95a3', clusterBkg: '#fafbfc', titleColor: '#0d1b3e', edgeLabelBackground: '#ffffff' };
+      })(),
+      flowchart: { curve: 'basis', htmlLabels: true, rankSpacing: 120, nodeSpacing: 80 }
+    });
+    document.querySelectorAll('.mermaid').forEach(el => { el.removeAttribute('data-processed'); });
+    mermaid.run({ nodes: document.querySelectorAll('.mermaid') });
+  }
+  document.addEventListener('DOMContentLoaded', initMermaid);
+  window.__reinitMermaid = initMermaid;
+</script>
+</head>
+<body>
+
+<div class="top-bar" role="toolbar" aria-label="Document controls">
+  <div class="group">
+    <span class="label">Sections</span>
+    <button type="button" id="expand-all">Expand all</button>
+    <button type="button" id="collapse-all">Collapse all</button>
+  </div>
+  <div class="group">
+    <span class="label">Theme</span>
+    <button type="button" class="theme-btn" data-theme="light">Light</button>
+    <button type="button" class="theme-btn" data-theme="dark">Dark</button>
+    <button type="button" class="theme-btn" data-theme="solar">Solar</button>
+  </div>
+  <div class="group">
+    <button type="button" id="top-btn" title="Back to top">↑ Top</button>
+  </div>
+</div>
+
+<div class="page-wrapper">
+<div class="static-section">
+
+<h1>Issue #214 — Path 2: Flowable Parallel Join</h1>
+
+<p>
+  <strong>Issue:</strong> <a href="https://github.com/tazama-lf/case-management-system/issues/214">#214 — FRAUD_AND_AML container cases modelled as peer Case rows</a><br>
+  <strong>Date:</strong> 2026-06-30<br>
+  <strong>Path:</strong> <span class="badge badge-blue">Path 2 of 2</span> — Flowable-orchestrated parallel investigation with a coordinated combined SAR/STR close<br>
+  <strong>Prerequisite:</strong> <a href="path-1-minimal-flowable.html">Path 1 — Minimal Flowable Change</a> (Track A reporting fix should ship before this)
+</p>
+
+<hr>
+
+<h2 id="overview">Executive Overview</h2>
+
+<p>Path 2 is the <strong>architecturally complete solution</strong> for clients who require that the combined closure of both FRAUD and AML investigations — including a single coordinated SAR/STR filing — be enforced and orchestrated by Flowable, not by application code or human convention.</p>
+
+<p>Today, the coordination is done through a container <code>Case</code> row, a supervisor-only closure gate in application code, and hand-coded status propagation across four services. Path 2 replaces all of that with <strong>a new parent BPMN process</strong> that forks into two <code>callActivity</code> sub-processes (one per investigation), blocks at a parallel join gateway until both complete, then routes to a single combined SAR/STR filing task before ending. The container <code>Case</code> row is still removed (as in Path 1), but now Flowable itself becomes the coordinator.</p>
+
+<div class="callout amber">
+  <strong>Prerequisite:</strong> Path 2 builds directly on Path 1's Track B. The container <code>Case</code> row must be removed, the <code>InvestigationGroup</code> table introduced, and the five workaround layers deleted before the Flowable parallel process can take over coordination. Path 2 is additive on top of Path 1, not an alternative that skips it.
+</div>
+
+<div class="diagram-wrap">
+<div class="mermaid">
+flowchart TD
+    subgraph TODAY["TODAY — Application-code coordination"]
+        direction TD
+        A1([FRAUD_AND_AML Alert]) --> CONTAINER["Container Case\napp-code gate\n4 services propagate"]
+        CONTAINER --> F1["FRAUD Case\nFlowable process 1"]
+        CONTAINER --> A_1["AML Case\nFlowable process 2"]
+        F1 -.->|status mirror| CONTAINER
+        A_1 -.->|status mirror| CONTAINER
+        CONTAINER -->|supervisor closes| SAR1["SAR/STR via STATUS_84"]
+    end
+
+    subgraph PATH2["PATH 2 — Flowable orchestration"]
+        direction TD
+        A2([FRAUD_AND_AML Alert]) --> PARENT["Parent BPMN Process\nfraudAndAmlProcess"]
+        PARENT -->|parallel fork| F2["callActivity\nFRAUD subprocess\nfull caseManagementProcess"]
+        PARENT -->|parallel fork| A_2["callActivity\nAML subprocess\nfull caseManagementProcess"]
+        F2 -->|joins when complete| JOIN{{"Parallel Join\nwaits for both"}}
+        A_2 -->|joins when complete| JOIN
+        JOIN --> COMBINED["Combined SAR/STR\nfiling task\ncompliance group"]
+        COMBINED -.->|"sarStrAction=complete"| END([Case Closed])
+    end
+
+    SAR1 ~~~ A2
+
+    classDef container fill:#f8d7da,stroke:#721c24,color:#721c24
+    classDef child fill:#d4edda,stroke:#155724,color:#155724
+    classDef bpmn fill:#d1ecf1,stroke:#0c5460,color:#0c5460
+    classDef gateway fill:#fff3cd,stroke:#856404,color:#856404
+    classDef alert fill:#e9d8fd,stroke:#6f42c1,color:#44267a
+
+    class CONTAINER container
+    class F1,A_1,F2,A_2 child
+    class PARENT,COMBINED bpmn
+    class JOIN gateway
+    class A1,A2 alert
+</div>
+</div>
+
+<hr>
+
+<h2>Table of Contents</h2>
+<div class="toc">
+  <p class="toc-title">Contents</p>
+  <ol>
+    <li><a href="#the-solution">The Solution</a>
+      <ul>
+        <li><a href="#bpmn-design">New BPMN Process Design</a></li>
+        <li><a href="#application-changes">Application Code Changes</a></li>
+        <li><a href="#flowable-integration">Flowable Integration Points</a></li>
+      </ul>
+    </li>
+    <li><a href="#bpmn-detail">BPMN Design in Detail</a></li>
+    <li><a href="#impact">Impact Assessment</a>
+      <ul>
+        <li><a href="#schema-impact">Schema Impact</a></li>
+        <li><a href="#backend-impact">Backend Code Impact</a></li>
+        <li><a href="#frontend-impact">Frontend Impact</a></li>
+      </ul>
+    </li>
+    <li><a href="#tradeoffs">Tradeoffs &amp; Pros/Cons</a></li>
+    <li><a href="#path-comparison">Path 1 vs Path 2 — Decision Guide</a></li>
+    <li><a href="#summary-matrix">Summary Matrix</a></li>
+    <li><a href="#acceptance">Acceptance Criteria</a></li>
+  </ol>
+</div>
+
+</div>
+
+<hr>
+
+<details class="section" open id="the-solution">
+<summary><h2>The Solution</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open id="bpmn-design">
+<summary><h3>New BPMN Process Design</h3></summary>
+<div class="subsection-body">
+
+<p>A new BPMN process definition <code>fraudAndAmlProcess</code> is added alongside the existing <code>caseManagementProcess</code>. This new process is started when a <code>FRAUD_AND_AML</code> alert is triaged, taking <code>alertId</code>, <code>tenantId</code>, <code>fraudCaseId</code>, and <code>amlCaseId</code> as process variables.</p>
+
+<p>The process contains:</p>
+<ol>
+  <li>A <strong>parallel gateway (fork)</strong> — splits immediately into two branches</li>
+  <li>Two <strong><code>callActivity</code> elements</strong> — each calls <code>caseManagementProcess</code> as a sub-process, passing the respective <code>caseId</code> as the business key. Each sub-process runs its full lifecycle independently: investigation, supervisor approval, and individual SAR/STR if needed.</li>
+  <li>A <strong>parallel join gateway</strong> — blocks until <strong>both</strong> <code>callActivity</code> sub-processes have reached their end events. Flowable maintains this join state durably across restarts and arbitrarily long waits.</li>
+  <li>A <strong>combined SAR/STR filing user task</strong> — assigned to the <code>compliance</code> candidate group. This is a single task representing the joint regulatory filing that combines findings from both investigations.</li>
+  <li>An <strong>end event</strong> — terminates the parent process, representing the closure of the full FRAUD_AND_AML investigation.</li>
+</ol>
+
+<p>The existing <code>caseManagementProcess</code> is unchanged. Child processes invoked as <code>callActivity</code> use it without modification.</p>
+
+<p>The <code>isFraudNAMLGateway</code> in the existing BPMN and the <code>isFraudNAML</code> variable are removed (clean-up) — they are no longer reached because <code>FRAUD_AND_AML</code>-typed containers no longer start a <code>caseManagementProcess</code> instance directly.</p>
+
+</div>
+</details>
+
+<details class="subsection" open id="application-changes">
+<summary><h3>Application Code Changes</h3></summary>
+<div class="subsection-body">
+
+<p><strong>Path 2 includes all of Path 1 Track B</strong> — the container Case row is removed, all seven propagation blocks are deleted, the permission bypass is removed, and the closure gate is removed. Then Path 2 adds the following on top:</p>
+
+<p><strong>1. New BPMN file: <code>fraud-and-aml-process.bpmn20.xml</code></strong><br>
+Create the <code>fraudAndAmlProcess</code> definition with parallel fork, two <code>callActivity</code> elements calling <code>caseManagementProcess</code>, parallel join, combined SAR/STR user task, and end event. Deploy alongside the existing BPMN on startup.</p>
+
+<p><strong>2. <code>FlowableService</code> — new method <code>handleFraudAndAmlCaseCreated</code></strong><br>
+After both child cases are created in <code>triage.service.ts</code>, call this new method. It starts a <code>fraudAndAmlProcess</code> process instance, passing both <code>fraudCaseId</code> and <code>amlCaseId</code> as variables alongside <code>alertId</code> and <code>tenantId</code>. This is the process that Flowable keeps alive until both sub-processes complete.</p>
+
+<p><strong>3. <code>triage.service.ts</code> — capture both child case IDs</strong><br>
+After creating the FRAUD and AML child cases, collect their <code>case_id</code> values and pass them to <code>handleFraudAndAmlCaseCreated</code>. Currently <code>createCaseWithInvestigationTask</code> returns <code>{ caseId, message }</code> — this return value is used here.</p>
+
+<p><strong>4. <code>flowable.service.ts</code> — deploy second BPMN on init</strong><br>
+Update <code>deployBpmnProcess</code> (or add a second deployment call) to also deploy <code>fraud-and-aml-process.bpmn20.xml</code> at module init time.</p>
+
+<p><strong>5. Combined SAR/STR task listener</strong><br>
+A new Flowable task listener (or a Flowable event listener wired via the existing <code>TaskEventListener</code>) must handle the combined SAR/STR user task: assign it to the compliance group, surface it in the UI, and complete it when filing is done. The existing SAR/STR filing task in <code>caseManagementProcess</code> handles individual case filings; this new task handles the joint filing for FRAUD_AND_AML investigations.</p>
+
+<p><strong>6. Frontend — combined SAR/STR task display</strong><br>
+The task list UI must surface the combined SAR/STR task as a distinct task type. It needs to show both the FRAUD case outcome and the AML case outcome together, so the compliance officer can file a single report that covers both. This requires a new task card variant and potentially a new modal.</p>
+
+</div>
+</details>
+
+<details class="subsection" open id="flowable-integration">
+<summary><h3>Flowable Integration Points</h3></summary>
+<div class="subsection-body">
+
+<p>Understanding how the CMS currently uses Flowable is essential to sizing Path 2 correctly.</p>
+
+<p><strong>Current model:</strong> One <code>Case</code> row → one <code>caseManagementProcess</code> instance, started via <code>FlowableService.handleCaseCreated</code>. The business key is <code>caseId</code>. The NestJS backend drives the process forward by calling <code>handleTaskCompleted</code> whenever a task transitions, which in turn calls Flowable's task completion API. Flowable evaluates the BPMN gateways and advances the token.</p>
+
+<p><strong>Path 2 model:</strong> One <code>FRAUD_AND_AML</code> alert → one <code>fraudAndAmlProcess</code> parent instance (business key: <code>alertId</code>) + two <code>caseManagementProcess</code> child instances (business keys: <code>fraudCaseId</code> and <code>amlCaseId</code>). The child instances are started by Flowable internally via <code>callActivity</code>, not by the NestJS service directly. The NestJS service still drives each child process forward through task completions as it does today.</p>
+
+<p><strong>The parallel join behaviour:</strong> Flowable natively supports parallel join. When both <code>callActivity</code> elements reach their end events, the join gateway fires automatically, creating the combined SAR/STR user task. The NestJS service does not need to poll or manually trigger the join — Flowable handles it. This is the key advantage over Path 1's application-code coordination.</p>
+
+<p><strong>Long-running process resilience:</strong> Investigations can take days or weeks. Flowable persists process state durably in its own database. The parallel join survives service restarts, container rescheduling, and database failovers. This is significantly more robust than the current application-code propagation, which loses state on restart.</p>
+
+<p><strong>Flowable API used:</strong></p>
+<ul>
+  <li><code>POST /process-instances</code> — start <code>fraudAndAmlProcess</code></li>
+  <li><code>POST /deployments</code> — deploy new BPMN (already wired in <code>FlowableService.deployBpmnProcess</code>)</li>
+  <li>Task completion continues to use the existing <code>handleTaskCompleted</code> path — child processes are driven exactly as single-type cases are today</li>
+</ul>
+
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section" open id="bpmn-detail">
+<summary><h2>BPMN Design in Detail</h2></summary>
+<div class="section-body">
+
+<div class="diagram-wrap">
+<div class="mermaid">
+flowchart TD
+    START([Start\nalertId, fraudCaseId\namlCaseId, tenantId]) --> FORK{{"Parallel Fork\ngateway"}}
+
+    FORK -->|Branch 1| CA_FRAUD["callActivity\ncaseManagementProcess\nbusinessKey=fraudCaseId\nisFraudNAML=false"]
+    FORK -->|Branch 2| CA_AML["callActivity\ncaseManagementProcess\nbusinessKey=amlCaseId\nisFraudNAML=false"]
+
+    CA_FRAUD -->|"FRAUD complete\n(STATUS_81/82/83)"| JOIN{{"Parallel Join\nwaits for both tokens"}}
+    CA_AML -->|"AML complete\n(STATUS_81/82/83)"| JOIN
+
+    JOIN --> SAR["Combined SAR/STR\nUser Task\ncandidateGroup=compliance\nfraudOutcome + amlOutcome"]
+
+    SAR -->|"sarStrAction=complete"| END([Parent Process\nEnds])
+
+    classDef gateway fill:#fff3cd,stroke:#856404,color:#5a3e00
+    classDef activity fill:#d1ecf1,stroke:#0c5460,color:#0c5460
+    classDef subprocess fill:#d4edda,stroke:#155724,color:#155724
+    classDef terminal fill:#e9d8fd,stroke:#6f42c1,color:#44267a
+
+    class FORK,JOIN gateway
+    class CA_FRAUD,CA_AML subprocess
+    class SAR activity
+    class START,END terminal
+</div>
+</div>
+
+<p>Key design decisions in the BPMN:</p>
+
+<ul>
+  <li><strong>Each <code>callActivity</code> calls the existing <code>caseManagementProcess</code> unchanged.</strong> The child processes are full investigation lifecycles including their own supervisor approval and individual SAR/STR filing steps. The combined SAR/STR in the parent is an additional, joint filing step on top of any individual filings — or the individual <code>fileSarStr</code> tasks can be suppressed for FRAUD_AND_AML child cases via a process variable if joint-only filing is the requirement.</li>
+  <li><strong>The parallel join gateway waits indefinitely.</strong> Flowable stores the join state in its ACT_RU_EXECUTION table. This is robust across restarts.</li>
+  <li><strong>The combined SAR/STR task receives both outcomes.</strong> The parent process variables include the <code>finalOutcome</code> from each child process, surfaced to the combined task so the compliance officer has full context.</li>
+  <li><strong>The parent process does not have a <code>Case</code> row.</strong> It is a pure Flowable process entity, linked to the alert via <code>alertId</code> as business key and to the two child cases via <code>InvestigationGroup</code>.</li>
+</ul>
+
+<p><strong>BPMN XML sketch (key elements):</strong></p>
+<pre><code>&lt;process id="fraudAndAmlProcess" name="FRAUD and AML Combined Investigation" isExecutable="true"&gt;
+
+  &lt;startEvent id="start"&gt;
+    &lt;extensionElements&gt;
+      &lt;flowable:formProperty id="alertId"     type="string" required="true"/&gt;
+      &lt;flowable:formProperty id="tenantId"    type="string" required="true"/&gt;
+      &lt;flowable:formProperty id="fraudCaseId" type="string" required="true"/&gt;
+      &lt;flowable:formProperty id="amlCaseId"   type="string" required="true"/&gt;
+    &lt;/extensionElements&gt;
+  &lt;/startEvent&gt;
+
+  &lt;parallelGateway id="parallelFork" name="Fork: start both investigations"/&gt;
+
+  &lt;callActivity id="fraudInvestigation" name="FRAUD Investigation"
+                calledElement="caseManagementProcess"&gt;
+    &lt;extensionElements&gt;
+      &lt;flowable:in source="fraudCaseId" target="caseId"/&gt;
+      &lt;flowable:in source="tenantId"    target="tenantId"/&gt;
+      &lt;flowable:in sourceExpression="${'AUTOMATIC_SYSTEM'}" target="creationType"/&gt;
+      &lt;flowable:in sourceExpression="${'false'}"            target="isFraudNAML"/&gt;
+      &lt;flowable:out source="finalOutcome" target="fraudOutcome"/&gt;
+    &lt;/extensionElements&gt;
+  &lt;/callActivity&gt;
+
+  &lt;callActivity id="amlInvestigation" name="AML Investigation"
+                calledElement="caseManagementProcess"&gt;
+    &lt;extensionElements&gt;
+      &lt;flowable:in source="amlCaseId" target="caseId"/&gt;
+      &lt;flowable:in source="tenantId"  target="tenantId"/&gt;
+      &lt;flowable:in sourceExpression="${'AUTOMATIC_SYSTEM'}" target="creationType"/&gt;
+      &lt;flowable:in sourceExpression="${'false'}"            target="isFraudNAML"/&gt;
+      &lt;flowable:out source="finalOutcome" target="amlOutcome"/&gt;
+    &lt;/extensionElements&gt;
+  &lt;/callActivity&gt;
+
+  &lt;parallelGateway id="parallelJoin" name="Join: both investigations complete"/&gt;
+
+  &lt;userTask id="combinedSarStr" name="Combined SAR/STR Filing"
+            flowable:candidateGroups="compliance"&gt;
+    &lt;extensionElements&gt;
+      &lt;flowable:formProperty id="sarStrAction" type="enum" required="true"&gt;
+        &lt;flowable:value id="inProgress" name="Keep Working"/&gt;
+        &lt;flowable:value id="complete"   name="Complete Filing"/&gt;
+      &lt;/flowable:formProperty&gt;
+    &lt;/extensionElements&gt;
+  &lt;/userTask&gt;
+
+  &lt;endEvent id="end" name="Combined Investigation Complete"/&gt;
+
+  &lt;!-- Sequence flows --&gt;
+  &lt;sequenceFlow sourceRef="start"            targetRef="parallelFork"/&gt;
+  &lt;sequenceFlow sourceRef="parallelFork"     targetRef="fraudInvestigation"/&gt;
+  &lt;sequenceFlow sourceRef="parallelFork"     targetRef="amlInvestigation"/&gt;
+  &lt;sequenceFlow sourceRef="fraudInvestigation" targetRef="parallelJoin"/&gt;
+  &lt;sequenceFlow sourceRef="amlInvestigation"   targetRef="parallelJoin"/&gt;
+  &lt;sequenceFlow sourceRef="parallelJoin"     targetRef="combinedSarStr"/&gt;
+  &lt;sequenceFlow sourceRef="combinedSarStr"   targetRef="sarStrGateway"/&gt;
+  &lt;!-- gateway routes inProgress back to combinedSarStr, complete to end --&gt;
+  &lt;sequenceFlow sourceRef="sarStrGateway"    targetRef="end"&gt;
+    &lt;conditionExpression&gt;${sarStrAction == 'complete'}&lt;/conditionExpression&gt;
+  &lt;/sequenceFlow&gt;
+&lt;/process&gt;</code></pre>
+
+</div>
+</details>
+
+<details class="section" open id="impact">
+<summary><h2>Impact Assessment</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open id="schema-impact">
+<summary><h3>Schema Impact</h3></summary>
+<div class="subsection-body">
+
+<p>Path 2 inherits all schema changes from Path 1 and adds none. The <code>InvestigationGroup</code> table introduced in Path 1 serves as the link between the parent Flowable process (keyed on <code>alertId</code>) and the two child cases. No additional tables are required.</p>
+
+<table>
+  <thead><tr><th>Change</th><th>From</th><th>Risk</th></tr></thead>
+  <tbody>
+    <tr><td>Add <code>InvestigationGroup</code> model</td><td>Path 1 Track B</td><td><span class="badge badge-green">Low</span></td></tr>
+    <tr><td>Retire <code>STATUS_84_COMPLETED</code></td><td>Path 1 Track B Step B7</td><td><span class="badge badge-amber">Medium — requires data migration validation</span></td></tr>
+    <tr><td>New BPMN process definition deployed to Flowable</td><td>Path 2 new</td><td><span class="badge badge-amber">Medium — must be tested in Flowable test environment before production</span></td></tr>
+  </tbody>
+</table>
+
+</div>
+</details>
+
+<details class="subsection" open id="backend-impact">
+<summary><h3>Backend Code Impact</h3></summary>
+<div class="subsection-body">
+
+<p><strong>Inherited from Path 1 (all of Track A + Track B):</strong></p>
+<table>
+  <thead><tr><th>File</th><th>Change</th></tr></thead>
+  <tbody>
+    <tr><td><code>report.service.ts</code></td><td><code>LEAF_CASE_FILTER</code>; remove <code>STATUS_84</code> from private constants</td></tr>
+    <tr><td><code>triage.service.ts</code></td><td>Stop creating container; upsert <code>InvestigationGroup</code></td></tr>
+    <tr><td><code>case-creation.service.ts</code></td><td>Widen <code>parentCaseId</code> to <code>number | null</code></td></tr>
+    <tr><td>4 services, 7 locations</td><td>Delete all propagation blocks</td></tr>
+    <tr><td><code>case.repository.ts</code></td><td>Remove permission bypass</td></tr>
+    <tr><td><code>case-closure-approval.service.ts</code></td><td>Remove closure gate</td></tr>
+    <tr><td><code>case.constants.ts</code>, <code>case-enum.ts</code></td><td>Retire <code>STATUS_84</code> (deferred)</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Path 2 additions:</strong></p>
+<table>
+  <thead><tr><th>File / Component</th><th>Change</th><th>Complexity</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>fraud-and-aml-process.bpmn20.xml</code></td>
+      <td>New BPMN file with parallel fork, two <code>callActivity</code> elements, parallel join, combined SAR/STR user task, end event</td>
+      <td><span class="badge badge-amber">Medium</span></td>
+    </tr>
+    <tr>
+      <td><code>flowable.service.ts</code></td>
+      <td>Add <code>handleFraudAndAmlCaseCreated</code> method; update <code>deployBpmnProcess</code> to deploy both BPMN files on startup</td>
+      <td><span class="badge badge-green">Low</span></td>
+    </tr>
+    <tr>
+      <td><code>triage.service.ts</code></td>
+      <td>After creating FRAUD + AML cases, capture both <code>caseId</code> return values and call <code>handleFraudAndAmlCaseCreated(alertId, fraudCaseId, amlCaseId, tenantId)</code></td>
+      <td><span class="badge badge-green">Low</span></td>
+    </tr>
+    <tr>
+      <td><code>task-event.listener.ts</code> or new listener</td>
+      <td>Handle the combined SAR/STR user task created by the parent process: surface it in the task list, complete it on compliance action, emit a domain event that closes the <code>InvestigationGroup</code> arc</td>
+      <td><span class="badge badge-amber">Medium</span></td>
+    </tr>
+    <tr>
+      <td>New <code>CombinedSarStrService</code> (or extend existing <code>notification.service.ts</code>)</td>
+      <td>Handle notifications for the combined SAR/STR task; compile final outcomes from both child cases into a single filing payload; log the combined closure event</td>
+      <td><span class="badge badge-amber">Medium</span></td>
+    </tr>
+    <tr>
+      <td><code>cms.bpmn20.xml</code> (existing)</td>
+      <td>Remove <code>isFraudNAMLGateway</code>, <code>isFraudNAML</code> form property, and <code>flowIsFraudNAML</code> sequence flow — now dead code. Also remove the <code>FRAUD_AND_AML</code> option from <code>completeCaseCreation</code> user task's <code>caseType</code> form property.</td>
+      <td><span class="badge badge-green">Low — cleanup only</span></td>
+    </tr>
+    <tr>
+      <td>Flowable test environment</td>
+      <td>Deploy and validate <code>fraudAndAmlProcess</code> BPMN: verify fork fires both branches simultaneously, join blocks until both tokens arrive, combined task appears correctly in task list, process ends after filing complete</td>
+      <td><span class="badge badge-red">High — requires Flowable test harness</span></td>
+    </tr>
+  </tbody>
+</table>
+
+</div>
+</details>
+
+<details class="subsection" open id="frontend-impact">
+<summary><h3>Frontend Impact</h3></summary>
+<div class="subsection-body">
+
+<p><strong>Inherited from Path 1 (same frontend cleanup):</strong> Remove <code>STATUS_84</code> from <code>CloseCaseModal.tsx</code>, <code>CaseFilters.tsx</code>, <code>casesTable.utils.ts</code>. Simplify <code>ViewCaseModal.tsx</code> and <code>CaseModalsManager.tsx</code>.</p>
+
+<p><strong>Path 2 additions:</strong></p>
+<table>
+  <thead><tr><th>File / Component</th><th>Change</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Task list UI (new task card)</td>
+      <td>The combined SAR/STR task from <code>fraudAndAmlProcess</code> needs a distinct task card variant that shows both the FRAUD and AML case outcomes, the alert ID, and the compliance filing action</td>
+    </tr>
+    <tr>
+      <td>New <code>CombinedSarStrModal.tsx</code></td>
+      <td>A filing modal that displays both investigation outcomes side-by-side and collects the combined SAR/STR filing reference number or completion confirmation</td>
+    </tr>
+    <tr>
+      <td><code>ViewCaseModal.tsx</code></td>
+      <td>If showing case grouping: display a link to the sibling case via <code>InvestigationGroup</code>, along with the parent Flowable process state (waiting for join, combined filing pending)</td>
+    </tr>
+    <tr>
+      <td>Task filters / task type enum</td>
+      <td>Add <code>COMBINED_SAR_STR</code> as a task type so operators can filter for combined filing tasks separately from regular SAR/STR tasks</td>
+    </tr>
+  </tbody>
+</table>
+
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section" open id="tradeoffs">
+<summary><h2>Tradeoffs &amp; Pros/Cons</h2></summary>
+<div class="section-body">
+
+<table>
+  <thead><tr><th>Dimension</th><th><span class="badge badge-green">Pros</span></th><th><span class="badge badge-red">Cons / Risks</span></th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Client requirement fit</strong></td>
+      <td>Fully satisfies a requirement that combined FRAUD+AML closure be orchestrated and enforced by the process engine, not by application code or human convention</td>
+      <td>If the client's actual requirement is only "fix the data model and reports", Path 2 is over-engineering. Clarify before committing.</td>
+    </tr>
+    <tr>
+      <td><strong>Process integrity</strong></td>
+      <td>Flowable guarantees the combined SAR/STR task cannot be skipped — it is a mandatory step in the parent process that fires only after both child processes end</td>
+      <td>If either child process gets stuck (orphaned task, system error), the parent join never fires. Flowable's admin API must be used to diagnose and unblock, which requires ops tooling.</td>
+    </tr>
+    <tr>
+      <td><strong>Long-running resilience</strong></td>
+      <td>Flowable persists process state durably. A parallel join waiting for two investigations that each take 3 weeks survives any number of restarts</td>
+      <td>Flowable becomes a hard dependency for FRAUD_AND_AML closure. If Flowable is down, the combined task cannot be completed. Currently only tracked in application state (in-memory propagation blocks).</td>
+    </tr>
+    <tr>
+      <td><strong>Audit trail</strong></td>
+      <td>The parent Flowable process provides a complete, engine-maintained audit of the fork, each sub-process completion, and the join — visible in Flowable's admin UI or history API</td>
+      <td>Two audit trails now exist: application-level logging (NestJS <code>LoggingOrchestrationService</code>) and Flowable's own history. These must be kept consistent.</td>
+    </tr>
+    <tr>
+      <td><strong>Delivery timeline</strong></td>
+      <td>Architecturally sound; no technical debt deferred</td>
+      <td>Significantly more work than Path 1: new BPMN file, Flowable test environment validation, new frontend task card, new combined SAR/STR service. Estimate 8–12 days vs. 3–4 days for Path 1.</td>
+    </tr>
+    <tr>
+      <td><strong>BPMN complexity</strong></td>
+      <td><code>callActivity</code> is a well-supported Flowable pattern; parallel join is a standard BPMN 2.0 construct</td>
+      <td>The BPMN must be tested in a Flowable test environment before production deployment. The <code>callActivity</code> variable mapping (<code>flowable:in</code>/<code>flowable:out</code>) requires careful validation — incorrect variable names silently produce wrong behaviour.</td>
+    </tr>
+    <tr>
+      <td><strong>Individual vs. joint SAR/STR</strong></td>
+      <td>Explicit combined filing task makes the regulatory workflow unambiguous</td>
+      <td>Decision required: do FRAUD and AML child processes also file individual SAR/STR reports, or is the combined parent task the only filing? The existing <code>caseManagementProcess</code> routes <code>STATUS_82</code> outcomes to <code>fileSarStr</code>. If child processes should not file individually for FRAUD_AND_AML cases, they must be parameterised to skip that step, adding conditional logic to the existing BPMN.</td>
+    </tr>
+    <tr>
+      <td><strong>Relationship to Path 1</strong></td>
+      <td>Path 2 builds directly on Path 1 — all of Path 1's correctness gains apply, plus Flowable enforcement on top</td>
+      <td>Cannot be delivered without Path 1 first completing. Any delay in Path 1 delays Path 2.</td>
+    </tr>
+  </tbody>
+</table>
+
+</div>
+</details>
+
+<details class="section" open id="path-comparison">
+<summary><h2>Path 1 vs Path 2 — Decision Guide</h2></summary>
+<div class="section-body">
+
+<div class="diagram-wrap">
+<div class="mermaid">
+flowchart TD
+    Q1{"Client requires combined\nSAR/STR to be enforced\nby the process engine?"}
+    Q2{"Timeline allows\n8–12 days additional\nFlowable work?"}
+    Q3{"Flowable test environment\navailable for BPMN validation?"}
+
+    Q1 -->|No| PATH1["✅ Path 1\nMinimal Flowable\n3–4 days\nReports fixed + model corrected"]
+    Q1 -->|Yes| Q2
+    Q2 -->|No| INTERIM["Path 1 now\n+ Path 2 later\nShip independently\nPath 2 is additive"]
+    Q2 -->|Yes| Q3
+    Q3 -->|No| BLOCK["Blocked — need Flowable\ntest env before Path 2\nship Path 1 first"]
+    Q3 -->|Yes| PATH2["✅ Path 2\nFlowable Parallel Join\n8–12 days total\nFull process enforcement"]
+
+    classDef path1 fill:#d4edda,stroke:#155724,color:#155724
+    classDef path2 fill:#d1ecf1,stroke:#0c5460,color:#0c5460
+    classDef block fill:#f8d7da,stroke:#721c24,color:#721c24
+    classDef interim fill:#fff3cd,stroke:#856404,color:#856404
+
+    class PATH1 path1
+    class PATH2 path2
+    class BLOCK block
+    class INTERIM interim
+</div>
+</div>
+
+<table>
+  <thead><tr><th>Question</th><th>Path 1</th><th>Path 2</th></tr></thead>
+  <tbody>
+    <tr><td>Combined SAR/STR enforced by Flowable?</td><td>No — independent filing per case</td><td>Yes — mandatory parent process task</td></tr>
+    <tr><td>BPMN changes required?</td><td>None</td><td>New <code>fraudAndAmlProcess.bpmn20.xml</code>; cleanup of existing BPMN</td></tr>
+    <tr><td>Flowable test environment needed?</td><td>No</td><td>Yes — parallel join + callActivity must be validated</td></tr>
+    <tr><td>Reports corrected?</td><td>Yes (Track A)</td><td>Yes (inherited from Path 1)</td></tr>
+    <tr><td>Data model corrected?</td><td>Yes</td><td>Yes (same)</td></tr>
+    <tr><td>Effort estimate</td><td>~4h (Track A) + ~3–4d (Track B)</td><td>Path 1 total + ~4–8d additional</td></tr>
+    <tr><td>Can ship Track A independently?</td><td>Yes</td><td>Yes — Track A is the same for both paths</td></tr>
+    <tr><td>Path 2 prerequisite?</td><td>—</td><td>Path 1 Track B must be complete first</td></tr>
+  </tbody>
+</table>
+
+</div>
+</details>
+
+<details class="section" open id="summary-matrix">
+<summary><h2>Summary Matrix</h2></summary>
+<div class="section-body">
+
+<table>
+  <thead><tr><th>Area</th><th>Before (Today)</th><th>After Path 2</th></tr></thead>
+  <tbody>
+    <tr><td>Case rows per FRAUD_AND_AML alert</td><td>3 (container + FRAUD + AML)</td><td>2 (FRAUD + AML only)</td></tr>
+    <tr><td>Reports triple-count</td><td>Yes</td><td>No (same as Path 1)</td></tr>
+    <tr><td>Flowable process instances per alert</td><td>3 (one per Case row)</td><td>3 (parent + FRAUD child + AML child) — same count, different structure</td></tr>
+    <tr><td>Combined closure enforced by</td><td>Application-code gate in 4 services</td><td>Flowable parallel join gateway</td></tr>
+    <tr><td>Combined SAR/STR filing</td><td>Implied by STATUS_84 close</td><td>Explicit user task in parent process, assigned to compliance group</td></tr>
+    <tr><td>BPMN changes</td><td>—</td><td>New <code>fraudAndAmlProcess.bpmn20.xml</code>; cleanup of existing BPMN gateway dead code</td></tr>
+    <tr><td>Audit trail for combined close</td><td>Application log only</td><td>Flowable process history + application log</td></tr>
+    <tr><td>Status propagation code</td><td>7 blocks across 4 services</td><td>Removed (same as Path 1)</td></tr>
+    <tr><td>Permission model</td><td>Bypass for FRAUD_AND_AML</td><td>Standard (same as Path 1)</td></tr>
+    <tr><td>Effort estimate (total from scratch)</td><td>—</td><td><span class="badge badge-red">~8–12 days</span></td></tr>
+    <tr><td>Effort estimate (on top of Path 1)</td><td>—</td><td><span class="badge badge-amber">~4–8 additional days</span></td></tr>
+  </tbody>
+</table>
+
+</div>
+</details>
+
+<details class="section" open id="acceptance">
+<summary><h2>Acceptance Criteria</h2></summary>
+<div class="section-body">
+
+<p><strong>Inherited from Path 1 (all must pass):</strong></p>
+<ul>
+  <li>Triaging a FRAUD_AND_AML alert creates exactly 2 Case rows (FRAUD and AML), both <code>parent_id = null</code></li>
+  <li>An <code>InvestigationGroup</code> row is created with correct <code>alert_id</code> and <code>tenant_id</code></li>
+  <li>Reports show accurate counts — no triple-counting</li>
+  <li>Status propagation between child cases does not occur</li>
+  <li>Standard permission checks apply to all cases</li>
+</ul>
+
+<p><strong>Path 2 specific:</strong></p>
+<ul>
+  <li>Triaging a FRAUD_AND_AML alert starts a <code>fraudAndAmlProcess</code> Flowable process instance with <code>fraudCaseId</code>, <code>amlCaseId</code>, <code>alertId</code>, and <code>tenantId</code> variables correctly set</li>
+  <li>Closing only the FRAUD case does not trigger the combined SAR/STR task — the parallel join blocks until the AML case is also closed</li>
+  <li>When both FRAUD and AML cases close, the combined SAR/STR user task appears in the compliance group's task list exactly once</li>
+  <li>The combined SAR/STR task shows the FRAUD outcome and AML outcome from the respective child processes</li>
+  <li>Completing the combined SAR/STR task terminates the parent <code>fraudAndAmlProcess</code> instance</li>
+  <li>The parent Flowable process instance is visible in Flowable's admin/history API with the correct execution path</li>
+  <li>If the Flowable service restarts while the parallel join is waiting, the join resumes correctly and does not duplicate the combined task on the next completion event</li>
+  <li>Querying <code>GET /cases?type=FRAUD_AND_AML</code> returns zero results (no container row exists)</li>
+  <li>Zero <code>Case</code> rows with <code>status = STATUS_84_COMPLETED</code> after data migration</li>
+</ul>
+
+</div>
+</details>
+
+</div>
+
+<script>
+(function() {
+  const THEME_KEY = 'impact-study-theme';
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.theme === theme);
+    });
+    try { localStorage.setItem(THEME_KEY, theme); } catch(e) {}
+    if (window.__reinitMermaid) setTimeout(window.__reinitMermaid, 50);
+  }
+
+  const saved = (function() { try { return localStorage.getItem(THEME_KEY); } catch(e) { return null; } })();
+  applyTheme(saved || 'light');
+
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
+  });
+
+  document.getElementById('expand-all').addEventListener('click', () => {
+    document.querySelectorAll('details').forEach(d => d.open = true);
+  });
+  document.getElementById('collapse-all').addEventListener('click', () => {
+    document.querySelectorAll('details').forEach(d => d.open = false);
+  });
+  document.getElementById('top-btn').addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', (e) => {
+      const id = a.getAttribute('href').slice(1);
+      const target = document.getElementById(id);
+      if (!target) return;
+      let el = target;
+      while (el) {
+        if (el.tagName && el.tagName.toLowerCase() === 'details') el.open = true;
+        el = el.parentElement;
+      }
+    });
+  });
+
+  document.querySelectorAll('.diagram-wrap').forEach(function(wrap) {
+    var isDown = false, startX, scrollLeft;
+    wrap.addEventListener('mousedown', function(e) {
+      isDown = true; startX = e.pageX - wrap.offsetLeft; scrollLeft = wrap.scrollLeft;
+    });
+    wrap.addEventListener('mouseleave', function() { isDown = false; });
+    wrap.addEventListener('mouseup', function() { isDown = false; });
+    wrap.addEventListener('mousemove', function(e) {
+      if (!isDown) return;
+      e.preventDefault();
+      wrap.scrollLeft = scrollLeft - (e.pageX - wrap.offsetLeft - startX);
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
