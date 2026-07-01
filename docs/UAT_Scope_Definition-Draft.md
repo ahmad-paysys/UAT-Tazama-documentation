@@ -1,6 +1,7 @@
 # UAT Scope Definition — Tazama Core + Extension Services
 
 **Status:** Submission for discussion
+
 **Involved Parties:** [Paysys Labs, Tazama]
 
 ---
