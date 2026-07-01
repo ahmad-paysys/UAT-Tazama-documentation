@@ -1,8 +1,7 @@
 # UAT Scope Definition — Tazama Core + Extension Services
 
-**Status:** Draft for discussion
-**Owner:** [Your name / team]
-**Open items pending Behjet's input are flagged throughout with 🔶**
+**Status:** Submission for discussion
+**Involved Parties:** [Paysys Labs, Tazama]
 
 ---
 
@@ -36,8 +35,8 @@ UAT is defined as the execution of agreed test scenarios across the full Tazama 
 
 UAT scenarios must exercise the following stages, in sequence, at minimum once per scenario:
 
-1. Connection creation in **TCS** (Transaction Configuration Service)
-2. Rule creation in **TRS** (Transaction Risk Scoring / Rule Service)
+1. Connection creation in **TCS** 
+2. Rule creation in **TRS** 
 3. Rule deployment
 4. Ingestion in **DEMS**, via the connection created in TCS
 5. Rule Processor triggering for relevant rules
@@ -72,9 +71,9 @@ A scenario is considered successfully executed when every applicable stage above
 
 ## 4. Scenario Ownership & Deadlines
 
-- **Our team** will bring a set of scenarios intended to be comprehensive enough to exercise each meaningful branch across the services' flows.
-- **The client** is welcome to bring additional scenarios.
-- One scenario already identified: validating that **pacs.002 rules translated to pacs.008** produce consistent system behavior.
+- **Paysys Labs team** will bring a set of scenarios intended to be comprehensive enough to exercise each meaningful branch across the services' flows.
+- **Tazama** is welcome to bring additional scenarios.
+- One scenario already brought up by Tazama: validating that **pacs.002 rules translated to pacs.008** produce consistent system behavior.
 - **Deadline for client-submitted scenarios: 10 July** — client to commit to submitting all scenarios by this date so they can be incorporated into the test plan without disrupting the schedule.
 
 ### 4.1 Scenario Sourcing Overview
@@ -104,16 +103,16 @@ flowchart TD
 
 - Successful execution of the agreed scenario set — demonstrating that all stages in [Section 3](#3-end-to-end-scope-coverage) work in concert — constitutes grounds for UAT conclusion.
 - Once this is demonstrated, **UAT is considered concluded by both parties**, independent of any outstanding issues discovered during testing.
-- **Sign-off is not withheld on the basis of bugs.** The client agrees not to delay or block sign-off due to defects identified during UAT.
-- Target sign-off date: **23 July** 🔶 *(pending Behjet's confirmation)*
+- **Sign-off is not withheld on the basis of bugs.** Tazama agrees not to delay or block sign-off due to defects identified during UAT.
+- Target sign-off date: **23 July**
 
 ---
 
 ## 6. Issue Handling & Post-UAT Commitment
 
-- We commit to resolving any **critical issues** identified on our end, including those found **after UAT has concluded**. 🔶 *(commitment scope/definition pending Behjet's input)*
+- Paysys Labs commit to resolving any **critical issues** identified on our end, including those found **after UAT has concluded**.
 - This commitment is separate from, and does not affect, the sign-off decision.
-- **Critical issue reporting threshold (client-side):** issues must be reported by **14 July** to be considered within the committed resolution window. 🔶 *(date negotiable, pending Behjet's input)*
+- **Critical issue reporting threshold (client-side):** issues must be reported by **14 July** to be considered within the committed resolution window.
 - Issues reported after this threshold may be handled on a best-effort basis, subject to further discussion.
 
 ### 6.1 Issue Lifecycle
@@ -121,7 +120,7 @@ flowchart TD
 ```mermaid
 flowchart LR
     A[Issue Identified<br/>during UAT] --> B{Severity?}
-    B -->|Critical| C[Report by 14 July 🔶]
+    B -->|Critical| C[Report by 14 July]
     B -->|Non-Critical| D[Logged, does not<br/>block sign-off]
     C --> E[Committed to resolution,<br/>even post-UAT]
     D --> F[Addressed per standard<br/>backlog process]
@@ -135,9 +134,9 @@ flowchart LR
 
 | Date | Milestone | Status |
 |---|---|---|
-| 10 July | Deadline for client to submit their UAT scenarios | Confirmed |
-| 14 July | Critical issue reporting threshold (client-side) | 🔶 Negotiable — pending Behjet |
-| 23 July | Target UAT sign-off date | 🔶 Pending Behjet |
+| 10 July | Deadline for client to submit their UAT scenarios | pending Tazama confirmation |
+| 14 July | Critical issue reporting threshold (client-side) | pending Tazama confirmation |
+| 23 July | Target UAT sign-off date | pending Tazama confirmation |
 
 ---
 
@@ -158,10 +157,10 @@ The following items are commonly needed to make a UAT scope airtight and may be 
 
 ---
 
-## 9. Open Items Requiring Confirmation
+## 9. Open Items Requiring Confirmation from Tazama
 
-- 🔶 Scope and definition of the "critical issue" resolution commitment post-UAT (Behjet)
-- 🔶 14 July critical issue reporting threshold — confirm or renegotiate (Behjet)
-- 🔶 23 July sign-off date — confirm or renegotiate (Behjet)
+- Scope and definition of the "critical issue" resolution commitment post-UAT 
+- 14 July critical issue reporting threshold 
+- 23 July sign-off date 
 - Confirm defect severity classification criteria (see [Section 8](#8-additional-considerations))
 - Confirm environment freeze policy during UAT window
