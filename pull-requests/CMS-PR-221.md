@@ -13,6 +13,9 @@
   - [Changes Requested — Resolution Status](#changes-requested--resolution-status)
   - [New Issues Found in Updated Commits](#new-issues-found-in-updated-commits)
   - [Updated Verdict](#updated-verdict)
+- [Final Review (2026-07-01)](#final-review-2026-07-01)
+  - [Resolution Status — All Outstanding Items](#resolution-status--all-outstanding-items)
+  - [Final Verdict](#final-verdict)
 
 ---
 
@@ -427,3 +430,76 @@ Item 3 is the only clean blocker — six dead-code lines that are trivial to rem
 The developer should also confirm whether any other consumer of the `/transaction-history` API depended on `volumeDistribution` before the backend removal is merged.
 
 Once item 3 (and the two remaining stray commented-out lines) is cleaned up, the PR is ready to approve.
+
+---
+---
+---
+
+## Final Review (2026-07-01)
+
+[↑ Back to top](#pr-review-cms-221--fix-transaction-history-graph-and-visualization)
+
+**Reviewed commit:** `919d13a0` — *"fix: dead code removed"* (2026-07-01)  
+**Triggered by:** Developer push after second CHANGES_REQUESTED review  
+**Developer note:** *"Dead code and unused code is removed completely from transaction-viz notebook file."*
+
+---
+
+## Resolution Status — All Outstanding Items
+
+[↑ Back to top](#pr-review-cms-221--fix-transaction-history-graph-and-visualization)
+
+### Item 2 — Remove commented-out code blocks
+
+**Status: RESOLVED**
+
+The two stray commented-out executable lines that remained after the previous push have been removed:
+
+```python
+# Before (still present in ef3404a5):
+# df_timeline['date'] = pd.to_datetime(df_timeline['date'])
+# df_cumulative['date'] = pd.to_datetime(df_cumulative['date'])
+# df_timeline = df_timeline.sort_values('date')
+
+# After (919d13a0): all three lines are gone
+```
+
+What remains in the notebook are only legitimate section-header comments (e.g., `# 1. Transaction Timeline`, `# Shared x-axis config`, `# Format Date`) and inline explanatory comments — none of these are dead code. The cleanup is complete.
+
+---
+
+### Item 3 — Remove unused `_bar_x_start`/`_bar_x_end` variables
+
+**Status: RESOLVED**
+
+All six assignments of `_bar_x_start` and `_bar_x_end` across the three granularity branches (`day`/`year`/`else`) have been removed. A full-text search of the notebook at `919d13a0` confirms zero occurrences of either variable. This was the last hard blocker.
+
+---
+
+### Remaining concern: `volumeDistribution` backend removal
+
+**Status: ACKNOWLEDGED — no new information**
+
+The backend removal of `volumeDistribution` (from service, type, and test) remains in scope. The developer's comment confirms it was removed because the notebook was no longer using it. No other consumer has been identified. This is acceptable to proceed with, but the team should be aware it is a breaking API change on the response contract.
+
+---
+
+## Final Verdict
+
+[↑ Back to top](#pr-review-cms-221--fix-transaction-history-graph-and-visualization)
+
+**Verdict: Approved**
+
+All five items from the original CHANGES_REQUESTED review are now fully resolved:
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | Remove duplicate `total_vol` | ✅ Resolved |
+| 2 | Remove commented-out code blocks | ✅ Resolved |
+| 3 | Remove unused `_bar_x_start`/`_bar_x_end` | ✅ Resolved |
+| 4 | Remove or use `fetch_json` | ✅ Resolved |
+| 5 | Clean up `df_volume` normalization | ✅ Resolved |
+
+The notebook is clean. The functional fixes (granularity-aware visualization, date parsing hardening) and security improvements (URL encoding, HTML escaping, request timeouts, `accountId` guard on Benford URL) are all sound and were confirmed across the review cycle. No new issues were introduced in the final commit.
+
+This PR is ready to merge.
