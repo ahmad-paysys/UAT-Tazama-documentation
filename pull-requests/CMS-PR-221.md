@@ -1,5 +1,23 @@
 # PR Review: CMS #221 — fix: Transaction History Graph and Visualization
 
+## Table of Contents
+
+- [Initial Review (2026-06-30)](#initial-review-2026-06-30)
+  - [Overview](#overview)
+  - [What Changed (Detailed)](#what-changed-detailed)
+  - [Issues and Observations](#issues-and-observations)
+  - [Security Assessment](#security-assessment)
+  - [Test Coverage](#test-coverage)
+  - [Summary and Verdict](#summary-and-verdict)
+- [Follow-up Review (2026-06-30)](#follow-up-review-2026-06-30)
+  - [Changes Requested — Resolution Status](#changes-requested--resolution-status)
+  - [New Issues Found in Updated Commits](#new-issues-found-in-updated-commits)
+  - [Updated Verdict](#updated-verdict)
+
+---
+
+## Initial Review (2026-06-30)
+
 **Repo:** tazama-lf/case-management-system  
 **Branch:** `paysys/code-fixes` → `dev`  
 **Author:** Sobia Rizwan  
@@ -10,6 +28,8 @@
 ---
 
 ## Overview
+
+[↑ Back to top](#pr-review-cms-221--fix-transaction-history-graph-and-visualization)
 
 This PR fixes broken graph rendering in the Transactional History view of the Case Management System. The changes are entirely within Jupyter notebooks (`.ipynb` files) served via Voila. Four files are touched:
 
@@ -25,6 +45,8 @@ The core fix is in `transaction-viz.ipynb`, which was producing incorrect or bla
 ---
 
 ## What Changed (Detailed)
+
+[↑ Back to top](#pr-review-cms-221--fix-transaction-history-graph-and-visualization)
 
 ### 1. `account-network.ipynb` — Formatting Fix
 
@@ -146,6 +168,8 @@ Also added `.fillna('—')` for the date column after `pd.to_datetime(..., error
 
 ## Issues and Observations
 
+[↑ Back to top](#pr-review-cms-221--fix-transaction-history-graph-and-visualization)
+
 ### Bug: Duplicate line in `viz_metrics` cell
 ```python
 total_vol = f"{summary.get('totalVolume', 0):,.2f}"
@@ -208,6 +232,8 @@ Using string labels for the bar chart x-axis means Plotly treats them as categor
 
 ## Security Assessment
 
+[↑ Back to top](#pr-review-cms-221--fix-transaction-history-graph-and-visualization)
+
 | Concern | Old Code | New Code |
 |---------|----------|----------|
 | Path traversal via `accountId` in URL | Vulnerable | Fixed (URL encoding) |
@@ -222,11 +248,15 @@ All four security improvements are valid and should have been present from the s
 
 ## Test Coverage
 
+[↑ Back to top](#pr-review-cms-221--fix-transaction-history-graph-and-visualization)
+
 No automated tests exist or are expected for Jupyter notebooks in this project (the PR checklist confirms "Unit tests passing" but this is likely referring to other project tests). The changes were validated locally and in the development environment per the PR description.
 
 ---
 
 ## Summary and Verdict
+
+[↑ Back to top](#pr-review-cms-221--fix-transaction-history-graph-and-visualization)
 
 **Verdict: Approve with minor cleanup requested**
 
@@ -243,3 +273,157 @@ The blocking items before merge are minor:
 5. Either clean up the `df_volume` normalization block (now unused) or add a comment explaining it's kept for future backend integration.
 
 None of these are defects — they are cleanliness issues. The functional changes are correct and the security improvements are a net positive.
+
+---
+---
+---
+
+## Follow-up Review (2026-06-30)
+
+[↑ Back to top](#pr-review-cms-221--fix-transaction-history-graph-and-visualization)
+
+**Reviewed commit:** `ef3404a5` (latest as of 2026-06-30)  
+**Reviewed against:** CHANGES_REQUESTED on commit `ecc8218d` by `ahmad-paysys`  
+**Developer response:** Sobia Rizwan posted: *"All of the issues are catered."*
+
+The PR has received 6 total commits since the initial push, with the latest (`ef3404a5`) arriving after both the CHANGES_REQUESTED review and CodeRabbit's third round of comments. The review below verifies each requested change against the current notebook state.
+
+---
+
+## Changes Requested — Resolution Status
+
+[↑ Back to top](#pr-review-cms-221--fix-transaction-history-graph-and-visualization)
+
+### Item 1 — Remove the duplicate `total_vol` assignment
+
+**Status: RESOLVED**
+
+The `viz_metrics` cell now contains a single assignment:
+```python
+total_vol = f"{summary.get('totalVolume', 0):,.2f}"
+```
+The duplicate line is gone.
+
+---
+
+### Item 2 — Remove commented-out code blocks from `viz_charts`
+
+**Status: PARTIALLY RESOLVED — still has issues**
+
+Some commented-out code was removed, but the cleanup is incomplete. The following commented-out lines remain in the notebook:
+
+**In cell 2 (`fetch_data`):**
+```python
+# df_timeline['date'] = pd.to_datetime(df_timeline['date'])
+# df_cumulative['date'] = pd.to_datetime(df_cumulative['date'])
+```
+These are the old strict-parse lines sitting right above the new `errors='coerce'` equivalents. They serve as an implicit "before/after" comment, but they are dead code and should be removed.
+
+**In cell 4 (`viz_charts`):**
+```python
+# df_timeline = df_timeline.sort_values('date')
+```
+Commented-out sort is dead code — the actual sort happens in `fetch_data` already.
+
+The section-header comments (e.g., `# 1. Transaction Timeline - per-transaction amount`, `# 3. Volume Distribution — derived from df_timeline`, `# Layout & axes styling`, etc.) are retained and are fine — they serve as documentation for chart sections. The truly problematic dead code is the commented-out executable statements listed above.
+
+**Overall: the bulk of the commented-out block clutter from the initial review has been removed, but a few stray commented-out code lines remain.**
+
+---
+
+### Item 3 — Remove unused `_bar_x_start`/`_bar_x_end` variables
+
+**Status: NOT RESOLVED**
+
+`_bar_x_start` and `_bar_x_end` are still assigned in all three branches of the granularity `if/elif/else` block in cell 4:
+
+```python
+if _filter == "day":
+    ...
+    _bar_x_start = (df_timeline['date'].min() - timedelta(days=1)).strftime('%Y-%m-%d')
+    _bar_x_end   = (df_timeline['date'].max() + timedelta(days=1)).strftime('%Y-%m-%d')
+elif _filter == "year":
+    ...
+    _bar_x_start = (df_timeline['date'].dt.to_period('Y').min()...).strftime('%Y-%m-%d')
+    _bar_x_end   = (df_timeline['date'].dt.to_period('Y').max()...).strftime('%Y-%m-%d')
+else:
+    ...
+    _bar_x_start = (df_timeline['date'].dt.to_period('M').min()...).strftime('%Y-%m-%d')
+    _bar_x_end   = (df_timeline['date'].dt.to_period('M').max()...).strftime('%Y-%m-%d')
+```
+
+None of the `fig.update_xaxes(range=...)` calls reference `_bar_x_start` or `_bar_x_end`. The only `range=` calls in the chart are:
+```python
+range=[_tl_x_start, _tl_x_end]   # Row 1
+range=[_cum_x_start, _cum_x_end]  # Row 2
+```
+Row 3 uses a categorical string axis (`date_str`) so no x-range is applied to it at all. These six assignments are dead code. **This item was not addressed.**
+
+---
+
+### Item 4 — Either use `fetch_json` or remove it
+
+**Status: RESOLVED**
+
+`fetch_json` has been fully removed from the notebook. No reference to it exists in the current commit.
+
+---
+
+### Item 5 — Clean up `df_volume` normalization block (unused) or comment it
+
+**Status: RESOLVED**
+
+The `df_volume` / `volumeDistribution` normalization block has been removed from the notebook. This aligns with a broader cleanup: the backend also removed the `volumeDistribution` field from `TransactionHistoryResponse` (both the TypeScript interface and the service mapping), and the corresponding test assertion was dropped. The notebook, backend service, and type definitions are now consistent — none of them reference `volumeDistribution` anymore.
+
+---
+
+## New Issues Found in Updated Commits
+
+[↑ Back to top](#pr-review-cms-221--fix-transaction-history-graph-and-visualization)
+
+The latest commits introduced backend changes that were not part of the original PR scope and warrant attention.
+
+### Backend: `volumeDistribution` removal
+
+Three backend files were modified to remove the `volumeDistribution` field:
+
+| File | Change |
+|------|--------|
+| `backend/src/modules/gold-lakehouse/transaction-lakehouse.service.ts` | Removed mapping block |
+| `backend/src/modules/gold-lakehouse/types/transaction-history-response.types.ts` | Removed type field |
+| `backend/test/transaction-lakehouse.service.spec.ts` | Removed test assertion |
+
+This is a **breaking API change**: any client consuming the `volumeDistribution` field from the transaction history endpoint will silently receive `undefined` instead of an array. Since the notebook was the only known consumer and it no longer uses the field, this is likely safe — but it should be confirmed that no other dashboard, report, or integration depends on this field before merging.
+
+### CodeRabbit Round 3: `accountId` guard before Benford URL (open)
+
+CodeRabbit's third review (on commit `19687b77`) flagged that the Benford URL construction could produce `/account/None` if `accountId` is falsy. The latest commit (`ef3404a5`) added a guard:
+```python
+if not accountId:
+    display(HTML("..."))
+else:
+    benford_url = f"..."
+```
+This resolves CodeRabbit's concern. Confirmed fixed.
+
+---
+
+## Updated Verdict
+
+[↑ Back to top](#pr-review-cms-221--fix-transaction-history-graph-and-visualization)
+
+**Verdict: Still requires one fix before approval**
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | Remove duplicate `total_vol` | ✅ Resolved |
+| 2 | Remove commented-out code blocks | ⚠️ Partial — a few stray lines remain |
+| 3 | Remove unused `_bar_x_start`/`_bar_x_end` | ❌ Not resolved |
+| 4 | Remove or use `fetch_json` | ✅ Resolved |
+| 5 | Clean up `df_volume` normalization | ✅ Resolved |
+
+Item 3 is the only clean blocker — six dead-code lines that are trivial to remove. Item 2 has a few stray commented-out executable statements left but is mostly addressed; it can be resolved in the same pass as item 3.
+
+The developer should also confirm whether any other consumer of the `/transaction-history` API depended on `volumeDistribution` before the backend removal is merged.
+
+Once item 3 (and the two remaining stray commented-out lines) is cleaned up, the PR is ready to approve.
