@@ -347,6 +347,8 @@ Always the last section. Contains ready-to-paste Markdown for posting directly a
 
 The comment must be self-contained — it should make sense to the PR author without needing to read the full review file. Include specific file paths, line references, and code examples in the comment itself.
 
+**Backtick fence rule:** The outer fence wrapping the entire GitHub Review Comment block must use **at least one more backtick** than any fence inside it. If the comment body contains a ` ```diff ` or ` ```typescript ` block (3 backticks), the outer fence must use 4 backticks (` ```` `). If the body contains a 4-backtick fence, use 5 for the outer, and so on. Violating this causes the inner fence to close the outer one, breaking the raw-markdown display.
+
 ---
 
 ## 6. Multi-Round PR Structure
