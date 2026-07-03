@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Impact Study — Issue #47: CI lint gate fails on dev</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #24292e;
+    --h1: #0d1b3e;
+    --h2: #1a3a6b;
+    --h3: #2563a8;
+    --border: #d0d7de;
+    --border-soft: #e1e4e8;
+    --code-bg: #f6f8fa;
+    --table-head-bg: #0d1b3e;
+    --table-head-fg: #ffffff;
+    --table-head-border: #1a3a6b;
+    --row-even: #f3f5f8;
+    --row-odd: #ffffff;
+    --link: #1a3a6b;
+    --link-hover: #2563a8;
+    --bar-bg: #0d1b3e;
+    --bar-fg: #ffffff;
+    --bar-btn-bg: rgba(255,255,255,0.12);
+    --bar-btn-bg-hover: rgba(255,255,255,0.25);
+    --bar-btn-border: rgba(255,255,255,0.25);
+    --bar-btn-active: #2563a8;
+    --details-bg: #fafbfc;
+    --details-border: #d0d7de;
+    --summary-bg: #f3f5f8;
+    --summary-hover: #e9edf2;
+    --badge-green-bg: #d4edda;  --badge-green-fg: #155724;  --badge-green-bd: #b8dfc4;
+    --badge-amber-bg: #fff3cd;  --badge-amber-fg: #856404;  --badge-amber-bd: #f0d88a;
+    --badge-red-bg:   #f8d7da;  --badge-red-fg:   #721c24;  --badge-red-bd:   #f1aeb5;
+    --badge-blue-bg:  #d1ecf1;  --badge-blue-fg:  #0c5460;  --badge-blue-bd:  #a8d9e2;
+  }
+
+  [data-theme="dark"] {
+    --bg: #0d1117;
+    --fg: #c9d1d9;
+    --h1: #79c0ff;
+    --h2: #58a6ff;
+    --h3: #79c0ff;
+    --border: #30363d;
+    --border-soft: #21262d;
+    --code-bg: #161b22;
+    --table-head-bg: #1f6feb;
+    --table-head-fg: #ffffff;
+    --table-head-border: #388bfd;
+    --row-even: #161b22;
+    --row-odd: #0d1117;
+    --link: #58a6ff;
+    --link-hover: #79c0ff;
+    --bar-bg: #161b22;
+    --bar-fg: #c9d1d9;
+    --bar-btn-bg: rgba(255,255,255,0.06);
+    --bar-btn-bg-hover: rgba(255,255,255,0.14);
+    --bar-btn-border: rgba(255,255,255,0.18);
+    --bar-btn-active: #1f6feb;
+    --details-bg: #0d1117;
+    --details-border: #30363d;
+    --summary-bg: #161b22;
+    --summary-hover: #1f242c;
+    --badge-green-bg: #033a16; --badge-green-fg: #7ee787; --badge-green-bd: #196c2e;
+    --badge-amber-bg: #4d3800; --badge-amber-fg: #ffd33d; --badge-amber-bd: #8a6500;
+    --badge-red-bg:   #4c0014; --badge-red-fg:   #ff7b85; --badge-red-bd:   #8a0020;
+    --badge-blue-bg:  #032b40; --badge-blue-fg:  #79c0ff; --badge-blue-bd:  #1f6feb;
+  }
+
+  [data-theme="solar"] {
+    --bg: #fdf6e3;
+    --fg: #586e75;
+    --h1: #073642;
+    --h2: #268bd2;
+    --h3: #b58900;
+    --border: #eee8d5;
+    --border-soft: #eee8d5;
+    --code-bg: #eee8d5;
+    --table-head-bg: #073642;
+    --table-head-fg: #fdf6e3;
+    --table-head-border: #002b36;
+    --row-even: #f5efdc;
+    --row-odd: #fdf6e3;
+    --link: #268bd2;
+    --link-hover: #2aa198;
+    --bar-bg: #073642;
+    --bar-fg: #fdf6e3;
+    --bar-btn-bg: rgba(253,246,227,0.10);
+    --bar-btn-bg-hover: rgba(253,246,227,0.22);
+    --bar-btn-border: rgba(253,246,227,0.30);
+    --bar-btn-active: #b58900;
+    --details-bg: #fbf2d8;
+    --details-border: #eee8d5;
+    --summary-bg: #eee8d5;
+    --summary-hover: #e4dcc1;
+    --badge-green-bg: #dbe9b1; --badge-green-fg: #4d5d10; --badge-green-bd: #b5c97a;
+    --badge-amber-bg: #ffeec2; --badge-amber-fg: #7d5a00; --badge-amber-bd: #e6c970;
+    --badge-red-bg:   #fbd3cb; --badge-red-fg:   #8a1a08; --badge-red-bd:   #e89a8a;
+    --badge-blue-bg:  #cfe6f5; --badge-blue-fg:  #1c5e85; --badge-blue-bd:  #8ec0dc;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--fg);
+    background: var(--bg);
+    margin: 0;
+    padding: 4.5rem 1rem 2rem;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+
+  .page-wrapper { max-width: 960px; margin: 0 auto; }
+
+  /* Top bar */
+  .top-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    background: var(--bar-bg);
+    color: var(--bar-fg);
+    padding: 0.55rem 1rem;
+    z-index: 1000;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+  }
+  .top-bar .group { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+  .top-bar .label {
+    font-size: 0.75em;
+    opacity: 0.7;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-right: 0.25rem;
+  }
+  .top-bar button {
+    background: var(--bar-btn-bg);
+    color: var(--bar-fg);
+    border: 1px solid var(--bar-btn-border);
+    border-radius: 5px;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.82em;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s ease;
+  }
+  .top-bar button:hover { background: var(--bar-btn-bg-hover); }
+  .top-bar button.active {
+    background: var(--bar-btn-active);
+    border-color: var(--bar-btn-active);
+  }
+
+  h1 { color: var(--h1); font-size: 2rem; margin-top: 0; margin-bottom: 0.25rem; }
+  h2 { color: var(--h2); font-size: 1.4rem; margin: 0; padding: 0; border: none; }
+  h3 { color: var(--h3); font-size: 1.1rem; margin: 0; padding: 0; }
+
+  .static-section h2 {
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 0.3rem;
+    margin-top: 2.2rem;
+  }
+  .static-section h3 { margin-top: 1.8rem; }
+
+  p { margin: 0.6rem 0; }
+  ul, ol { margin: 0.5rem 0; padding-left: 1.6rem; }
+  li { margin: 0.25rem 0; }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 1.8rem 0; }
+
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.875em;
+    background: var(--code-bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    padding: 0.15em 0.4em;
+  }
+
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    padding: 1rem 1.2rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+  }
+  pre code { background: none; border: none; padding: 0; font-size: 0.85em; line-height: 1.5; }
+
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9em; }
+  thead tr { background: var(--table-head-bg); color: var(--table-head-fg); }
+  thead th {
+    padding: 0.6rem 0.85rem;
+    text-align: left;
+    font-weight: 600;
+    border: 1px solid var(--table-head-border);
+  }
+  tbody tr:nth-child(even) { background: var(--row-even); }
+  tbody tr:nth-child(odd)  { background: var(--row-odd); }
+  tbody td { padding: 0.5rem 0.85rem; border: 1px solid var(--border); vertical-align: top; }
+
+  .badge {
+    display: inline-block;
+    padding: 0.15em 0.6em;
+    border-radius: 999px;
+    font-size: 0.78em;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .badge-green { background: var(--badge-green-bg); color: var(--badge-green-fg); border: 1px solid var(--badge-green-bd); }
+  .badge-amber { background: var(--badge-amber-bg); color: var(--badge-amber-fg); border: 1px solid var(--badge-amber-bd); }
+  .badge-red   { background: var(--badge-red-bg);   color: var(--badge-red-fg);   border: 1px solid var(--badge-red-bd); }
+  .badge-blue  { background: var(--badge-blue-bg);  color: var(--badge-blue-fg);  border: 1px solid var(--badge-blue-bd); }
+
+  strong { font-weight: 600; }
+
+  /* TOC */
+  div.toc {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.1rem 1.4rem;
+    margin: 1.2rem 0 1.8rem;
+  }
+  div.toc p.toc-title {
+    font-weight: 700;
+    font-size: 0.95em;
+    margin: 0 0 0.5rem;
+    color: var(--h1);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  div.toc ol { margin: 0; padding-left: 1.3rem; }
+  div.toc li { margin: 0.2rem 0; font-size: 0.9em; }
+  div.toc ul { margin: 0.15rem 0; padding-left: 1.2rem; list-style: disc; }
+  div.toc a { color: var(--link); text-decoration: none; }
+  div.toc a:hover { text-decoration: underline; color: var(--link-hover); }
+
+  /* Collapsible sections */
+  details.section {
+    margin: 1rem 0;
+    border: 1px solid var(--details-border);
+    border-radius: 6px;
+    background: var(--details-bg);
+    overflow: hidden;
+  }
+  details.section > summary {
+    cursor: pointer;
+    padding: 0.7rem 1rem;
+    background: var(--summary-bg);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    user-select: none;
+    transition: background 0.15s ease;
+  }
+  details.section > summary:hover { background: var(--summary-hover); }
+  details.section > summary::-webkit-details-marker { display: none; }
+  details.section > summary::before {
+    content: "▶";
+    font-size: 0.7em;
+    color: var(--h2);
+    transition: transform 0.2s ease;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  details.section[open] > summary::before { transform: rotate(90deg); }
+  details.section .section-body { padding: 0.4rem 1.2rem 1rem; }
+
+  details.subsection {
+    margin: 0.6rem 0;
+    border: 1px solid var(--details-border);
+    border-radius: 5px;
+    background: var(--bg);
+  }
+  details.subsection > summary {
+    cursor: pointer;
+    padding: 0.5rem 0.85rem;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    user-select: none;
+    background: transparent;
+    transition: background 0.15s ease;
+  }
+  details.subsection > summary:hover { background: var(--summary-hover); }
+  details.subsection > summary::-webkit-details-marker { display: none; }
+  details.subsection > summary::before {
+    content: "▶";
+    font-size: 0.65em;
+    color: var(--h3);
+    transition: transform 0.2s ease;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  details.subsection[open] > summary::before { transform: rotate(90deg); }
+  details.subsection .subsection-body { padding: 0.2rem 1rem 0.8rem; }
+
+  html { scroll-behavior: smooth; scroll-padding-top: 70px; }
+
+  .diagram-wrap {
+    position: relative;
+    margin: 1.4rem -1rem 0.6rem;
+    border-top: 1px solid var(--details-border);
+    border-bottom: 1px solid var(--details-border);
+    background: var(--details-bg);
+    padding: 1.4rem 1.2rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    cursor: grab;
+  }
+  .diagram-wrap:active { cursor: grabbing; }
+  .diagram-wrap .mermaid { display: inline-block; min-width: max-content; }
+  .diagram-wrap .mermaid svg { min-width: 700px; height: auto !important; }
+</style>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  function getMermaidTheme() {
+    const t = document.documentElement.getAttribute('data-theme');
+    if (t === 'dark') return 'dark';
+    return 'base';
+  }
+  function initMermaid() {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: getMermaidTheme(),
+      themeVariables: (function() {
+        const t = document.documentElement.getAttribute('data-theme');
+        if (t === 'dark') return {};
+        if (t === 'solar') return { primaryColor: '#eee8d5', primaryTextColor: '#586e75', primaryBorderColor: '#93a1a1', lineColor: '#586e75', background: '#fdf6e3', mainBkg: '#fdf6e3', nodeBorder: '#93a1a1', clusterBkg: '#f5efdc', titleColor: '#073642', edgeLabelBackground: '#fdf6e3' };
+        return { primaryColor: '#f3f5f8', primaryTextColor: '#24292e', primaryBorderColor: '#8a95a3', lineColor: '#6b7a8d', background: '#ffffff', mainBkg: '#f3f5f8', nodeBorder: '#8a95a3', clusterBkg: '#fafbfc', titleColor: '#0d1b3e', edgeLabelBackground: '#ffffff' };
+      })(),
+      flowchart: { curve: 'basis', htmlLabels: true, rankSpacing: 80, nodeSpacing: 50 }
+    });
+    document.querySelectorAll('.mermaid').forEach(el => { el.removeAttribute('data-processed'); });
+    mermaid.run({ nodes: document.querySelectorAll('.mermaid') });
+  }
+  document.addEventListener('DOMContentLoaded', initMermaid);
+  window.__reinitMermaid = initMermaid;
+</script>
+</head>
+<body>
+
+<div class="top-bar" role="toolbar" aria-label="Document controls">
+  <div class="group">
+    <span class="label">Sections</span>
+    <button type="button" id="expand-all">Expand all</button>
+    <button type="button" id="collapse-all">Collapse all</button>
+  </div>
+  <div class="group">
+    <span class="label">Theme</span>
+    <button type="button" class="theme-btn" data-theme="light">Light</button>
+    <button type="button" class="theme-btn" data-theme="dark">Dark</button>
+    <button type="button" class="theme-btn" data-theme="solar">Solar</button>
+  </div>
+  <div class="group">
+    <button type="button" id="top-btn" title="Back to top">&#8593; Top</button>
+  </div>
+</div>
+
+<div class="page-wrapper">
+
+<div class="static-section">
+
+<h1>Impact Study &#8212; Issue #47</h1>
+
+<p><strong>Issue:</strong> <a href="https://github.com/tazama-lf/event-monitoring-service/issues/47">#47 &#8212; CI lint gate (npm run lint:eslint) fails on dev with 66 errors</a><br>
+<strong>Study Date:</strong> 2026-07-03<br>
+<strong>Author:</strong> Ahmad Khalid<br>
+<strong>Repository:</strong> tazama-lf/event-monitoring-service</p>
+
+<hr>
+
+<h2 id="summary">Summary</h2>
+
+<p>The <code>npm run lint:eslint</code> script in <code>event-monitoring-service</code> runs bare <code>eslint</code> with no file path argument, causing ESLint to discover all <code>.ts</code> files in the project and fail to parse them under <code>parserOptions.project</code> &#8212; producing 66 errors that block the <code>node-ci.yml@dev</code> CI gate for every PR. A second independent fault causes additional &#8220;Definition for rule X was not found&#8221; errors due to a dual-registration of the <code>@typescript-eslint</code> plugin in <code>eslint.config.mjs</code> and a removed rule in <code>eslint-plugin-promise@7</code>. Track A fixes the CI gate immediately by scoping the <code>lint:eslint</code> script to the same file glob as <code>lint:check</code>. Track B removes the underlying ESLint configuration debt by eliminating the dual-plugin pattern, migrating to <code>projectService</code>, and correcting the <code>tsconfig.json</code> include path.</p>
+
+<hr>
+
+<h2>Table of Contents</h2>
+
+<div class="toc">
+  <p class="toc-title">Contents</p>
+  <ol>
+    <li><a href="#confirmed-root-cause">Confirmed Root Cause</a></li>
+    <li><a href="#track-a">Track A &#8212; Scope the bare eslint command</a></li>
+    <li><a href="#track-b">Track B &#8212; Reconcile flat config with installed plugin versions</a></li>
+    <li><a href="#side-effects">Side Effects and Risks</a>
+      <ul>
+        <li><a href="#risks-a">Risks of Track A Alone</a></li>
+        <li><a href="#risks-b">Risks of Track B</a></li>
+        <li><a href="#cross-issue">Cross-Issue Dependencies</a></li>
+      </ul>
+    </li>
+    <li><a href="#effort">Effort Estimate</a></li>
+    <li><a href="#acceptance">Acceptance Criteria</a></li>
+    <li><a href="#sequencing">Recommended Sequencing</a></li>
+  </ol>
+</div>
+
+</div>
+
+<hr>
+
+<details class="section" open id="confirmed-root-cause">
+<summary><h2>Confirmed Root Cause</h2></summary>
+<div class="section-body">
+
+<p>All claims from the issue are confirmed against the source code:</p>
+
+<ul>
+  <li><strong><code>lint:eslint</code> is bare <code>eslint</code></strong>: confirmed at <code>repos/event-monitoring-service/package.json</code> line 21: <code>"lint:eslint": "eslint"</code>. The issue states &#8220;bare command&#8221; &#8212; confirmed exact.</li>
+  <li><strong><code>lint:check</code> is path-scoped</strong>: confirmed at <code>package.json</code> line 20: <code>"lint:check": "eslint \"{src,apps,libs,test}/**/*.ts\""</code>. Zero errors on path-scoped run is consistent with file-discovery being the trigger.</li>
+  <li><strong><code>parserOptions.project</code> set for all matched files</strong>: confirmed at <code>repos/event-monitoring-service/eslint.config.mjs</code> line 27: <code>project: ['./tsconfig.json']</code>. This is inside the <code>files: ['**/*.ts']</code> config block (line 14).</li>
+  <li><strong>62 <code>.ts</code> files in <code>src/</code></strong>: confirmed by directory enumeration. All 62 are under <code>src/</code>, which is covered by <code>tsconfig.json</code> include. The parse errors arise from the bare invocation context.</li>
+  <li><strong>66 total <code>.ts</code> files</strong>: confirmed (62 in <code>src/</code> + 4 in <code>tests/</code>). The number matches the error count in the issue.</li>
+  <li><strong>Dual plugin registration</strong>: confirmed at <code>eslint.config.mjs</code> lines 4, 16, and 19. <code>tsEslint</code> is imported directly and then overrides <code>...eslintStandard.plugins</code>, creating two distinct plugin instances under the same namespace.</li>
+  <li><strong><code>promise/avoid-new</code> removed in v7</strong>: <code>package-lock.json</code> shows <code>eslint-plugin-promise@7.2.1</code> installed. This version removed <code>avoid-new</code>. <code>eslint-config-love@125.1.0</code> still enables it.</li>
+  <li><strong><code>tsconfig.json</code> includes <code>test/**/*</code> but directory is <code>tests/</code></strong>: confirmed. <code>tsconfig.json</code> line 25 has <code>"test/**/*"</code>; the actual directory on disk is <code>tests/</code> (no <code>test/</code> directory exists).</li>
+  <li><strong><code>typescript-eslint ^8.20.0</code> devDependency is outdated</strong>: confirmed at <code>package.json</code> devDependencies. <code>eslint-config-love@125.1.0</code> peer-requires <code>^8.41.0</code>; installed is <code>8.59.0</code> (compatible but the declared minimum is stale).</li>
+</ul>
+
+<div class="diagram-wrap">
+<div class="mermaid">
+graph TD
+    A["npm run lint:eslint<br/>(bare eslint — package.json:21)"]
+    B["ESLint discovers files<br/>via files: ['**/*.ts']<br/>(eslint.config.mjs:14)"]
+    C["62 src/*.ts files found"]
+    D["@typescript-eslint/parser<br/>parserOptions.project: ['./tsconfig.json']<br/>(eslint.config.mjs:27)"]
+    E["62 parse errors<br/>File not in TS project"]
+    F["eslintStandard.plugins spread<br/>then tsEslint override<br/>(eslint.config.mjs:16,19)"]
+    G["2 @typescript-eslint rules<br/>not found in override instance"]
+    H["promise/avoid-new<br/>removed in eslint-plugin-promise@7"]
+    I["1 promise rule not found"]
+    J["Total: 66 errors → CI gate RED"]
+
+    A --> B --> C --> D --> E --> J
+    F --> G --> J
+    H --> I --> J
+
+    classDef err fill:#f8d7da,stroke:#721c24,color:#721c24
+    classDef cfg fill:#fff3cd,stroke:#856404,color:#856404
+    classDef out fill:#d4edda,stroke:#155724,color:#155724
+
+    class E,G,I err
+    class A,B,C,D,F,H cfg
+    class J err
+</div>
+</div>
+
+</div>
+</details>
+
+<details class="section" open id="track-a">
+<summary><h2>Track A &#8212; Scope the bare eslint command</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open>
+<summary><h3>What Changes</h3></summary>
+<div class="subsection-body">
+<p>One file, one line. <code>package.json</code> line 21 gains a file glob argument that matches the scope of <code>lint:check</code>. No ESLint config changes, no dependency changes, no schema changes, no frontend changes.</p>
+
+<table>
+  <thead><tr><th>File</th><th>Change</th><th>Lines</th></tr></thead>
+  <tbody>
+    <tr><td><code>package.json</code></td><td>Add <code>"{src,apps,libs,test}/**/*.ts"</code> glob to <code>lint:eslint</code> script</td><td>Line 21</td></tr>
+    <tr><td><code>package.json</code></td><td>Update <code>fix:eslint</code> glob from <code>"**/*.ts"</code> to <code>"{src,apps,libs,test}/**/*.ts"</code> for consistency</td><td>Line 13</td></tr>
+  </tbody>
+</table>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Impact</h3></summary>
+<div class="subsection-body">
+
+<table>
+  <thead><tr><th>Dimension</th><th>Detail</th></tr></thead>
+  <tbody>
+    <tr><td>Files changed</td><td>1 (<code>package.json</code>)</td></tr>
+    <tr><td>Lines changed</td><td>1&#8211;2</td></tr>
+    <tr><td>Schema migration required</td><td><span class="badge badge-green">No</span></td></tr>
+    <tr><td>Frontend changes required</td><td><span class="badge badge-green">No</span></td></tr>
+    <tr><td>Downtime required</td><td><span class="badge badge-green">No</span></td></tr>
+    <tr><td>Risk of regression</td><td><span class="badge badge-green">Low</span> &#8212; matches existing <code>lint:check</code> scope exactly</td></tr>
+    <tr><td>Reversibility</td><td><span class="badge badge-green">Fully reversible</span> &#8212; revert the one line</td></tr>
+  </tbody>
+</table>
+
+<p><strong>What this fixes immediately:</strong></p>
+<ul>
+  <li><code>npm run lint:eslint</code> exits 0 on a clean <code>origin/dev</code> checkout</li>
+  <li>The CI <code>node-ci.yml@dev</code> lint gate passes for all PRs without touching application code</li>
+  <li>The bare invocation context no longer triggers <code>parserOptions.project</code> resolution failures</li>
+  <li>CI and <code>lint:check</code> now run ESLint over the same file set, making local and CI results consistent</li>
+</ul>
+
+<p><strong>What this does not fix:</strong></p>
+<ul>
+  <li>The dual <code>@typescript-eslint</code> plugin registration in <code>eslint.config.mjs</code> (latent, masked by scope)</li>
+  <li><code>promise/avoid-new</code> rule-not-found: still present in config; silently suppressed when no file triggers it</li>
+  <li>The <code>tsconfig.json</code> include path mismatch (<code>test/**/*</code> vs actual <code>tests/</code> directory)</li>
+  <li>Outdated <code>typescript-eslint ^8.20.0</code> devDependency declaration</li>
+  <li>Future drift: new rules added by <code>eslint-config-love</code> may re-expose the dual-plugin issue</li>
+</ul>
+
+<p><strong>Track A is safe to ship in isolation.</strong></p>
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section" open id="track-b">
+<summary><h2>Track B &#8212; Reconcile flat config with installed plugin versions</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open>
+<summary><h3>What Changes</h3></summary>
+<div class="subsection-body">
+<p>Three files. Removes the dual-plugin registration pattern, migrates <code>parserOptions.project</code> to <code>projectService</code>, corrects the tsconfig include path, disables the removed <code>promise/avoid-new</code> rule, and updates the <code>typescript-eslint</code> devDependency pin.</p>
+
+<table>
+  <thead><tr><th>File</th><th>Change</th><th>Lines affected</th></tr></thead>
+  <tbody>
+    <tr><td><code>eslint.config.mjs</code></td><td>Remove <code>import tsEslint from '@typescript-eslint/eslint-plugin'</code></td><td>Line 4</td></tr>
+    <tr><td><code>eslint.config.mjs</code></td><td>Remove <code>['@typescript-eslint']: tsEslint</code> plugin override</td><td>Line 19</td></tr>
+    <tr><td><code>eslint.config.mjs</code></td><td>Replace <code>parserOptions.project</code> with <code>parserOptions.projectService: true, tsconfigRootDir: import.meta.dirname</code></td><td>Lines 26&#8211;28</td></tr>
+    <tr><td><code>eslint.config.mjs</code></td><td>Add <code>'promise/avoid-new': 'off'</code> to rules block</td><td>Rules block</td></tr>
+    <tr><td><code>tsconfig.json</code></td><td>Change <code>"test/**/*"</code> to <code>"tests/**/*"</code> in include array</td><td>Line 25</td></tr>
+    <tr><td><code>package.json</code></td><td>Update <code>typescript-eslint</code> devDep from <code>^8.20.0</code> to <code>^8.41.0</code></td><td>devDependencies</td></tr>
+  </tbody>
+</table>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Schema Impact</h3></summary>
+<div class="subsection-body">
+<p>No database schema changes. No migration required.</p>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Backend Code Impact</h3></summary>
+<div class="subsection-body">
+
+<table>
+  <thead><tr><th>File</th><th>Change type</th><th>Detail</th></tr></thead>
+  <tbody>
+    <tr><td><code>repos/event-monitoring-service/eslint.config.mjs</code></td><td>Config rewrite (partial)</td><td>Remove import line 4; remove plugin override line 19; update <code>parserOptions</code> lines 26&#8211;28; add one rule override</td></tr>
+    <tr><td><code>repos/event-monitoring-service/tsconfig.json</code></td><td>Include path correction</td><td>Line 25: <code>"test/**/*"</code> &#8594; <code>"tests/**/*"</code></td></tr>
+    <tr><td><code>repos/event-monitoring-service/package.json</code></td><td>DevDependency version bump</td><td><code>typescript-eslint: "^8.20.0"</code> &#8594; <code>"^8.41.0"</code></td></tr>
+  </tbody>
+</table>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Frontend Code Impact</h3></summary>
+<div class="subsection-body">
+<p>No frontend changes required. This repository has no frontend code.</p>
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section" open id="side-effects">
+<summary><h2>Side Effects and Risks</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open id="risks-a">
+<summary><h3>Risks of Track A Alone</h3></summary>
+<div class="subsection-body">
+<table>
+  <thead><tr><th>Risk</th><th>Likelihood</th><th>Mitigation</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Rule-not-found errors resurface if a future <code>eslint-config-love</code> update enables new rules not in the override instance</td>
+      <td><span class="badge badge-amber">Medium</span></td>
+      <td>Ship Track B before the next dependency update cycle</td>
+    </tr>
+    <tr>
+      <td><code>promise/avoid-new</code> rule-not-found warning continues in verbose ESLint output</td>
+      <td><span class="badge badge-green">Low</span> &#8212; not a gate failure</td>
+      <td>Ship Track B to remove it cleanly</td>
+    </tr>
+    <tr>
+      <td><code>fix:eslint</code> script (line 13) still uses <code>"**/*.ts"</code> if not updated in same PR</td>
+      <td><span class="badge badge-green">Low</span> &#8212; local tool only, not CI</td>
+      <td>Update <code>fix:eslint</code> in the same Track A PR</td>
+    </tr>
+    <tr>
+      <td><code>tsconfig.json</code> continues to miss <code>tests/</code> spec files in type-checking</td>
+      <td><span class="badge badge-amber">Medium</span> &#8212; latent type errors in test files may go undetected</td>
+      <td>Ship Track B Step B4 promptly</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</details>
+
+<details class="subsection" open id="risks-b">
+<summary><h3>Risks of Track B</h3></summary>
+<div class="subsection-body">
+<table>
+  <thead><tr><th>Risk</th><th>Likelihood</th><th>Mitigation</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Migrating to <code>projectService</code> changes TypeScript program loading; some type-aware rules may behave differently</td>
+      <td><span class="badge badge-green">Low</span></td>
+      <td>Run full lint before and after; compare warning counts and rule outputs</td>
+    </tr>
+    <tr>
+      <td>Correcting tsconfig include to <code>tests/**/*</code> exposes spec files to <code>tsc</code> type-checking; existing type errors surface</td>
+      <td><span class="badge badge-amber">Medium</span></td>
+      <td>Run <code>tsc --noEmit</code> after the change; fix any new errors before merging</td>
+    </tr>
+    <tr>
+      <td>Removing the direct <code>tsEslint</code> import may break explicit <code>@stylistic</code> or other plugin entries if they depended on load order</td>
+      <td><span class="badge badge-green">Low</span></td>
+      <td>Verify all plugins still register correctly after removal; <code>@stylistic</code> import remains untouched</td>
+    </tr>
+    <tr>
+      <td>Bumping <code>typescript-eslint</code> devDep pin triggers npm install pulling a new minor</td>
+      <td><span class="badge badge-green">Low</span> &#8212; already at 8.59.0, satisfies both ranges</td>
+      <td>Lock to exact version if needed; no functional change expected</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</details>
+
+<details class="subsection" open id="cross-issue">
+<summary><h3>Cross-Issue Dependencies</h3></summary>
+<div class="subsection-body">
+<p>No other open issue directories exist under <code>issues/event-monitoring-service/</code> at this time. <code>eslint.config.mjs</code>, <code>tsconfig.json</code>, and <code>package.json</code> are not modified by any other currently tracked open issue in this UAT workspace. No merge conflict risk identified.</p>
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section" open id="effort">
+<summary><h2>Effort Estimate</h2></summary>
+<div class="section-body">
+
+<table>
+  <thead><tr><th>Track</th><th>Files changed</th><th>Lines changed</th><th>Effort estimate</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Track A</strong> &#8212; Scope bare eslint</td>
+      <td>1 (<code>package.json</code>)</td>
+      <td>1&#8211;2</td>
+      <td><span class="badge badge-green">15 minutes</span></td>
+    </tr>
+    <tr>
+      <td><strong>Track B</strong> &#8212; Reconcile flat config</td>
+      <td>3 (<code>eslint.config.mjs</code>, <code>tsconfig.json</code>, <code>package.json</code>)</td>
+      <td>~10</td>
+      <td><span class="badge badge-amber">60 minutes</span></td>
+    </tr>
+    <tr>
+      <td><strong>Total</strong></td>
+      <td>3 files</td>
+      <td>~12</td>
+      <td><span class="badge badge-blue">~75 minutes</span></td>
+    </tr>
+  </tbody>
+</table>
+
+</div>
+</details>
+
+<details class="section" open id="acceptance">
+<summary><h2>Acceptance Criteria (Verification Checklist)</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open>
+<summary><h3>Track A Checklist</h3></summary>
+<div class="subsection-body">
+<ul>
+  <li>&#9744; <code>npm run lint:eslint</code> exits with code 0 on a clean <code>origin/dev</code> checkout</li>
+  <li>&#9744; <code>package.json</code> line 21 contains a file glob argument matching <code>{src,apps,libs,test}/**/*.ts</code></li>
+  <li>&#9744; The CI <code>node-ci.yml@dev</code> lint step passes without touching application code</li>
+  <li>&#9744; <code>npm run lint:check</code> continues to pass with the same number of warnings (92)</li>
+  <li>&#9744; Running <code>npm run lint:eslint</code> and <code>npm run lint:check</code> on <code>origin/dev</code> produces identical error counts (both 0)</li>
+</ul>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Track B Checklist</h3></summary>
+<div class="subsection-body">
+<ul>
+  <li>&#9744; <code>eslint.config.mjs</code> does not contain a direct <code>import tsEslint from '@typescript-eslint/eslint-plugin'</code></li>
+  <li>&#9744; <code>eslint.config.mjs</code> uses <code>parserOptions.projectService: true</code> instead of <code>parserOptions.project</code></li>
+  <li>&#9744; No "Definition for rule X was not found" warnings appear in ESLint output</li>
+  <li>&#9744; <code>tsconfig.json</code> include array contains <code>"tests/**/*"</code> not <code>"test/**/*"</code></li>
+  <li>&#9744; <code>tsc --noEmit</code> resolves type-checks across <code>src/</code> and <code>tests/</code> with no new errors introduced by the fix</li>
+  <li>&#9744; <code>package.json</code> devDependency for <code>typescript-eslint</code> is updated to <code>^8.41.0</code> or later</li>
+  <li>&#9744; <code>npm run lint:eslint</code> exits 0 with the bare command (no file glob) after Track B lands</li>
+</ul>
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section" open id="sequencing">
+<summary><h2>Recommended Sequencing</h2></summary>
+<div class="section-body">
+
+<ol>
+  <li><strong>Merge Track A first</strong> &#8212; one-line change to <code>package.json</code>; unblocks CI gate immediately; zero risk. Target: same sprint.</li>
+  <li><strong>Merge Track B as a follow-up PR</strong> &#8212; cleans configuration debt; can be developed in parallel with Track A but should land after Track A is merged so CI is already green and Track B&#8217;s changes can be verified against a working baseline.</li>
+  <li><strong>No dependency on other open issues</strong> &#8212; no external service changes, no schema migrations, no other repositories involved.</li>
+</ol>
+
+</div>
+</details>
+
+</div>
+
+<script>
+(function() {
+  const THEME_KEY = 'impact-study-theme';
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.theme === theme);
+    });
+    try { localStorage.setItem(THEME_KEY, theme); } catch(e) {}
+    if (window.__reinitMermaid) setTimeout(window.__reinitMermaid, 50);
+  }
+
+  const saved = (function() { try { return localStorage.getItem(THEME_KEY); } catch(e) { return null; } })();
+  applyTheme(saved || 'light');
+
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
+  });
+
+  document.getElementById('expand-all').addEventListener('click', () => {
+    document.querySelectorAll('details').forEach(d => d.open = true);
+  });
+  document.getElementById('collapse-all').addEventListener('click', () => {
+    document.querySelectorAll('details').forEach(d => d.open = false);
+  });
+  document.getElementById('top-btn').addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', (e) => {
+      const id = a.getAttribute('href').slice(1);
+      const target = document.getElementById(id);
+      if (!target) return;
+      let el = target;
+      while (el) {
+        if (el.tagName && el.tagName.toLowerCase() === 'details') el.open = true;
+        el = el.parentElement;
+      }
+    });
+  });
+
+  // Drag-to-scroll on diagram containers
+  document.querySelectorAll('.diagram-wrap').forEach(function(wrap) {
+    var isDown = false, startX, scrollLeft;
+    wrap.addEventListener('mousedown', function(e) {
+      isDown = true; startX = e.pageX - wrap.offsetLeft; scrollLeft = wrap.scrollLeft;
+    });
+    wrap.addEventListener('mouseleave', function() { isDown = false; });
+    wrap.addEventListener('mouseup', function() { isDown = false; });
+    wrap.addEventListener('mousemove', function(e) {
+      if (!isDown) return;
+      e.preventDefault();
+      wrap.scrollLeft = scrollLeft - (e.pageX - wrap.offsetLeft - startX);
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
