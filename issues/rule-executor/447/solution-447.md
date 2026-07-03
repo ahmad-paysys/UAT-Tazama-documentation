@@ -1,190 +1,244 @@
 ## Complete Fix — Exact Code Changes
 
-Track A can merge independently and immediately — it is two one-line changes in `tazama-lf/rule-studio-example` and has no dependency on Track B. Track B must land as a single coordinated PR into `dev` on `tazama-lf/rule-executer`; it should not be split because several changes interact (library versions, `Dockerfile` auth mechanism, and the `rule.ts` decision all affect whether the same build succeeds).
+The two tracks are independent and can be merged in either order. Track A is a two-line change in the `rule-studio-example` deployment workflows that stops targeting an obsolete branch of `rule-executer`; it ships as a standalone PR. Track B is a coordinated cleanup PR in `rule-executer` that reconciles `feat-paysys` with `dev` (or, equivalently, deletes `feat-paysys` after porting anything worth keeping). Track B must land as a single PR because the changes are cross-cutting (Dockerfile, package.json, .npmrc, controllers, husky hook, dead files) and are only meaningful as a set.
 
 ---
 
-### Track A — Switch clone target (PR 1 of 2)
+### Track A — Retarget deploy workflows to `dev` (PR 1 of 2)
 
-#### `.github/workflows/deploy.yml` — `tazama-lf/rule-studio-example`
+Both workflow files in `rule-studio-example` clone `rule-executer` from the abandoned `feat-paysys` branch. Track A retargets them to `dev`. The change must be applied on **both** `main`/`dev` (line 39) **and** `feat-paysys` (line 41) of `rule-studio-example`, since `feat-paysys` in that repo is 19 commits ahead and still carries the same hardcoded clone plus additional Docker Hub push logic.
 
-**Line 39. BEFORE:**
+#### File: `.github/workflows/deploy.yml` (rule-studio-example)
+
+Line 39 on `main`/`dev`; line 41 on `feat-paysys`.
+
+BEFORE:
 ```yaml
+      - name: Clone Rule Executer Repo
+        run: |
+          echo "Cloning Rule Executer repo and removing package-lock.json file..."
           git clone https://github.com/tazama-lf/rule-executer -b feat-paysys
+          cd rule-executer
+          rm -f package-lock.json
+          cd ..
+          echo "Clone completed."
 ```
 
-**AFTER:**
+AFTER:
 ```yaml
+      - name: Clone Rule Executer Repo
+        run: |
+          echo "Cloning Rule Executer repo and removing package-lock.json file..."
           git clone https://github.com/tazama-lf/rule-executer -b dev
+          cd rule-executer
+          rm -f package-lock.json
+          cd ..
+          echo "Clone completed."
 ```
 
-This makes every dev/build-and-publish-triggered deploy clone the maintained `dev` branch instead of the diverged `feat-paysys` fork.
+This is a one-token change (`feat-paysys` -> `dev`). It stops the pipeline from resurrecting an abandoned branch on every deploy and pins the source of truth to `dev`, which is the branch Tazama actually maintains.
 
----
+#### File: `.github/workflows/deploy-to-uat.yml` (rule-studio-example)
 
-#### `.github/workflows/deploy-to-uat.yml` — `tazama-lf/rule-studio-example`
+Line 36 on `main`/`dev`; equivalent line on `feat-paysys`.
 
-**Line 36. BEFORE:**
+BEFORE:
 ```yaml
+      - name: Clone Rule Executer Repo
+        run: |
+          echo "Cloning Rule Executer repo and removing package-lock.json file..."
           git clone https://github.com/tazama-lf/rule-executer -b feat-paysys
+          cd rule-executer
+          rm -f package-lock.json
+          cd ..
+          echo "Clone completed."
 ```
 
-**AFTER:**
+AFTER:
 ```yaml
+      - name: Clone Rule Executer Repo
+        run: |
+          echo "Cloning Rule Executer repo and removing package-lock.json file..."
           git clone https://github.com/tazama-lf/rule-executer -b dev
+          cd rule-executer
+          rm -f package-lock.json
+          cd ..
+          echo "Clone completed."
 ```
 
-This makes the UAT deploy also clone `dev`. Once `dev` is promoted to `main` via a proper PR, this can be updated to `-b main` for production-grade traceability.
+Note: `deploy-to-uat.yml` is Paysys-specific. Line 104 hardcodes `npm install --save-exact rule@npm:@psl-copilot/$RULE_NAME@latest`, meaning the UAT workflow installs rule packages from the `@psl-copilot` scope. Retargeting the clone to `dev` does not remove that hardcoding — `deploy-to-uat.yml` will still resolve rule packages from `@psl-copilot`. Track A only fixes the clone target; scope hardcoding is a separate concern.
 
-**Impact of Track A alone:** All future Rule Studio deploys get the 35 upstream `dev` commits (including security fixes from PRs #443, #445, #446). Containers already running are unaffected until they are rebuilt.
+#### Verify the authoritative template repo
+
+`tazama-lf/rule-studio-devtestops` sets in `.env.sample`:
+```
+GITHUB_TEMPLATE_REPO=rule-template
+GITHUB_TEMPLATE_OWNER=psl-copilot
+```
+
+The production template Rule Studio actually clones may be `psl-copilot/rule-template` (a fork or copy of `tazama-lf/rule-studio-example`) rather than `tazama-lf/rule-studio-example`. Before closing Track A, verify which template repo the Rule Studio backend authoritatively pulls from, and apply the same two-line fix there if it also carries `-b feat-paysys`.
+
+#### Impact of Track A alone
+
+Every new rule generated after Track A ships will start from `rule-executer@dev`. Existing generated rules that were cloned from `feat-paysys` are unaffected until they are regenerated. Track A does not remove any code from `rule-executer` and does not touch `feat-paysys` — it just stops feeding new consumers into it.
 
 ---
 
-### Track B — Reconcile feat-paysys with dev (PR 2 of 2)
+### Track B — Reconcile `feat-paysys` with `dev` (PR 2 of 2)
 
-All changes below apply to the `tazama-lf/rule-executer` repository, targeting the `dev` branch.
+Track B lands as one PR against `rule-executer` `dev`. Every step below references the current HEAD of `feat-paysys` as the BEFORE and the current HEAD of `dev` as the AFTER. The end state is: (a) `dev` remains authoritative, (b) `feat-paysys` is deleted, (c) any Paysys-specific bits that must remain live inside `dev` in an env-driven, non-hardcoded form.
 
----
+#### Step B1 — Dockerfile: remove hardcoded UAT values and restore build-secret pattern
 
-#### Step B1 — Dockerfile: remove hardcoded infrastructure, restore BuildKit secret
+File: `Dockerfile`
 
-**File:** `Dockerfile`
+Multiple hunks. Locations are approximate (feat-paysys line numbers).
 
-**BEFORE (feat-paysys lines 44–82):**
+BEFORE (feat-paysys, lines 15-16, 27):
+```dockerfile
+COPY .npmrc ./
+ARG GH_TOKEN
+
+RUN npm ci --ignore-scripts
+...
+ARG GH_TOKEN
+RUN npm ci --omit=dev --ignore-scripts
+```
+
+AFTER (dev):
+```dockerfile
+COPY .npmrc ./
+RUN --mount=type=secret,id=GH_TOKEN,env=GH_TOKEN npm ci --ignore-scripts
+...
+RUN --mount=type=secret,id=GH_TOKEN,env=GH_TOKEN npm ci --omit=dev --ignore-scripts
+```
+
+BEFORE (feat-paysys, lines 47-49, 52):
 ```dockerfile
 ENV FUNCTION_NAME="rule-executer"
 ENV RULE_VERSION="2.1.0"
 ENV RULE_NAME="rule-901"
-ENV NODE_ENV=production
-ENV MAX_CPU=1
-
-# Apm
+...
 ENV APM_ACTIVE=false
-ENV APM_URL=http://apm-server.development.svc.cluster.local:8200/
-ENV APM_SECRET_TOKEN=
-ENV APM_SERVICE_NAME=rule-901
-
-# Database
-ENV RAW_HISTORY_DATABASE=raw_history
-ENV RAW_HISTORY_DATABASE_HOST=10.10.80.18
-ENV RAW_HISTORY_DATABASE_PORT=15432
-ENV RAW_HISTORY_DATABASE_USER=postgres
-ENV RAW_HISTORY_DATABASE_PASSWORD=postgres
-ENV RAW_HISTORY_DATABASE_CERT_PATH=/usr/local/share/ca-certificates/ca-certificates.crt
-
-ENV CONFIGURATION_DATABASE=configuration
-ENV CONFIGURATION_DATABASE_HOST=10.10.80.18
-ENV CONFIGURATION_DATABASE_PORT=15432
-ENV CONFIGURATION_DATABASE_USER=postgres
-ENV CONFIGURATION_DATABASE_PASSWORD=postgres
-ENV CONFIGURATION_DATABASE_CERT_PATH=/usr/local/share/ca-certificates/ca-certificates.crt
-
-ENV EVENT_HISTORY_DATABASE=event_history
-ENV EVENT_HISTORY_DATABASE_HOST=10.10.80.18
-ENV EVENT_HISTORY_DATABASE_PORT=15432
-ENV EVENT_HISTORY_DATABASE_USER=postgres
-ENV EVENT_HISTORY_DATABASE_PASSWORD=postgres
-ENV CONFIGURATION_DATABASE_CERT_PATH=/usr/local/share/ca-certificates/ca-certificates.crt
-
-#Nats
-ENV STARTUP_TYPE=nats
-ENV SERVER_URL=10.10.80.18:14222
 ```
 
-**AFTER (align with `dev`):**
+AFTER (dev):
 ```dockerfile
 ENV FUNCTION_NAME="rule-executer"
 ENV RULE_VERSION="2.1.0"
 ENV RULE_NAME="901"
-ENV NODE_ENV=production
-ENV MAX_CPU=1
-
-# Apm
+...
 ENV APM_ACTIVE=true
-ENV APM_URL=http://apm-server.development.svc.cluster.local:8200/
-ENV APM_SECRET_TOKEN=
-ENV APM_SERVICE_NAME=rule-901
+```
 
-# Database
-ENV RAW_HISTORY_DATABASE=raw_history
+BEFORE (feat-paysys, lines 60-77, DB blocks):
+```dockerfile
+ENV RAW_HISTORY_DATABASE_HOST=10.10.80.18
+ENV RAW_HISTORY_DATABASE_PORT=15432
+ENV RAW_HISTORY_DATABASE_USER=postgres
+ENV RAW_HISTORY_DATABASE_PASSWORD=postgres
+...
+ENV CONFIGURATION_DATABASE_HOST=10.10.80.18
+ENV CONFIGURATION_DATABASE_PORT=15432
+ENV CONFIGURATION_DATABASE_USER=postgres
+ENV CONFIGURATION_DATABASE_PASSWORD=postgres
+...
+ENV EVENT_HISTORY_DATABASE_HOST=10.10.80.18
+ENV EVENT_HISTORY_DATABASE_PORT=15432
+ENV EVENT_HISTORY_DATABASE_USER=postgres
+ENV EVENT_HISTORY_DATABASE_PASSWORD=postgres
+```
+
+AFTER (dev):
+```dockerfile
 ENV RAW_HISTORY_DATABASE_HOST=
 ENV RAW_HISTORY_DATABASE_PORT=
 ENV RAW_HISTORY_DATABASE_USER=
 ENV RAW_HISTORY_DATABASE_PASSWORD=
-ENV RAW_HISTORY_DATABASE_CERT_PATH=/usr/local/share/ca-certificates/ca-certificates.crt
-
-ENV CONFIGURATION_DATABASE=configuration
+...
 ENV CONFIGURATION_DATABASE_HOST=
 ENV CONFIGURATION_DATABASE_PORT=
 ENV CONFIGURATION_DATABASE_USER=
 ENV CONFIGURATION_DATABASE_PASSWORD=
-ENV CONFIGURATION_DATABASE_CERT_PATH=/usr/local/share/ca-certificates/ca-certificates.crt
-
-ENV EVENT_HISTORY_DATABASE=event_history
+...
 ENV EVENT_HISTORY_DATABASE_HOST=
 ENV EVENT_HISTORY_DATABASE_PORT=
 ENV EVENT_HISTORY_DATABASE_USER=
 ENV EVENT_HISTORY_DATABASE_PASSWORD=
-ENV EVENT_HISTORY_DATABASE_CERT_PATH=/usr/local/share/ca-certificates/ca-certificates.crt
+```
 
-#Nats
-ENV STARTUP_TYPE=nats
+BEFORE (feat-paysys, line 86):
+```dockerfile
+ENV SERVER_URL=10.10.80.18:14222
+```
+
+AFTER (dev):
+```dockerfile
 ENV SERVER_URL=0.0.0.0:4222
 ```
 
-Also restore the BuildKit secret mount in the `npm ci` instructions. **BEFORE (`feat-paysys`):**
-```dockerfile
-ARG GH_TOKEN
-RUN npm ci --ignore-scripts
-```
+Framing note: in the Rule Studio pipeline these values are overridden at `docker run` time by `-e` flags the workflow already supplies, so the hardcoded IPs do **not** break the pipeline. They matter when someone runs the built image outside the workflow (local test, ad-hoc container). Removing the hardcoding removes a footgun; it does not unbreak the pipeline.
 
-**AFTER (align with `dev`):**
-```dockerfile
-RUN --mount=type=secret,id=GH_TOKEN,env=GH_TOKEN npm ci --ignore-scripts
-```
+#### Step B2 — package.json: align versions and dependencies with dev
 
-Repeat for both Stage 1 (builder) and Stage 2 (dep-resolver). Hardcoded infrastructure values override any runtime env vars injected by `docker run`, silently breaking rule containers in non-UAT environments.
+File: `package.json`
 
----
-
-#### Step B2 — package.json: align library versions and restore rule placeholder
-
-**File:** `package.json`
-
-**BEFORE (feat-paysys):**
+BEFORE (feat-paysys):
 ```json
-"dependencies": {
-  "@tazama-lf/frms-coe-lib": "0.0.1-psl.0",
-  "@tazama-lf/frms-coe-startup-lib": "3.0.2-rc.5",
-  "dotenv": "^17.2.3",
-  "node-cache": "^5.1.2",
-  "ts-node": "^10.9.2",
-  "tslib": "^2.8.1"
+{
+  "name": "rule-executer",
+  "version": "3.0.0",
+  ...
+  "scripts": {
+    ...
+    "cleanup": "npx rimraf lib node_modules coverage package-lock.json",
+    ...
+  },
+  "dependencies": {
+    "@tazama-lf/frms-coe-lib": "0.0.1-psl.0",
+    "@tazama-lf/frms-coe-startup-lib": "3.0.2-rc.5",
+    "dotenv": "^17.2.3",
+    "node-cache": "^5.1.2",
+    "ts-node": "^10.9.2",
+    "tslib": "^2.8.1"
+  }
 }
 ```
 
-**AFTER (align with `dev`):**
+AFTER (dev):
 ```json
-"dependencies": {
-  "@tazama-lf/frms-coe-lib": "8.2.0-rc.6",
-  "@tazama-lf/frms-coe-startup-lib": "3.1.0-rc.8",
-  "dotenv": "^17.2.3",
-  "node-cache": "^5.1.2",
-  "rule": "npm:@tazama-lf/rule-901@4.0.0-rc.6",
-  "ts-node": "^10.9.2",
-  "tslib": "^2.8.1"
+{
+  "name": "rule-executer",
+  "version": "4.0.0-rc.2",
+  ...
+  "scripts": {
+    ...
+    "cleanup": "rm -rf build template jest.config.js jest.config.js.map node_modules package-lock.json",
+    ...
+  },
+  "dependencies": {
+    "@tazama-lf/frms-coe-lib": "8.2.0-rc.6",
+    "@tazama-lf/frms-coe-startup-lib": "3.1.0-rc.8",
+    "dotenv": "^17.2.3",
+    "node-cache": "^5.1.2",
+    "rule": "npm:@tazama-lf/rule-901@4.0.0-rc.6",
+    "ts-node": "^10.9.2",
+    "tslib": "^2.8.1"
+  },
+  "overrides": {
+    "uuid": "^11.1.1",
+    "@opentelemetry/core": "^2.8.0"
+  }
 }
 ```
 
-`0.0.1-psl.0` is a Paysys-internal pre-release that is not available from the `tazama-lf` npm registry. Restoring the `rule` placeholder entry makes the `deploy.yml` `sed` substitution (line 66) functional again.
+Key changes: `frms-coe-lib` moves from the private `0.0.1-psl.0` build to the public `8.2.0-rc.6`; `frms-coe-startup-lib` moves from `3.0.2-rc.5` (a real published version, not the psl fork) to `3.1.0-rc.8`; the `rule` dependency placeholder is restored so pipelines and local builds work; `overrides` block is picked up; version bumps to `4.0.0-rc.2`; cleanup script switches from `rimraf lib` to `rm -rf build template ...`.
 
----
+#### Step B3 — .npmrc: decide on `@psl-copilot` scope
 
-#### Step B3 — .npmrc: remove psl-copilot scope if not needed on dev
+File: `.npmrc`
 
-**File:** `.npmrc`
-
-**BEFORE (feat-paysys):**
+BEFORE (feat-paysys):
 ```
 # SPDX-License-Identifier: Apache-2.0
 @frmscoe:registry=https://npm.pkg.github.com
@@ -193,7 +247,7 @@ Repeat for both Stage 1 (builder) and Stage 2 (dep-resolver). Hardcoded infrastr
 //npm.pkg.github.com/:_authToken=${GH_TOKEN}
 ```
 
-**AFTER (if `@psl-copilot` packages not needed on `dev`):**
+AFTER (dev, current):
 ```
 # SPDX-License-Identifier: Apache-2.0
 @frmscoe:registry=https://npm.pkg.github.com
@@ -201,137 +255,217 @@ Repeat for both Stage 1 (builder) and Stage 2 (dep-resolver). Hardcoded infrastr
 //npm.pkg.github.com/:_authToken=${GH_TOKEN}
 ```
 
-If any Studio rule package is published under `@psl-copilot`, keep the line and add it to `dev`'s `.npmrc` via a reviewed PR. The decision must be explicit — not inherited from an unreviewed branch.
+Two options, decision needed at PR review:
 
----
+- **Option 3a (keep `@psl-copilot` on dev).** Add the `@psl-copilot:registry=...` line to `dev`'s `.npmrc`. This is required if `rule-studio-example`'s `deploy-to-uat.yml` (line 104: `npm install --save-exact rule@npm:@psl-copilot/$RULE_NAME@latest`) must keep working after Track A retargets its clone to `dev`.
+- **Option 3b (remove).** Leave `dev`'s `.npmrc` as-is (no `@psl-copilot`). Then `deploy-to-uat.yml` must be updated in a follow-up to install from `@tazama-lf` (or another agreed scope) instead of `@psl-copilot`.
 
-#### Step B4 — src/controllers/execute.ts: strip debug log statements and any cast
+Pick 3a if UAT deploys must continue unbroken on merge day; pick 3b if the plan is to remove the `@psl-copilot` scope entirely and follow up in `rule-studio-example`.
 
-**File:** `src/controllers/execute.ts`
+#### Step B4 — src/controllers/execute.ts: remove `[L##]` logs and the `as any` cast
 
-Remove all `[L##]`-prefixed log messages added in `feat-paysys`. The `dev` version of this file is clean; the reconciliation is to confirm `dev` already has the correct version. Key reversal: the `feat-paysys` version also contains:
+File: `src/controllers/execute.ts`
 
+The `feat-paysys` copy is peppered with debug-style logger calls of the form `loggerService.log('[L16] ...', ...)`, plus a `databaseManager as any` cast at the `handleTransaction` call (line 119). `dev`'s copy is clean.
+
+BEFORE (feat-paysys, selected lines):
+```typescript
+loggerService.log('[L16] Function entry - Starting execute request handler', context, configuration.functionName);
+...
+loggerService.log('[L22] Starting request parsing and validation', context, configuration.functionName);
+...
+loggerService.log(`[L32] Request transaction data: ${JSON.stringify(message.transaction)}`, context, configuration.functionName);
+...
+loggerService.log('[L35] Request parsing completed successfully', context, configuration.functionName);
+...
+const failMessage = '[L38] Failed to parse execution request.';
+loggerService.error(failMessage, err, context, configuration.functionName);
+loggerService.log('[L40] Early exit due to request parsing failure', context, configuration.functionName);
+```
+
+AFTER (dev):
+```typescript
+loggerService.log('Start - Handle execute request', context, configuration.functionName);
+...
+// (parsing block: no debug logs)
+...
+const failMessage = 'Failed to parse execution request.';
+loggerService.error(failMessage, err, context, configuration.functionName);
+loggerService.log('End - Handle execute request', context, configuration.functionName);
+```
+
+BEFORE (feat-paysys, line 119):
 ```typescript
 ruleRes = await handleTransaction(request, determineOutcome, ruleRes, loggerService, ruleConfig, databaseManager as any);
 ```
 
-**AFTER (align with dev):**
+AFTER (dev):
 ```typescript
 ruleRes = await handleTransaction(request, determineOutcome, ruleRes, loggerService, ruleConfig, databaseManager);
 ```
 
-The `as any` cast suppresses a type error that likely indicates a type mismatch between the `feat-paysys` version of `frms-coe-lib` and the function signature in `rule/lib`. On `dev` with the correct library version this cast is not needed.
+The `as any` cast was a workaround for a type mismatch that no longer exists once `frms-coe-lib` is bumped to `8.2.0-rc.6` (Step B2). Removing it restores type safety at the call boundary. The `[L##]`-prefixed logs were left-over debug prints; `dev` already has the clean version, so this step is really "adopt `dev`'s file verbatim".
 
----
+#### Step B5 — src/controllers/rule.ts: delete (dead code)
 
-#### Step B5 — src/controllers/rule.ts: decision point
+File: `src/controllers/rule.ts`
 
-**File:** `src/controllers/rule.ts` (exists only on `feat-paysys`)
+This file exists only on `feat-paysys`. It is **never imported** — `execute.ts` imports `handleTransaction` from the `rule/lib` npm package (line 6: `import { handleTransaction } from 'rule/lib';`), not from `./rule`. The file's contents duplicate what `rule/lib` provides, with an additional `isBaseMessageTransaction` branch. Because nothing consumes it, it is orphaned dead code.
 
-This file provides a local `handleTransaction` that handles `BaseMessage` transactions with amount-band logic. The `feat-paysys` version of `execute.ts` still imports `handleTransaction` from `'rule/lib'` (confirmed: `import { handleTransaction } from 'rule/lib'` at line 6 of `feat-paysys/src/controllers/execute.ts`), so `rule.ts` is **not imported by the executer itself** — it appears to be an experimental/standalone file.
+Action: **delete** `src/controllers/rule.ts`. Do not attempt to "merge it into dev". If the team wants `BaseMessage` handling in the shared `rule/lib`, they can open a separate feature PR against `frms-coe-lib`/`rule/lib` with proper tests. Deleting is the default; porting is out of scope for this reconciliation.
 
-**If the `BaseMessage` path is not needed by the current pipeline (recommended):**
-Do not add `src/controllers/rule.ts` to `dev`. Delete it from `feat-paysys` before deleting the branch.
+#### Step B6 — Delete `simple-rule2-test.js`
 
-**If `BaseMessage` handling is required:**
-Clean the file (remove all `console.log` statements) and open a separate PR to `dev` with tests. The cleaned version would look like:
+File: `simple-rule2-test.js`
 
-```typescript
-// BEFORE (feat-paysys) — contains debug output:
-console.log("hello bhai the req ", req)
-console.log("hello bhai the trxn ", transaction)
-console.log('hi, this is trx', JSON.stringify(transaction))
-console.log('hello bhai')
-console.log('hi, this is trx', JSON.stringify(amountRaw))
+A 124-line standalone script that lives at the repo root on `feat-paysys` only. It is not referenced by `jest.config.ts`, not required by `package.json` scripts, and not part of the test suite (its first line is `const { handleTransaction } = require('rule/lib');` — it is an ad-hoc harness). Delete it.
 
-// AFTER — remove all console.log lines, keep logic only
+#### Step B7 — .husky/pre-commit: fix broken command
+
+File: `.husky/pre-commit`
+
+BEFORE (feat-paysys):
+```
+npx lint - staged
 ```
 
----
+AFTER (dev):
+```
+npx lint-staged
+```
 
-#### Step B6 — Delete simple-rule2-test.js
+The extra spaces on `feat-paysys` mean the pre-commit hook has been silently broken (it invokes `npx lint` with `-` and `staged` as arguments). Aligning with `dev` restores the hook.
 
-**File:** `simple-rule2-test.js` (exists only on `feat-paysys`)
+#### Step B8 — src/config.ts: whitespace-only realignment
 
-Delete. This is a one-off test/debug file not present on `dev` and not part of any test suite.
+File: `src/config.ts`
 
----
+BEFORE (feat-paysys):
+```typescript
+export type RuleExecutorConfig = Required<
+  Pick<ManagerConfig, 'rawHistory' | 'eventHistory' | 'configuration' | 'localCacheConfig'>
+>;
+```
 
-#### Step B7 — Delete feat-paysys branch
+AFTER (dev):
+```typescript
+export type RuleExecutorConfig = Required<Pick<ManagerConfig, 'rawHistory' | 'eventHistory' | 'configuration' | 'localCacheConfig'>>;
+```
 
-After the Track B PR merges into `dev`:
+Pure formatting difference. Include for parity with `dev` so a subsequent `prettier --check` is clean.
+
+#### Step B9 — Delete the `feat-paysys` branch
+
+Once the PR against `dev` is merged and CI is green, delete the abandoned branch so it cannot be re-targeted:
+
 ```bash
 git push origin --delete feat-paysys
 ```
 
+Ordering caveat: Step B9 must come **after** Track A ships. If `feat-paysys` is deleted while any Rule Studio workflow still points at it, the next deploy fails with `fatal: Remote branch feat-paysys not found`. The safe sequence is: Track A merged -> Track B merged -> `feat-paysys` deleted.
+
 ---
 
-### Test Cases
+### Note on `deploy.yml` line 66 sed
 
-#### Unit tests (new tests to add)
+An earlier draft of this document claimed the `sed` invocation around line 66 of `rule-studio-example/.github/workflows/deploy.yml` was "a silent no-op that breaks the pipeline". This is wrong. Lines 108-111 of the workflow run:
+
+```yaml
+npm pkg delete dependencies.rule
+npm install --save-exact rule@npm:@$ORG/$RULE_NAME@latest
+```
+
+which installs the rule regardless of what the `sed` did or did not do. The `sed` is dead / cleanup-lag, not a functional bug. Restoring its placeholder is a nice-to-have for consistency, **not** blocking, and is not part of Track A or Track B.
+
+---
+
+## Test Cases
+
+### Unit Tests
+
+Track B changes controller code (`src/controllers/execute.ts`) and dependency versions, so unit tests should verify the clean logger path and the removed cast still compile and behave.
 
 ```typescript
-// Verify deploy.yml clones correct branch
-// (shell-level test — verify by grepping the workflow file)
-import { readFileSync } from 'fs';
+// src/controllers/__tests__/execute.test.ts (add or extend)
+describe('execute()', () => {
+  it('logs the clean Start/End markers without [L##] prefixes', async () => {
+    const spy = jest.spyOn(loggerService, 'log');
+    await execute(validRequest);
+    const messages = spy.mock.calls.map(([msg]) => msg);
+    expect(messages).toContain('Start - Handle execute request');
+    expect(messages).toContain('End - Handle execute request');
+    expect(messages.some((m) => /\[L\d+\]/.test(String(m)))).toBe(false);
+  });
 
-test('deploy.yml clones dev branch', () => {
-  const content = readFileSync('.github/workflows/deploy.yml', 'utf8');
-  expect(content).toContain('-b dev');
-  expect(content).not.toContain('-b feat-paysys');
-});
-
-test('deploy-to-uat.yml clones dev branch', () => {
-  const content = readFileSync('.github/workflows/deploy-to-uat.yml', 'utf8');
-  expect(content).toContain('-b dev');
-  expect(content).not.toContain('-b feat-paysys');
+  it('calls handleTransaction with databaseManager passed unchanged (no cast)', async () => {
+    const spy = jest.fn().mockResolvedValue(baseRuleRes);
+    jest.doMock('rule/lib', () => ({ handleTransaction: spy }));
+    await execute(validRequest);
+    const passedDbm = spy.mock.calls[0][5];
+    expect(passedDbm).toBe(databaseManager);
+  });
 });
 ```
 
-#### Integration / E2E test scenarios
+The husky change (B7) should be verified by `git commit`ing a `.ts` file with a lint issue and confirming the hook rejects it.
 
-1. Trigger `deploy.yml` workflow via `workflow_dispatch` in a Rule Studio–generated rule repo.
-2. In the workflow log, confirm the clone step outputs `Cloning into 'rule-executer'...` followed by a commit SHA from `dev` (not `feat-paysys`).
-3. Confirm the built Docker image contains the correct `frms-coe-lib` version: `docker run --rm <image> node -p "require('/home/app/node_modules/@tazama-lf/frms-coe-lib/package.json').version"` — should return `8.2.0-rc.6`.
-4. Confirm APM is enabled by default: `docker inspect <container> | jq '.[0].Config.Env'` — should show `APM_ACTIVE=true`.
-5. Confirm no `console.log("hello bhai")` output appears in rule container logs during a test transaction.
-6. Submit a test transaction through NATS; confirm the rule container produces a valid `RuleResult` forwarded to the Typology Processor.
+### Integration / E2E Scenarios
 
-#### Manual / UAT checks
+1. **Track A retarget verification.** In `rule-studio-example`, trigger the `deploy.yml` workflow for a test rule. Observe the "Clone Rule Executer Repo" step logs; confirm the clone URL ends in `-b dev`, not `-b feat-paysys`.
+2. **UAT deploy still works.** Trigger `deploy-to-uat.yml` for a rule whose `@psl-copilot/$RULE_NAME` package exists. Confirm the install step at line 104 succeeds. If it fails with `E401`/`E404` for `@psl-copilot`, Option 3a (keep the scope in `dev`'s `.npmrc`) is required.
+3. **Track B image build.** Run `docker build --secret id=GH_TOKEN,env=GH_TOKEN .` against the merged `dev`. Confirm the build succeeds using the `--mount=type=secret` pattern and does not leak `GH_TOKEN` into any layer.
+4. **Runtime with env overrides.** Start the built image with all DB/NATS env vars supplied externally. Confirm the service connects — proves the empty defaults in the Dockerfile do not break real runs.
+5. **Runtime with no env overrides.** Start the built image with no DB/NATS env vars. Confirm the service fails fast with a clear config error (not by silently connecting to `10.10.80.18`).
+6. **Branch is gone.** After Step B9, `git ls-remote --heads origin feat-paysys` in `rule-executer` returns nothing.
+7. **Generated rule roundtrip.** In Rule Studio, generate a new rule end-to-end (create -> deploy) after Track A. Confirm the generated rule folder was cloned from `dev` and boots cleanly.
+
+### Data Migration Validation
+
+No schema migration. Both tracks are code-only / workflow-only changes; no database, no persisted state.
+
+### Manual / UAT Checks
 
 | # | Scenario | Steps | Expected Result |
 |---|---|---|---|
-| 1 | Verify clone target | Trigger `deploy.yml`; inspect workflow log step "Clone Rule Executer Repo" | Log shows `dev` branch SHA, not `feat-paysys` |
-| 2 | Verify library version | `docker run --rm <built-image> node -p "require('/home/app/node_modules/@tazama-lf/frms-coe-lib/package.json').version"` | Returns `8.2.0-rc.6` |
-| 3 | Verify APM enabled | `docker inspect <container>` → env | `APM_ACTIVE=true` |
-| 4 | Verify no hardcoded IP | `docker inspect <container>` → env | `RAW_HISTORY_DATABASE_HOST` is empty (overridden at `docker run` time) |
-| 5 | Verify no debug output | Run a test transaction; check container logs | No `[L##]`-prefixed messages, no `hello bhai` output |
-| 6 | End-to-end rule execution | Submit transaction matching rule config; observe Typology Processor receives result | `RuleResult` with correct `subRuleRef` and `cfg` produced |
-| 7 | feat-paysys deleted | `gh api repos/tazama-lf/rule-executer/branches/feat-paysys` | 404 response |
+| 1 | Deploy workflow retargeted | Trigger `deploy.yml` in `rule-studio-example` on `main` after Track A | Clone step logs `-b dev`; deploy completes |
+| 2 | UAT workflow retargeted | Trigger `deploy-to-uat.yml` on `main` after Track A | Clone step logs `-b dev`; rule install at line 104 succeeds |
+| 3 | Track A applied to feat-paysys of studio-example | `git show origin/feat-paysys:.github/workflows/deploy.yml` in `rule-studio-example` | Line 41 reads `-b dev` |
+| 4 | Docker build uses build secret | `docker build --secret id=GH_TOKEN,env=GH_TOKEN .` locally | Build succeeds; `docker history` shows no plaintext token |
+| 5 | Runtime respects supplied env | Run image with real DB env vars | Service connects using supplied host, not `10.10.80.18` |
+| 6 | Husky hook works | Stage a `.ts` file with a lint error and `git commit` | Commit rejected by `lint-staged` |
+| 7 | Orphan file removed | `git ls-tree origin/dev -- src/controllers/rule.ts` after B5 | Empty (file absent) |
+| 8 | Test harness removed | `git ls-tree origin/dev -- simple-rule2-test.js` after B6 | Empty (file absent) |
+| 9 | Branch deleted | `git ls-remote --heads https://github.com/tazama-lf/rule-executer feat-paysys` after B9 | No matching ref |
+| 10 | Template repo audit | Read `.env.sample` in `rule-studio-devtestops`, follow to `psl-copilot/rule-template` if it exists | Confirm which template repo Rule Studio actually clones; apply Track A there too if needed |
 
 ---
 
-### Overall Impact of the Fix
+## Overall Impact of the Fix
 
 | Area | Before | After |
 |---|---|---|
-| Clone target | `feat-paysys` (diverged, unreviewed) | `dev` (maintained, reviewed) |
-| Upstream fix coverage | Missing 35 `dev` commits | All `dev` commits included |
-| APM | Disabled (`APM_ACTIVE=false`) | Enabled by default |
-| Infrastructure config | Hardcoded UAT IPs baked into image | Empty defaults; all values injected at runtime |
-| Debug output | `console.log("hello bhai…")` in production containers | No debug output |
-| Library version | `frms-coe-lib 0.0.1-psl.0` (internal, unavailable to `tazama-lf` runners) | `frms-coe-lib 8.2.0-rc.6` (published, audited) |
-| `sed` patching | Silent no-op (no `rule` key in `package.json`) | Functional substitution |
-| Branch hygiene | Active diverged branch used as release artifact | Branch deleted; `dev` is the sole source of truth |
+| Rule Studio clone target | `rule-executer @ feat-paysys` (abandoned, 19 commits diverged) | `rule-executer @ dev` (maintained) |
+| `feat-paysys` branch on `rule-executer` | Alive, receiving deploys, hosting stale deps | Deleted |
+| Dockerfile DB/NATS defaults | Hardcoded `10.10.80.18:15432` / `10.10.80.18:14222` | Empty defaults; must be supplied by caller |
+| Dockerfile `GH_TOKEN` handling | `ARG GH_TOKEN` (risk of baking into layer) | `--mount=type=secret,id=GH_TOKEN` (build-secret) |
+| `frms-coe-lib` | `0.0.1-psl.0` (private psl build) | `8.2.0-rc.6` (public tazama-lf release) |
+| `frms-coe-startup-lib` | `3.0.2-rc.5` | `3.1.0-rc.8` |
+| `rule` dependency placeholder | Missing | Present (`npm:@tazama-lf/rule-901@4.0.0-rc.6`) |
+| `execute.ts` logger noise | `[L##]`-prefixed debug logs on every request | Clean `Start`/`End` markers only |
+| `execute.ts` type safety | `databaseManager as any` cast | Passed with its concrete type |
+| `src/controllers/rule.ts` | Present but never imported | Deleted |
+| `simple-rule2-test.js` | 124-line ad-hoc harness at repo root | Deleted |
+| `.husky/pre-commit` | `npx lint - staged` (silently broken) | `npx lint-staged` (working) |
+| `.npmrc @psl-copilot` scope | Only on `feat-paysys` | Present on `dev` (Option 3a) or removed everywhere (Option 3b) |
 
 ---
 
-### Fix Summary
+## Fix Summary
 
-The Rule Studio deploy pipeline was cloning a feature branch (`feat-paysys`) that had diverged significantly from the `dev` mainline and was being used as an unofficial release artifact. Every Studio-generated rule was therefore shipping executer code that was 35 commits behind `dev` (missing security fixes and bug fixes), while also carrying 28 unreviewed commits that included hardcoded UAT infrastructure IPs baked into the Docker image, a globally disabled APM configuration, a pinned pre-release library from an internal Paysys registry unavailable to standard `tazama-lf` runners, and raw `console.log` debug output visible in production container logs.
+The root problem was that Rule Studio deployments were pulling the `rule-executer` codebase from an old private-fork branch (`feat-paysys`) that had drifted 19 commits away from what Tazama actually maintains on `dev`. Every rule generated by Rule Studio for the last several months has been built on top of a stale library, with hardcoded UAT database IPs baked into its Dockerfile, a broken pre-commit hook, orphaned dead code in its controllers, and a `GH_TOKEN` build-arg pattern that risks leaking the token into image layers. None of that was a Tazama design decision — it was drift, and it kept getting reinforced because the deployment workflows kept re-cloning from the same drifted branch.
 
-Track A is a two-line change: replace `-b feat-paysys` with `-b dev` in the two deploy workflow files in `tazama-lf/rule-studio-example`. This immediately redirects all new builds to the maintained branch and is safe to ship without any application code changes.
+Track A is the small, immediate fix: change two workflow files in `rule-studio-example` (both on `main`/`dev` and on that repo's own `feat-paysys`) so the clone URL targets `-b dev` instead of `-b feat-paysys`. From the moment Track A ships, every new rule generated by Rule Studio is built from the maintained codebase, and the abandoned branch stops mattering to future work.
 
-Track B is a full reconciliation of `feat-paysys` with `dev`: removing hardcoded infrastructure, restoring BuildKit secret handling in the Dockerfile, aligning library versions, stripping debug log statements, making a documented decision about the experimental `rule.ts` `BaseMessage` handler, and deleting the branch once the PR merges. This track requires a parallel audit of the 28 branch-only commits to determine which (if any) represent required adaptations versus UAT-only hacks.
+Track B is the cleanup pass on `rule-executer` itself: reconcile the `feat-paysys` branch with `dev` — bump `frms-coe-lib` and `frms-coe-startup-lib` to their public releases, restore the build-secret pattern in the Dockerfile, empty out the hardcoded UAT DB and NATS values, remove the `[L##]` debug logs and the `databaseManager as any` cast from `execute.ts`, delete the orphaned `src/controllers/rule.ts` and the ad-hoc `simple-rule2-test.js`, fix the broken husky hook, and align whitespace in `src/config.ts`. Once that PR merges, delete the `feat-paysys` branch so no one can accidentally aim a workflow at it again.
 
-Shipping Track A first and Track B second is the recommended sequence. Track A stops the bleeding immediately; Track B closes the technical debt properly.
+The two tracks are independent — Track A can ship today, Track B can follow at whatever pace the team is comfortable reviewing dependency bumps and controller diffs. The only ordering rule is that the `feat-paysys` branch must not be deleted until Track A has landed and any external consumers (including a possible `psl-copilot/rule-template` fork) have been retargeted.

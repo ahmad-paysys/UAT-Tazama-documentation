@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Impact Study — Issue #447: Rule Studio Pipeline Branch Divergence</title>
+<title>Impact Study — Issue #447: Rule Studio pipeline builds against diverged feat-paysys branch</title>
 <style>
   :root {
     --bg: #ffffff;
@@ -219,27 +219,6 @@
 
   strong { font-weight: 600; }
 
-  div.toc {
-    background: var(--code-bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 1.1rem 1.4rem;
-    margin: 1.2rem 0 1.8rem;
-  }
-  div.toc p.toc-title {
-    font-weight: 700;
-    font-size: 0.95em;
-    margin: 0 0 0.5rem;
-    color: var(--h1);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-  div.toc ol { margin: 0; padding-left: 1.3rem; }
-  div.toc li { margin: 0.2rem 0; font-size: 0.9em; }
-  div.toc ul { margin: 0.15rem 0; padding-left: 1.2rem; list-style: disc; }
-  div.toc a { color: var(--link); text-decoration: none; }
-  div.toc a:hover { text-decoration: underline; color: var(--link-hover); }
-
   details.section {
     margin: 1rem 0;
     border: 1px solid var(--details-border);
@@ -318,6 +297,8 @@
   .diagram-wrap:active { cursor: grabbing; }
   .diagram-wrap .mermaid { display: inline-block; min-width: max-content; }
   .diagram-wrap .mermaid svg { min-width: 700px; height: auto !important; }
+
+  input[type="checkbox"] { margin-right: 0.4rem; }
 </style>
 <script type="module">
   import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
@@ -369,190 +350,81 @@
 <div class="static-section">
 
 <h1>Impact Study — Issue #447</h1>
-<h2 style="border:none;margin-top:0.2rem;font-size:1.15rem;color:var(--h3);">Rule Studio pipeline builds against diverged, hardcoded feat-paysys branch</h2>
-
-<p><strong>Issue:</strong> <a href="https://github.com/tazama-lf/rule-executer/issues/447">#447 — tazama-lf/rule-executer</a><br>
-<strong>Study Date:</strong> 2026-07-03<br>
-<strong>Author:</strong> Ahmad Khalid<br>
-<strong>Repository:</strong> tazama-lf/rule-executer &amp; tazama-lf/rule-studio-example</p>
-
-<hr>
-
-<h2 id="overview">Summary</h2>
-
-<p>Every rule deployed through Rule Studio clones <code>feat-paysys</code> — a diverged, unreviewed branch of <code>rule-executer</code> — because two workflow files in <code>tazama-lf/rule-studio-example</code> hardcode <code>-b feat-paysys</code>. The branch is <strong>28 commits ahead and 35 commits behind <code>dev</code></strong>, carrying hardcoded UAT IPs, disabled APM, a pinned Paysys-internal pre-release library, and raw <code>console.log</code> debug output baked into production images.</p>
-
-<p>Track A is a two-line fix: change the clone target in both workflows to <code>-b dev</code>. Track B reconciles the <code>feat-paysys</code> divergence into <code>dev</code> and deletes the branch.</p>
-
-<div class="diagram-wrap">
-<div class="mermaid">
-graph LR
-    subgraph STUDIO["Rule Studio deploy pipeline"]
-        direction TB
-        wf1["deploy.yml:39<br/><b>-b feat-paysys</b>"]
-        wf2["deploy-to-uat.yml:36<br/><b>-b feat-paysys</b>"]
-    end
-
-    subgraph BRANCHES["rule-executer branches"]
-        direction TB
-        fp["feat-paysys<br/>28 ahead / 35 behind dev"]
-        dev["dev (maintained)"]
-    end
-
-    wf1 -->|clones| fp
-    wf2 -->|clones| fp
-    fp -.->|missing 35 commits| dev
-
-    subgraph ARTIFACTS["Baked into every built image"]
-        direction TB
-        a1["Hardcoded IPs: 10.10.80.18"]
-        a2["APM_ACTIVE=false"]
-        a3["frms-coe-lib 0.0.1-psl.0"]
-        a4["console.log debug output"]
-    end
-
-    fp --> a1
-    fp --> a2
-    fp --> a3
-    fp --> a4
-
-    classDef bad fill:#f8d7da,stroke:#721c24,color:#721c24
-    classDef good fill:#d4edda,stroke:#155724,color:#155724
-    classDef warn fill:#fff3cd,stroke:#856404,color:#856404
-    classDef wf   fill:#d1ecf1,stroke:#0c5460,color:#0c5460
-
-    class wf1,wf2 wf
-    class fp bad
-    class dev good
-    class a1,a2,a3,a4 warn
-</div>
-</div>
-
-<h2>Table of Contents</h2>
-<div class="toc">
-  <p class="toc-title">Contents</p>
-  <ol>
-    <li><a href="#root-cause">Confirmed Root Cause</a></li>
-    <li><a href="#track-a">Track A — Switch clone target</a></li>
-    <li><a href="#track-b">Track B — Reconcile feat-paysys with dev</a></li>
-    <li><a href="#side-effects">Side Effects and Risks</a></li>
-    <li><a href="#effort">Effort Estimate</a></li>
-    <li><a href="#acceptance">Acceptance Criteria</a></li>
-    <li><a href="#sequencing">Recommended Sequencing</a></li>
-  </ol>
-</div>
-
-</div>
+<p><strong>Title:</strong> Rule Studio pipeline builds against diverged, hardcoded feat-paysys branch of tazama-lf/rule-executer</p>
+<p>
+  <strong>Issue:</strong> <a href="https://github.com/tazama-lf/rule-executer/issues/447">#447</a><br>
+  <strong>Study Date:</strong> 2026-07-03<br>
+  <strong>Author:</strong> Ahmad Khalid<br>
+  <strong>Repository:</strong> tazama-lf/rule-executer
+</p>
 
 <hr>
 
-<details class="section" open id="root-cause">
-<summary><h2>Confirmed Root Cause</h2></summary>
+</div>
+
+<details class="section" open id="summary">
+<summary><h2>1. Summary</h2></summary>
 <div class="section-body">
+<p>Every rule deployed through Rule Studio clones the <code>feat-paysys</code> branch of <code>tazama-lf/rule-executer</code> because two workflow files in the <code>tazama-lf/rule-studio-example</code> template repo hardcode <code>-b feat-paysys</code>. The branch is <strong>28 commits ahead and 35 commits behind</strong> <code>dev</code>, carrying hardcoded UAT IPs, disabled APM, a pre-release Paysys-internal library version, and raw <code>console.log</code> debug output — none of which should reach a production pipeline.</p>
+<p><strong>Track A</strong> is a two-line fix that retargets the two workflow files to <code>dev</code>. <strong>Track B</strong> reconciles the <code>feat-paysys</code> divergence into <code>dev</code>, cleans up debug artifacts, and deletes the branch.</p>
+</div>
+</details>
 
-<p>All facts below were confirmed by reading the actual files.</p>
+<details class="section" open id="confirmed-root-cause">
+<summary><h2>2. Confirmed Root Cause</h2></summary>
+<div class="section-body">
+<ul>
+  <li><code>tazama-lf/rule-studio-example/.github/workflows/deploy.yml:39</code> on <code>main</code>/<code>dev</code>: <code>git clone https://github.com/tazama-lf/rule-executer -b feat-paysys</code> — confirmed by reading the file.</li>
+  <li><code>tazama-lf/rule-studio-example/.github/workflows/deploy-to-uat.yml:36</code>: identical hardcoded clone — confirmed by reading the file.</li>
+  <li><code>git log --left-right origin/dev...origin/feat-paysys</code>: <strong>28 commits unique to feat-paysys</strong>, <strong>35 commits unique to dev</strong>.</li>
+  <li><code>feat-paysys/package.json</code>: <code>frms-coe-lib</code> at <code>0.0.1-psl.0</code> (private Paysys pre-release), <code>frms-coe-startup-lib</code> at <code>3.0.2-rc.5</code>, no <code>rule</code> dependency, package <code>version</code> <code>3.0.0</code>.</li>
+  <li><code>dev/package.json</code>: <code>frms-coe-lib</code> at <code>8.2.0-rc.6</code>, <code>frms-coe-startup-lib</code> at <code>3.1.0-rc.8</code>, <code>rule</code> aliased to <code>npm:@tazama-lf/rule-901@4.0.0-rc.6</code>, package <code>version</code> <code>4.0.0-rc.2</code>.</li>
+  <li><code>feat-paysys/Dockerfile</code>: hardcoded <code>RAW_HISTORY_DATABASE_HOST=10.10.80.18</code>, <code>PORT=15432</code>, <code>APM_ACTIVE=false</code>, <code>SERVER_URL=10.10.80.18:14222</code>, <code>RULE_NAME="rule-901"</code>, plain <code>ARG GH_TOKEN</code> (no BuildKit secret mount).</li>
+  <li><code>feat-paysys/src/controllers/execute.ts</code>: 20+ <code>[L##]</code>-prefixed debug <code>console.log</code>/<code>loggerService</code> calls; <code>databaseManager as any</code> cast.</li>
+  <li><code>feat-paysys/src/controllers/rule.ts</code>: new file present only on <code>feat-paysys</code>, containing five <code>console.log("hello bhai…")</code> statements. <strong>Never imported</strong> — <code>execute.ts</code> imports <code>handleTransaction</code> from the <code>rule/lib</code> package. This file is dead code.</li>
+  <li><code>feat-paysys/.husky/pre-commit</code>: contains <code>npx lint - staged</code> (spaces around the dash) — broken hook.</li>
+  <li><code>feat-paysys/simple-rule2-test.js</code>: 124-line orphan debug script, absent on <code>dev</code>.</li>
+</ul>
 
-<table>
-  <thead><tr><th>Claim</th><th>File</th><th>Line</th><th>Confirmed</th></tr></thead>
-  <tbody>
-    <tr>
-      <td><code>deploy.yml</code> clones <code>feat-paysys</code></td>
-      <td><code>tazama-lf/rule-studio-example/.github/workflows/deploy.yml</code></td>
-      <td>39</td>
-      <td><span class="badge badge-red">Confirmed</span></td>
-    </tr>
-    <tr>
-      <td><code>deploy-to-uat.yml</code> clones <code>feat-paysys</code></td>
-      <td><code>tazama-lf/rule-studio-example/.github/workflows/deploy-to-uat.yml</code></td>
-      <td>36</td>
-      <td><span class="badge badge-red">Confirmed</span></td>
-    </tr>
-    <tr>
-      <td><code>feat-paysys</code> is 28 ahead / 35 behind <code>dev</code></td>
-      <td><code>git log --left-right origin/dev...origin/feat-paysys</code></td>
-      <td>—</td>
-      <td><span class="badge badge-red">Confirmed</span></td>
-    </tr>
-    <tr>
-      <td>Dockerfile hardcodes <code>10.10.80.18</code></td>
-      <td><code>rule-executer/Dockerfile</code> (feat-paysys)</td>
-      <td>55–80</td>
-      <td><span class="badge badge-red">Confirmed</span></td>
-    </tr>
-    <tr>
-      <td><code>APM_ACTIVE=false</code> on feat-paysys</td>
-      <td><code>rule-executer/Dockerfile</code> (feat-paysys)</td>
-      <td>51</td>
-      <td><span class="badge badge-red">Confirmed</span></td>
-    </tr>
-    <tr>
-      <td><code>frms-coe-lib</code> pinned to <code>0.0.1-psl.0</code></td>
-      <td><code>rule-executer/package.json</code> (feat-paysys)</td>
-      <td>27</td>
-      <td><span class="badge badge-red">Confirmed</span></td>
-    </tr>
-    <tr>
-      <td>No <code>rule</code> placeholder in <code>package.json</code></td>
-      <td><code>rule-executer/package.json</code> (feat-paysys)</td>
-      <td>—</td>
-      <td><span class="badge badge-red">Confirmed</span></td>
-    </tr>
-    <tr>
-      <td><code>sed</code> step is a silent no-op</td>
-      <td><code>deploy.yml</code> line 66 vs <code>package.json</code> feat-paysys</td>
-      <td>66</td>
-      <td><span class="badge badge-red">Confirmed</span></td>
-    </tr>
-    <tr>
-      <td><code>console.log("hello bhai…")</code> in rule.ts</td>
-      <td><code>rule-executer/src/controllers/rule.ts</code> (feat-paysys)</td>
-      <td>26, 30, 36, 40, 44</td>
-      <td><span class="badge badge-red">Confirmed</span></td>
-    </tr>
-    <tr>
-      <td><code>src/controllers/rule.ts</code> absent on <code>dev</code></td>
-      <td><code>git show origin/dev:src/controllers/rule.ts</code> → fatal</td>
-      <td>—</td>
-      <td><span class="badge badge-red">Confirmed</span></td>
-    </tr>
-    <tr>
-      <td><code>[L##]</code>-prefixed debug logs in execute.ts</td>
-      <td><code>rule-executer/src/controllers/execute.ts</code> (feat-paysys)</td>
-      <td>18, 23, 33, 40, …</td>
-      <td><span class="badge badge-red">Confirmed</span></td>
-    </tr>
-  </tbody>
-</table>
-
+<p><strong>Corrections vs prior write-ups:</strong></p>
+<ul>
+  <li>The <code>sed</code> step at <code>deploy.yml:66</code> is <strong>dead code but not a functional bug</strong>. Lines 108–111 of the same workflow perform <code>npm pkg delete dependencies.rule</code> followed by <code>npm install --save-exact rule@npm:@$ORG/$RULE_NAME@latest</code>, so the rule package is installed regardless of the <code>sed</code> outcome. <span class="badge badge-blue">informational</span></li>
+  <li>The hardcoded IPs in <code>feat-paysys/Dockerfile</code> are <strong>overridden at <code>docker run</code> time</strong> by the workflow's <code>-e</code> flags (<code>deploy.yml</code> lines 135–168, <code>deploy-to-uat.yml</code> lines 128–157). Fixing the Dockerfile removes a footgun for anyone running the image outside the pipeline; it does not unbreak the pipeline itself. <span class="badge badge-blue">informational</span></li>
+  <li><code>deploy-to-uat.yml</code> is <strong>Paysys-specific by design</strong> — line 104 hardcodes the <code>@psl-copilot</code> npm scope. Retargeting the clone in this file does not unify the two workflows.</li>
+  <li><code>src/controllers/rule.ts</code> on <code>feat-paysys</code> is <strong>orphaned dead code</strong>. Default action = delete.</li>
+</ul>
 </div>
 </details>
 
 <details class="section" open id="track-a">
-<summary><h2>Track A — Switch clone target</h2></summary>
+<summary><h2>3. Track A — Switch clone target</h2></summary>
 <div class="section-body">
+
+<div class="diagram-wrap">
+<div class="mermaid">
+flowchart LR
+  A[Rule Studio bootstrap] -->|creates rule repo from| B["template: psl-copilot/rule-template<br/>OR tazama-lf/rule-studio-example"]
+  B -->|workflow clones| C["rule-executer branch: feat-paysys"]
+  C -->|diverged 28 ahead / 35 behind| D[dev branch]
+  C -->|contains| E["hardcoded UAT IPs / disabled APM /<br/>debug console.log / broken husky /<br/>private lib version 0.0.1-psl.0"]
+
+  classDef broken fill:#f8d7da,stroke:#c53030,color:#721c24
+  classDef target fill:#d4edda,stroke:#2f855a,color:#155724
+  classDef info   fill:#fff3cd,stroke:#b08000,color:#5a3e00
+  class C,E broken
+  class D target
+  class A,B info
+</div>
+</div>
 
 <details class="subsection" open>
 <summary><h3>What Changes</h3></summary>
 <div class="subsection-body">
-<p>Two files in <code>tazama-lf/rule-studio-example</code>. One line each. No application code changes.</p>
-
-<table>
-  <thead><tr><th>File</th><th>Line</th><th>Before</th><th>After</th></tr></thead>
-  <tbody>
-    <tr>
-      <td><code>.github/workflows/deploy.yml</code></td>
-      <td>39</td>
-      <td><code>-b feat-paysys</code></td>
-      <td><code>-b dev</code></td>
-    </tr>
-    <tr>
-      <td><code>.github/workflows/deploy-to-uat.yml</code></td>
-      <td>36</td>
-      <td><code>-b feat-paysys</code></td>
-      <td><code>-b dev</code></td>
-    </tr>
-  </tbody>
-</table>
+<p>Two workflow files in <code>tazama-lf/rule-studio-example</code>; one line each. No application code changes.</p>
+<ul>
+  <li><code>.github/workflows/deploy.yml</code> — line 39: change <code>-b feat-paysys</code> to <code>-b dev</code></li>
+  <li><code>.github/workflows/deploy-to-uat.yml</code> — line 36: change <code>-b feat-paysys</code> to <code>-b dev</code></li>
+</ul>
 </div>
 </details>
 
@@ -566,49 +438,58 @@ graph LR
     <tr><td>Schema migration required</td><td><span class="badge badge-green">No</span></td></tr>
     <tr><td>Frontend changes required</td><td><span class="badge badge-green">No</span></td></tr>
     <tr><td>Downtime required</td><td><span class="badge badge-green">No</span></td></tr>
-    <tr><td>Risk of regression</td><td><span class="badge badge-green">Low</span></td></tr>
-    <tr><td>Reversibility</td><td><span class="badge badge-blue">Fully reversible</span></td></tr>
+    <tr><td>Risk of regression</td><td><span class="badge badge-green">Low</span> — only changes which branch the pipeline clones</td></tr>
+    <tr><td>Reversibility</td><td><span class="badge badge-green">Fully reversible</span> (revert the two lines)</td></tr>
   </tbody>
 </table>
-
-<p><strong>What this fixes immediately:</strong></p>
-<ul>
-  <li>All future Rule Studio deploys clone <code>dev</code> — 35 upstream commits included</li>
-  <li>New containers get all upstream security/bug fixes (PRs #443, #445, #446)</li>
-  <li>Hardcoded IPs, disabled APM, and debug logging no longer baked into new builds</li>
-  <li><code>frms-coe-lib</code> resolves from the public <code>tazama-lf</code> registry at the correct version</li>
-</ul>
-
-<p><strong>What this does not fix:</strong></p>
-<ul>
-  <li>Containers already running from <code>feat-paysys</code> — remain on diverged code until rebuilt</li>
-  <li><code>feat-paysys</code> branch still exists and still diverges</li>
-  <li>The 28 <code>feat-paysys</code>-only commits (including <code>rule.ts</code>) remain unreviewed</li>
-  <li>The dead <code>sed</code> pattern in <code>deploy.yml</code> line 66 — it works again only after Track B restores the placeholder</li>
-</ul>
-
-<p><span class="badge badge-green">Track A is safe to ship in isolation.</span></p>
 </div>
 </details>
+
+<details class="subsection" open>
+<summary><h3>What this fixes immediately</h3></summary>
+<div class="subsection-body">
+<ul>
+  <li>All future Rule Studio deploys clone <code>dev</code> instead of <code>feat-paysys</code>.</li>
+  <li>New rule containers pick up all 35 upstream <code>dev</code> commits (security fixes, dependency updates, bug fixes).</li>
+  <li>Debug logging, disabled APM, and the private <code>0.0.1-psl.0</code> library pin are no longer baked into new builds.</li>
+</ul>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>What this does not fix</h3></summary>
+<div class="subsection-body">
+<ul>
+  <li>Containers already deployed from <code>feat-paysys</code> remain running on diverged code until rebuilt.</li>
+  <li>The <code>feat-paysys</code> branch still exists and continues to diverge.</li>
+  <li>The 28 <code>feat-paysys</code>-only commits remain unreviewed and unmerged.</li>
+  <li>The dead <code>sed</code> pattern in <code>deploy.yml:66</code> is not corrected by this track.</li>
+  <li>The <code>@psl-copilot</code> hardcoding in <code>deploy-to-uat.yml:104</code> is unchanged — the two workflows remain non-unified by design.</li>
+  <li>No documentation of the build-time rule-injection contract is added.</li>
+</ul>
+</div>
+</details>
+
+<p><strong>Track A is safe to ship in isolation.</strong></p>
 
 </div>
 </details>
 
 <details class="section" open id="track-b">
-<summary><h2>Track B — Reconcile feat-paysys with dev</h2></summary>
+<summary><h2>4. Track B — Reconcile feat-paysys with dev</h2></summary>
 <div class="section-body">
 
 <details class="subsection" open>
 <summary><h3>What Changes</h3></summary>
 <div class="subsection-body">
-<p>Full audit and reconciliation of the 28 commits unique to <code>feat-paysys</code> into <code>dev</code>, cleanup of debug artifacts, and branch deletion. All changes target <code>tazama-lf/rule-executer</code>.</p>
+<p>Full audit and reconciliation of the 28 commits unique to <code>feat-paysys</code> into <code>dev</code>, cleanup of debug artifacts and dead code, and deletion of the <code>feat-paysys</code> branch.</p>
 </div>
 </details>
 
 <details class="subsection" open>
 <summary><h3>Schema Impact</h3></summary>
 <div class="subsection-body">
-<p>None. No database schema changes.</p>
+<p><span class="badge badge-green">None</span>. No database schema changes involved.</p>
 </div>
 </details>
 
@@ -616,50 +497,15 @@ graph LR
 <summary><h3>Backend Code Impact</h3></summary>
 <div class="subsection-body">
 <table>
-  <thead><tr><th>File</th><th>Repository</th><th>Change type</th><th>Risk</th></tr></thead>
+  <thead><tr><th>File</th><th>Repository</th><th>Change type</th></tr></thead>
   <tbody>
-    <tr>
-      <td><code>Dockerfile</code></td>
-      <td>rule-executer</td>
-      <td>Remove hardcoded IPs/ports; restore empty ENV defaults; restore BuildKit secret mount</td>
-      <td><span class="badge badge-green">Low</span></td>
-    </tr>
-    <tr>
-      <td><code>package.json</code></td>
-      <td>rule-executer</td>
-      <td>Align library versions with <code>dev</code>; restore <code>rule</code> placeholder dependency</td>
-      <td><span class="badge badge-amber">Medium</span></td>
-    </tr>
-    <tr>
-      <td><code>.npmrc</code></td>
-      <td>rule-executer</td>
-      <td>Decide on <code>@psl-copilot</code> scope — add to <code>dev</code> or remove</td>
-      <td><span class="badge badge-amber">Medium</span></td>
-    </tr>
-    <tr>
-      <td><code>src/controllers/execute.ts</code></td>
-      <td>rule-executer</td>
-      <td>Remove all <code>[L##]</code> debug log calls; remove <code>databaseManager as any</code> cast</td>
-      <td><span class="badge badge-green">Low</span></td>
-    </tr>
-    <tr>
-      <td><code>src/controllers/rule.ts</code></td>
-      <td>rule-executer</td>
-      <td>Decision required: clean + merge, or confirm obsolete and discard</td>
-      <td><span class="badge badge-amber">Medium</span></td>
-    </tr>
-    <tr>
-      <td><code>simple-rule2-test.js</code></td>
-      <td>rule-executer</td>
-      <td>Delete (debug file, absent on <code>dev</code>)</td>
-      <td><span class="badge badge-green">Low</span></td>
-    </tr>
-    <tr>
-      <td><code>.husky/pre-commit</code></td>
-      <td>rule-executer</td>
-      <td>Align with <code>dev</code> hook syntax</td>
-      <td><span class="badge badge-green">Low</span></td>
-    </tr>
+    <tr><td><code>Dockerfile</code></td><td>tazama-lf/rule-executer</td><td>Remove hardcoded IPs/ports from ENV defaults; restore <code>APM_ACTIVE=true</code>; restore BuildKit secret mount for <code>GH_TOKEN</code></td></tr>
+    <tr><td><code>package.json</code></td><td>tazama-lf/rule-executer</td><td>Align <code>frms-coe-lib</code>, <code>frms-coe-startup-lib</code> versions with <code>dev</code>; restore <code>rule</code> placeholder dependency; bump <code>version</code> to <code>dev</code>'s value</td></tr>
+    <tr><td><code>.npmrc</code></td><td>tazama-lf/rule-executer</td><td>Decide on <code>@psl-copilot</code> scope (retain, or remove if private registry access is no longer required)</td></tr>
+    <tr><td><code>src/controllers/execute.ts</code></td><td>tazama-lf/rule-executer</td><td>Remove all <code>[L##]</code>-prefixed debug log statements; remove <code>databaseManager as any</code> cast</td></tr>
+    <tr><td><code>src/controllers/rule.ts</code></td><td>tazama-lf/rule-executer</td><td><strong>Delete</strong> — file is orphaned dead code (never imported; <code>execute.ts</code> uses <code>handleTransaction</code> from <code>rule/lib</code>)</td></tr>
+    <tr><td><code>simple-rule2-test.js</code></td><td>tazama-lf/rule-executer</td><td>Delete (124-line orphan debug script)</td></tr>
+    <tr><td><code>.husky/pre-commit</code></td><td>tazama-lf/rule-executer</td><td>Restore <code>dev</code>'s working hook (fix broken <code>npx lint - staged</code>)</td></tr>
   </tbody>
 </table>
 </div>
@@ -668,7 +514,7 @@ graph LR
 <details class="subsection" open>
 <summary><h3>Frontend Code Impact</h3></summary>
 <div class="subsection-body">
-<p>None. Rule Studio frontend is not involved in either track.</p>
+<p><span class="badge badge-green">None</span>. The Rule Studio frontend is not involved.</p>
 </div>
 </details>
 
@@ -676,7 +522,7 @@ graph LR
 </details>
 
 <details class="section" open id="side-effects">
-<summary><h2>Side Effects and Risks</h2></summary>
+<summary><h2>5. Side Effects and Risks</h2></summary>
 <div class="section-body">
 
 <details class="subsection" open>
@@ -686,19 +532,24 @@ graph LR
   <thead><tr><th>Risk</th><th>Likelihood</th><th>Mitigation</th></tr></thead>
   <tbody>
     <tr>
-      <td><code>feat-paysys</code>-unique <code>rule.ts</code> provides <code>BaseMessage</code> handling required by Studio rules that <code>dev</code> does not provide</td>
+      <td>A <code>feat-paysys</code>-unique change that IS required by Studio-generated rules is silently lost when clones switch to <code>dev</code></td>
       <td><span class="badge badge-amber">Medium</span></td>
-      <td>Audit <code>feat-paysys</code> commits before shipping Track A; confirm <code>dev</code> <code>rule/lib</code> handles all required transaction types</td>
+      <td>Audit the 28 unique commits before shipping. <code>rule.ts</code> confirmed orphaned; Dockerfile IPs confirmed overridden at run time; the remaining risk is around <code>execute.ts</code> behavioural changes on <code>dev</code></td>
     </tr>
     <tr>
-      <td><code>dev</code> has a breaking change incompatible with <code>@psl-copilot</code>-namespaced packages</td>
-      <td><span class="badge badge-green">Low</span></td>
-      <td>Verify registry scopes in <code>dev/.npmrc</code> before switching</td>
+      <td>Runtime library incompatibility: <code>dev</code>'s <code>frms-coe-lib@8.2.0-rc.6</code> vs <code>feat-paysys</code>'s <code>0.0.1-psl.0</code> introduces API changes</td>
+      <td><span class="badge badge-amber">Medium</span></td>
+      <td>Smoke-test one rule deploy from <code>dev</code> in a non-production tenant before rolling out</td>
     </tr>
     <tr>
-      <td>Already-deployed containers remain on diverged code until rebuilt</td>
+      <td>Already-deployed containers not rebuilt — they remain on <code>feat-paysys</code> code</td>
       <td><span class="badge badge-red">Certain</span></td>
-      <td>Schedule a rebuild cycle for all live Studio-deployed rule containers after Track A merges</td>
+      <td>Schedule a rebuild cycle for all Studio-deployed rule containers after Track A merges</td>
+    </tr>
+    <tr>
+      <td>Private <code>@psl-copilot</code> scope on <code>dev</code>/<code>.npmrc</code> is missing while some published rule packages still require it</td>
+      <td><span class="badge badge-green">Low</span></td>
+      <td>Verify registry scopes in <code>dev/.npmrc</code> and the resolution of <code>@tazama-lf/rule-901</code> before switching</td>
     </tr>
   </tbody>
 </table>
@@ -712,19 +563,24 @@ graph LR
   <thead><tr><th>Risk</th><th>Likelihood</th><th>Mitigation</th></tr></thead>
   <tbody>
     <tr>
-      <td><code>rule.ts</code> <code>BaseMessage</code> logic is required and its removal breaks rules</td>
-      <td><span class="badge badge-amber">Medium</span></td>
-      <td>End-to-end test with a Studio rule before deleting branch; if needed, clean and merge into <code>dev</code> with tests</td>
-    </tr>
-    <tr>
-      <td>Cleaning <code>execute.ts</code> log statements removes trace needed for active debugging</td>
+      <td>Deleting <code>src/controllers/rule.ts</code> removes handler code that turns out to be reachable through a build path not seen during review</td>
       <td><span class="badge badge-green">Low</span></td>
-      <td>Replace <code>[L##]</code> labels with proper structured log levels (DEBUG/TRACE) via <code>loggerService.trace()</code> rather than deleting entirely</td>
+      <td>Confirmed via <code>grep</code> that <code>rule.ts</code> is not imported anywhere; run a full build + rule execution in UAT before deleting</td>
     </tr>
     <tr>
-      <td><code>@psl-copilot</code> registry scope in <code>.npmrc</code> is needed by some deployed rules</td>
+      <td>Removing <code>[L##]</code> logs from <code>execute.ts</code> deletes a trace that operators rely on for debugging</td>
       <td><span class="badge badge-amber">Medium</span></td>
-      <td>Check if any rule package is published under <code>@psl-copilot</code>; if so, add scope to <code>dev/.npmrc</code> explicitly</td>
+      <td>Replace with proper structured log levels via <code>loggerService</code> rather than deleting outright</td>
+    </tr>
+    <tr>
+      <td>Aligning <code>package.json</code> to <code>dev</code> versions breaks compatibility with a rule authored against <code>0.0.1-psl.0</code></td>
+      <td><span class="badge badge-amber">Medium</span></td>
+      <td>End-to-end test a Rule Studio–generated rule against the reconciled branch in UAT before deleting <code>feat-paysys</code></td>
+    </tr>
+    <tr>
+      <td><code>@psl-copilot</code> registry scope is still required by some deployed rules once <code>.npmrc</code> is normalised</td>
+      <td><span class="badge badge-amber">Medium</span></td>
+      <td>Grep the rule catalogue for any <code>@psl-copilot</code>-scoped dependency; if any exist, add the scope to <code>dev/.npmrc</code> rather than removing it</td>
     </tr>
   </tbody>
 </table>
@@ -734,39 +590,44 @@ graph LR
 <details class="subsection" open>
 <summary><h3>Cross-Issue Dependencies</h3></summary>
 <div class="subsection-body">
-<p>No other open issue directory in <code>issues/rule-executor/</code> was found targeting the same files. No cross-issue merge conflict risk identified.</p>
+<p>No other open issue directory in <code>issues/rule-executor/</code> was found targeting the same files. Two adjacent caveats to note:</p>
+<ul>
+  <li><strong><code>psl-copilot/rule-template</code></strong>: Rule Studio may bootstrap new rule repos from this template as well as from <code>tazama-lf/rule-studio-example</code>. If <code>rule-template</code> also embeds a hardcoded <code>-b feat-paysys</code> in its workflows, Track A must be applied there too. This repo is outside the audit scope of this study — <span class="badge badge-amber">verify separately</span>.</li>
+  <li><strong><code>tazama-lf/rule-studio-example</code> feat-paysys branch</strong>: the template repo itself carries a <code>feat-paysys</code> branch. Confirm that Rule Studio's bootstrap does not clone <code>rule-studio-example</code> from its own <code>feat-paysys</code> branch — if it does, Track A must be applied on that branch too, or the bootstrap retargeted. <span class="badge badge-amber">verify separately</span></li>
+</ul>
 </div>
 </details>
 
 </div>
 </details>
 
-<details class="section" open id="effort">
-<summary><h2>Effort Estimate</h2></summary>
+<details class="section" open id="effort-estimate">
+<summary><h2>6. Effort Estimate</h2></summary>
 <div class="section-body">
 <table>
   <thead><tr><th>Track</th><th>Files changed</th><th>Estimated effort</th></tr></thead>
   <tbody>
     <tr><td>Track A — Switch clone target</td><td>2</td><td>30 minutes</td></tr>
-    <tr><td>Track B — Reconcile feat-paysys</td><td>7</td><td>1–2 days</td></tr>
+    <tr><td>Track B — Reconcile <code>feat-paysys</code> with <code>dev</code></td><td>7</td><td>1–2 days</td></tr>
     <tr><td><strong>Total</strong></td><td><strong>9</strong></td><td><strong>1–2 days</strong></td></tr>
   </tbody>
 </table>
 </div>
 </details>
 
-<details class="section" open id="acceptance">
-<summary><h2>Acceptance Criteria</h2></summary>
+<details class="section" open id="acceptance-criteria">
+<summary><h2>7. Acceptance Criteria (Verification Checklist)</h2></summary>
 <div class="section-body">
 
 <details class="subsection" open>
 <summary><h3>Track A</h3></summary>
 <div class="subsection-body">
-<ul>
-  <li>☐ <code>deploy.yml:39</code> reads <code>git clone … -b dev</code></li>
-  <li>☐ <code>deploy-to-uat.yml:36</code> reads <code>git clone … -b dev</code></li>
-  <li>☐ A triggered Rule Studio rule deploy shows a <code>dev</code> branch SHA in the clone step log</li>
-  <li>☐ No change made to <code>feat-paysys</code> or any rule repo</li>
+<ul style="list-style: none; padding-left: 0.4rem;">
+  <li><input type="checkbox" disabled> <code>rule-studio-example/.github/workflows/deploy.yml:39</code> clones branch <code>dev</code></li>
+  <li><input type="checkbox" disabled> <code>rule-studio-example/.github/workflows/deploy-to-uat.yml:36</code> clones branch <code>dev</code></li>
+  <li><input type="checkbox" disabled> A triggered workflow log shows the <code>dev</code> branch SHA in the clone step, not a <code>feat-paysys</code> SHA</li>
+  <li><input type="checkbox" disabled> The built container's <code>node_modules</code> resolves <code>frms-coe-lib</code> to the <code>dev</code> version (currently <code>8.2.0-rc.6</code>), not <code>0.0.1-psl.0</code></li>
+  <li><input type="checkbox" disabled> A smoke-test rule deployed after the change runs end-to-end in UAT</li>
 </ul>
 </div>
 </details>
@@ -774,17 +635,17 @@ graph LR
 <details class="subsection" open>
 <summary><h3>Track B</h3></summary>
 <div class="subsection-body">
-<ul>
-  <li>☐ <code>Dockerfile</code> contains no hardcoded IP addresses in ENV defaults</li>
-  <li>☐ <code>APM_ACTIVE</code> defaults to <code>true</code></li>
-  <li>☐ BuildKit secret mount (<code>--mount=type=secret,id=GH_TOKEN</code>) used in both Dockerfile build stages</li>
-  <li>☐ <code>package.json</code> <code>frms-coe-lib</code> version is <code>8.2.0-rc.6</code></li>
-  <li>☐ <code>package.json</code> carries a <code>rule</code> placeholder dependency matching the <code>deploy.yml</code> <code>sed</code> pattern</li>
-  <li>☐ <code>src/controllers/execute.ts</code> has no <code>[L##]</code>-prefixed debug log calls and no <code>as any</code> cast</li>
-  <li>☐ <code>src/controllers/rule.ts</code> decision resolved and documented</li>
-  <li>☐ <code>simple-rule2-test.js</code> deleted</li>
-  <li>☐ <code>feat-paysys</code> branch deleted from remote</li>
-  <li>☐ End-to-end rule execution passes in UAT from the corrected branch</li>
+<ul style="list-style: none; padding-left: 0.4rem;">
+  <li><input type="checkbox" disabled> <code>Dockerfile</code> has no hardcoded IP addresses or ports in ENV defaults</li>
+  <li><input type="checkbox" disabled> <code>APM_ACTIVE</code> defaults to <code>true</code> in <code>Dockerfile</code></li>
+  <li><input type="checkbox" disabled> <code>Dockerfile</code> uses <code>--mount=type=secret,id=GH_TOKEN</code> BuildKit secret mount</li>
+  <li><input type="checkbox" disabled> <code>package.json</code> versions match <code>dev</code> and include the <code>rule</code> placeholder dependency</li>
+  <li><input type="checkbox" disabled> <code>src/controllers/execute.ts</code> has no <code>[L##]</code>-prefixed log calls and no <code>as any</code> cast</li>
+  <li><input type="checkbox" disabled> <code>src/controllers/rule.ts</code> is deleted (or, if kept, contains no <code>console.log</code> and is imported by at least one caller)</li>
+  <li><input type="checkbox" disabled> <code>simple-rule2-test.js</code> is deleted</li>
+  <li><input type="checkbox" disabled> <code>.husky/pre-commit</code> matches <code>dev</code>'s working hook</li>
+  <li><input type="checkbox" disabled> <code>feat-paysys</code> branch deleted from remote</li>
+  <li><input type="checkbox" disabled> End-to-end rule execution passes in UAT from the reconciled <code>dev</code></li>
 </ul>
 </div>
 </details>
@@ -792,70 +653,76 @@ graph LR
 </div>
 </details>
 
-<details class="section" open id="sequencing">
-<summary><h2>Recommended Sequencing</h2></summary>
+<details class="section" open id="recommended-sequencing">
+<summary><h2>8. Recommended Sequencing</h2></summary>
 <div class="section-body">
 <ol>
-  <li><strong>Ship Track A immediately</strong> as a standalone PR into <code>tazama-lf/rule-studio-example</code> — two lines, no risk.</li>
-  <li><strong>Audit the 28 <code>feat-paysys</code>-only commits in parallel</strong> — determine if <code>rule.ts</code> <code>BaseMessage</code> handling is required by the Studio pipeline or covered by <code>dev</code>'s <code>rule/lib</code> import.</li>
-  <li><strong>Ship Track B</strong> as a reviewed PR into <code>dev</code> on <code>tazama-lf/rule-executer</code> once the audit is complete.</li>
-  <li><strong>Rebuild and re-deploy</strong> all Rule Studio–generated rule containers from <code>dev</code> after both tracks merge.</li>
-  <li><strong>Delete <code>feat-paysys</code></strong> after all containers are confirmed healthy.</li>
+  <li>Ship <strong>Track A</strong> immediately as a standalone PR into <code>tazama-lf/rule-studio-example</code> (both <code>main</code> and any branch consumed by Rule Studio bootstrap).</li>
+  <li>Verify in parallel whether <code>psl-copilot/rule-template</code> also hardcodes <code>-b feat-paysys</code>; if so, apply the same one-line fix there.</li>
+  <li>Audit the 28 <code>feat-paysys</code>-only commits — the residual risk after this study is the behavioural delta in <code>execute.ts</code> and any consumer of <code>frms-coe-lib@0.0.1-psl.0</code> APIs that changed by <code>8.2.0-rc.6</code>.</li>
+  <li>Open <strong>Track B</strong> PR into <code>dev</code> on <code>tazama-lf/rule-executer</code> once the audit is complete. Merge as a single coordinated change.</li>
+  <li>Rebuild and re-deploy all Rule Studio-generated rule containers after Track A and Track B are both merged.</li>
+  <li>Delete <code>feat-paysys</code> from <code>tazama-lf/rule-executer</code> only after all deployed containers have been rebuilt and confirmed healthy.</li>
 </ol>
 </div>
 </details>
 
-</div><!-- end page-wrapper -->
+</div>
 
 <script>
-(function () {
-  // Theme
-  const root = document.documentElement;
-  const STORAGE_KEY = 'impact-report-theme';
+(function() {
+  const THEME_KEY = 'impact-study-theme';
 
-  function applyTheme(t) {
-    root.setAttribute('data-theme', t);
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
     document.querySelectorAll('.theme-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.theme === t);
+      btn.classList.toggle('active', btn.dataset.theme === theme);
     });
-    localStorage.setItem(STORAGE_KEY, t);
-    if (window.__reinitMermaid) window.__reinitMermaid();
+    try { localStorage.setItem(THEME_KEY, theme); } catch(e) {}
+    if (window.__reinitMermaid) setTimeout(window.__reinitMermaid, 50);
   }
 
-  const saved = localStorage.getItem(STORAGE_KEY) || 'light';
-  applyTheme(saved);
+  const saved = (function() { try { return localStorage.getItem(THEME_KEY); } catch(e) { return null; } })();
+  applyTheme(saved || 'light');
 
   document.querySelectorAll('.theme-btn').forEach(btn => {
     btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
   });
 
-  // Expand / collapse
   document.getElementById('expand-all').addEventListener('click', () => {
-    document.querySelectorAll('details').forEach(d => { d.open = true; });
+    document.querySelectorAll('details').forEach(d => d.open = true);
   });
   document.getElementById('collapse-all').addEventListener('click', () => {
-    document.querySelectorAll('details').forEach(d => { d.open = false; });
+    document.querySelectorAll('details').forEach(d => d.open = false);
   });
-
-  // Back to top
   document.getElementById('top-btn').addEventListener('click', () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 
-  // Diagram drag-to-pan
-  document.querySelectorAll('.diagram-wrap').forEach(wrap => {
-    let isDown = false, startX, scrollLeft;
-    wrap.addEventListener('mousedown', e => {
-      isDown = true;
-      startX = e.pageX - wrap.offsetLeft;
-      scrollLeft = wrap.scrollLeft;
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', (e) => {
+      const id = a.getAttribute('href').slice(1);
+      const target = document.getElementById(id);
+      if (!target) return;
+      let el = target;
+      while (el) {
+        if (el.tagName && el.tagName.toLowerCase() === 'details') el.open = true;
+        el = el.parentElement;
+      }
     });
-    document.addEventListener('mouseup', () => { isDown = false; });
-    wrap.addEventListener('mousemove', e => {
+  });
+
+  document.querySelectorAll('.diagram-wrap').forEach(function(wrap) {
+    var isDown = false, startX, scrollLeft;
+    wrap.addEventListener('mousedown', function(e) {
+      isDown = true; startX = e.pageX - wrap.offsetLeft; scrollLeft = wrap.scrollLeft;
+    });
+    wrap.addEventListener('mouseleave', function() { isDown = false; });
+    wrap.addEventListener('mouseup', function() { isDown = false; });
+    wrap.addEventListener('mousemove', function(e) {
       if (!isDown) return;
       e.preventDefault();
-      const x = e.pageX - wrap.offsetLeft;
-      wrap.scrollLeft = scrollLeft - (x - startX);
+      wrap.scrollLeft = scrollLeft - (e.pageX - wrap.offsetLeft - startX);
     });
   });
 })();
