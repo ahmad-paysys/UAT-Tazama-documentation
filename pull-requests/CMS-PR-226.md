@@ -6,7 +6,7 @@
 **Date Reviewed:** 2026-07-03
 **Label:** bug
 **Size:** +960 / -279 lines across 22 files
-**Commits:** 7 (`cf9f97f`, `d6f2fa2`, `cef62ee`, `9fc66ea`, `cbff54e`, `bff9b82`, `34431dd`)
+**Commits:** 8 (`6199e94`, `aff9d25`, `c0c6695`, `5b6f1b8`, `39f6f08`, `7bdef6e`, `a9734e9`, `d961a2e`)
 **State:** OPEN
 **Existing approvals:** None
 
@@ -33,6 +33,10 @@
 - [CodeRabbit Activity](#coderabbit-activity)
 - [Summary and Verdict](#summary-and-verdict)
 - [GitHub Review Comment](#github-review-comment)
+- [Follow-up Review (2026-07-03)](#follow-up-review-2026-07-03)
+  - [Resolution Status — All Outstanding Items](#resolution-status--all-outstanding-items)
+  - [Final Verdict](#final-verdict)
+  - [Final GitHub Review Comment](#final-github-review-comment)
 
 ---
 
@@ -498,6 +502,104 @@ The tests for `today` and `sends today time range dates to the server` use `expe
 **5. Document the `case_id` removal from numeric search**
 
 The old search included `{ case_id: { equals: Number(search) } }` in numeric results; the new code removes it. If users currently search alerts by `case_id`, this is a regression. Please confirm in the PR description whether this is intentional.
+````
+
+[↑ Back to top](#pr-review-cms-226--fix-fixed-the-high-priority-issues)
+
+---
+---
+---
+
+## Follow-up Review (2026-07-03)
+
+**Reviewed commit:** `d961a2e` — *"fix: fixed the code rabbit issues"* (2026-07-03T12:43Z)
+**Reviewed against:** CHANGES_REQUESTED on commit `34431dd` by `ahmad-paysys` (2026-07-03T07:23Z)
+**Developer response:** Pushed one commit that touches only `frontend/src/features/cases/components/view/CaseDetailsTab.tsx` (+1/-0), applying the exact `setIsAlertModalOpen(false)` addition suggested in the review diff.
+
+### Resolution Status — All Outstanding Items
+
+### Item 1 — CI encoding check failures
+
+**Status: RESOLVED**
+
+`encoding-check / encoding-check` now reports `pass` on the latest commit. All 14 CI checks are green (`Analyze`, `CodeQL`, `dco-check`, `dependency-review`, `dockerfile-linter`, `encoding-check`, `gpg-verify`, `njsscan`, `node-ci / check style`, `node-ci / check tests`, `node-ci / run build`, `nodejsscan`, `conventional-commits`, `CodeRabbit`).
+
+### Item 2 — `isAlertModalOpen` not reset on `row.id` change
+
+**Status: RESOLVED**
+
+The follow-up commit `d961a2e` applies the exact diff proposed in the review:
+
+```diff
+   useEffect(() => {
+     setLatestReports({});
+     setViewingId(null);
++    setIsAlertModalOpen(false);
+   }, [row.id]);
+```
+
+Verified in `frontend/src/features/cases/components/view/CaseDetailsTab.tsx` around line 112–116.
+
+### Item 3 — Add modal close-path test (`CaseDetailsTab.test.tsx`)
+
+**Status: NOT RESOLVED** (non-blocking)
+
+No changes to `CaseDetailsTab.test.tsx` in the follow-up commit. The mock still only exercises the open path.
+
+### Item 4 — Assert concrete date values for preset time ranges (`useAlerts.test.ts`)
+
+**Status: NOT RESOLVED** (non-blocking)
+
+No changes to `useAlerts.test.ts` in the follow-up commit. Preset-range tests still assert `expect.any(String)`.
+
+### Item 5 — Document the `case_id` removal from numeric search
+
+**Status: NOT RESOLVED** (non-blocking)
+
+No update to the PR description. The behavior change is still undocumented.
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | CI encoding check failures | ✅ Resolved |
+| 2 | `isAlertModalOpen` not reset on `row.id` change | ✅ Resolved |
+| 3 | Add modal close-path test | ❌ Not resolved (non-blocking) |
+| 4 | Assert concrete date values for preset time ranges | ❌ Not resolved (non-blocking) |
+| 5 | Document the `case_id` removal from numeric search | ❌ Not resolved (non-blocking) |
+
+### Final Verdict
+
+**Verdict: Approve with minor cleanup requested**
+
+Both blocking items from the CHANGES_REQUESTED review are resolved. The encoding check passes and the `isAlertModalOpen` reset is in place with the exact fix suggested. All CI checks are green.
+
+The three non-blocking items remain open. They are quality-of-test and documentation gaps rather than functional defects, so they do not block merge — but items 3 and 4 in particular are worth addressing in a follow-up so the test suite protects the new behavior against timezone regressions and modal close semantics.
+
+[↑ Back to top](#pr-review-cms-226--fix-fixed-the-high-priority-issues)
+
+---
+
+## Final GitHub Review Comment
+
+````markdown
+**Approve with minor cleanup requested**
+
+Both blocking items from the previous review are resolved — encoding-check is green and `setIsAlertModalOpen(false)` is now reset on `row.id` change in `CaseDetailsTab.tsx`. All CI checks pass. Approving for merge; the three non-blocking items below are worth picking up in a small follow-up PR but do not block this one.
+
+---
+
+### Non-blocking (nice to have in a follow-up)
+
+**1. Add modal close-path test (`CaseDetailsTab.test.tsx`)**
+
+The `AlertsDetailModal` mock only exercises the open path. Extend the mock to expose a close trigger (call `onClose`) and add an assertion that the modal is removed from the DOM.
+
+**2. Assert concrete date values for preset time ranges (`useAlerts.test.ts`)**
+
+The tests for the `today`/preset time-range paths still use `expect.any(String)` for `startDate`/`endDate`. Freeze time with `vi.useFakeTimers()` and assert the exact ISO boundary strings to protect against off-by-one timezone regressions in `getDateRangeForFilter`.
+
+**3. Document the `case_id` removal from numeric search**
+
+The old numeric search included `{ case_id: { equals: Number(search) } }`; the new implementation removes it. Please add a note to the PR description confirming this is intentional so QA can validate the behavior change.
 ````
 
 [↑ Back to top](#pr-review-cms-226--fix-fixed-the-high-priority-issues)
