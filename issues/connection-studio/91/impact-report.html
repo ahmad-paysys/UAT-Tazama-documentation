@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Impact Study — Issue #91: Backend build & tests reproducibility</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #24292e; --h1: #0d1b3e; --h2: #1a3a6b; --h3: #2563a8;
+    --border: #d0d7de; --border-soft: #e1e4e8; --code-bg: #f6f8fa;
+    --table-head-bg: #0d1b3e; --table-head-fg: #ffffff; --table-head-border: #1a3a6b;
+    --row-even: #f3f5f8; --row-odd: #ffffff;
+    --link: #1a3a6b; --link-hover: #2563a8;
+    --bar-bg: #0d1b3e; --bar-fg: #ffffff;
+    --bar-btn-bg: rgba(255,255,255,0.12); --bar-btn-bg-hover: rgba(255,255,255,0.25);
+    --bar-btn-border: rgba(255,255,255,0.25); --bar-btn-active: #2563a8;
+    --details-bg: #fafbfc; --details-border: #d0d7de;
+    --summary-bg: #f3f5f8; --summary-hover: #e9edf2;
+    --badge-green-bg: #d4edda; --badge-green-fg: #155724; --badge-green-bd: #b8dfc4;
+    --badge-amber-bg: #fff3cd; --badge-amber-fg: #856404; --badge-amber-bd: #f0d88a;
+    --badge-red-bg:   #f8d7da; --badge-red-fg:   #721c24; --badge-red-bd:   #f1aeb5;
+    --badge-blue-bg:  #d1ecf1; --badge-blue-fg:  #0c5460; --badge-blue-bd:  #a8d9e2;
+  }
+  [data-theme="dark"] {
+    --bg: #0d1117; --fg: #c9d1d9; --h1: #79c0ff; --h2: #58a6ff; --h3: #79c0ff;
+    --border: #30363d; --border-soft: #21262d; --code-bg: #161b22;
+    --table-head-bg: #1f6feb; --table-head-fg: #ffffff; --table-head-border: #388bfd;
+    --row-even: #161b22; --row-odd: #0d1117;
+    --link: #58a6ff; --link-hover: #79c0ff;
+    --bar-bg: #161b22; --bar-fg: #c9d1d9;
+    --bar-btn-bg: rgba(255,255,255,0.06); --bar-btn-bg-hover: rgba(255,255,255,0.14);
+    --bar-btn-border: rgba(255,255,255,0.18); --bar-btn-active: #1f6feb;
+    --details-bg: #0d1117; --details-border: #30363d;
+    --summary-bg: #161b22; --summary-hover: #1f242c;
+    --badge-green-bg: #033a16; --badge-green-fg: #7ee787; --badge-green-bd: #196c2e;
+    --badge-amber-bg: #4d3800; --badge-amber-fg: #ffd33d; --badge-amber-bd: #8a6500;
+    --badge-red-bg:   #4c0014; --badge-red-fg:   #ff7b85; --badge-red-bd:   #8a0020;
+    --badge-blue-bg:  #032b40; --badge-blue-fg:  #79c0ff; --badge-blue-bd:  #1f6feb;
+  }
+  [data-theme="solar"] {
+    --bg: #fdf6e3; --fg: #586e75; --h1: #073642; --h2: #268bd2; --h3: #b58900;
+    --border: #eee8d5; --border-soft: #eee8d5; --code-bg: #eee8d5;
+    --table-head-bg: #073642; --table-head-fg: #fdf6e3; --table-head-border: #002b36;
+    --row-even: #f5efdc; --row-odd: #fdf6e3;
+    --link: #268bd2; --link-hover: #2aa198;
+    --bar-bg: #073642; --bar-fg: #fdf6e3;
+    --bar-btn-bg: rgba(253,246,227,0.10); --bar-btn-bg-hover: rgba(253,246,227,0.22);
+    --bar-btn-border: rgba(253,246,227,0.30); --bar-btn-active: #b58900;
+    --details-bg: #fbf2d8; --details-border: #eee8d5;
+    --summary-bg: #eee8d5; --summary-hover: #e4dcc1;
+    --badge-green-bg: #dbe9b1; --badge-green-fg: #4d5d10; --badge-green-bd: #b5c97a;
+    --badge-amber-bg: #ffeec2; --badge-amber-fg: #7d5a00; --badge-amber-bd: #e6c970;
+    --badge-red-bg:   #fbd3cb; --badge-red-fg:   #8a1a08; --badge-red-bd:   #e89a8a;
+    --badge-blue-bg:  #cfe6f5; --badge-blue-fg:  #1c5e85; --badge-blue-bd:  #8ec0dc;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px; line-height: 1.7; color: var(--fg); background: var(--bg);
+    margin: 0; padding: 4.5rem 1rem 2rem; transition: background 0.2s ease, color 0.2s ease; }
+  .page-wrapper { max-width: 960px; margin: 0 auto; }
+  .top-bar { position: fixed; top: 0; left: 0; right: 0; background: var(--bar-bg); color: var(--bar-fg);
+    padding: 0.55rem 1rem; z-index: 1000; display: flex; flex-wrap: wrap; gap: 0.5rem;
+    align-items: center; justify-content: space-between; box-shadow: 0 2px 6px rgba(0,0,0,0.18); }
+  .top-bar .group { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+  .top-bar .label { font-size: 0.75em; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 0.25rem; }
+  .top-bar button { background: var(--bar-btn-bg); color: var(--bar-fg); border: 1px solid var(--bar-btn-border);
+    border-radius: 5px; padding: 0.35rem 0.7rem; font-size: 0.82em; font-weight: 500; cursor: pointer;
+    font-family: inherit; transition: background 0.15s ease; }
+  .top-bar button:hover { background: var(--bar-btn-bg-hover); }
+  .top-bar button.active { background: var(--bar-btn-active); border-color: var(--bar-btn-active); }
+  h1 { color: var(--h1); font-size: 2rem; margin-top: 0; margin-bottom: 0.25rem; }
+  h2 { color: var(--h2); font-size: 1.4rem; margin: 0; padding: 0; border: none; }
+  h3 { color: var(--h3); font-size: 1.1rem; margin: 0; padding: 0; }
+  .static-section h2 { border-bottom: 2px solid var(--border); padding-bottom: 0.3rem; margin-top: 2.2rem; }
+  .static-section h3 { margin-top: 1.8rem; }
+  p { margin: 0.6rem 0; } ul, ol { margin: 0.5rem 0; padding-left: 1.6rem; } li { margin: 0.25rem 0; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 1.8rem 0; }
+  code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 0.875em;
+    background: var(--code-bg); border: 1px solid var(--border-soft); border-radius: 4px; padding: 0.15em 0.4em; }
+  pre { background: var(--code-bg); border: 1px solid var(--border-soft); border-radius: 6px;
+    padding: 1rem 1.2rem; overflow-x: auto; margin: 1rem 0; }
+  pre code { background: none; border: none; padding: 0; font-size: 0.85em; line-height: 1.5; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9em; }
+  thead tr { background: var(--table-head-bg); color: var(--table-head-fg); }
+  thead th { padding: 0.6rem 0.85rem; text-align: left; font-weight: 600; border: 1px solid var(--table-head-border); }
+  tbody tr:nth-child(even) { background: var(--row-even); }
+  tbody tr:nth-child(odd)  { background: var(--row-odd); }
+  tbody td { padding: 0.5rem 0.85rem; border: 1px solid var(--border); vertical-align: top; }
+  .badge { display: inline-block; padding: 0.15em 0.6em; border-radius: 999px; font-size: 0.78em; font-weight: 600; white-space: nowrap; }
+  .badge-green { background: var(--badge-green-bg); color: var(--badge-green-fg); border: 1px solid var(--badge-green-bd); }
+  .badge-amber { background: var(--badge-amber-bg); color: var(--badge-amber-fg); border: 1px solid var(--badge-amber-bd); }
+  .badge-red   { background: var(--badge-red-bg);   color: var(--badge-red-fg);   border: 1px solid var(--badge-red-bd); }
+  .badge-blue  { background: var(--badge-blue-bg);  color: var(--badge-blue-fg);  border: 1px solid var(--badge-blue-bd); }
+  strong { font-weight: 600; }
+  details.section { margin: 1rem 0; border: 1px solid var(--details-border); border-radius: 6px;
+    background: var(--details-bg); overflow: hidden; }
+  details.section > summary { cursor: pointer; padding: 0.7rem 1rem; background: var(--summary-bg); list-style: none;
+    display: flex; align-items: center; gap: 0.55rem; user-select: none; transition: background 0.15s ease; }
+  details.section > summary:hover { background: var(--summary-hover); }
+  details.section > summary::-webkit-details-marker { display: none; }
+  details.section > summary::before { content: "▶"; font-size: 0.7em; color: var(--h2);
+    transition: transform 0.2s ease; display: inline-block; flex-shrink: 0; }
+  details.section[open] > summary::before { transform: rotate(90deg); }
+  details.section .section-body { padding: 0.4rem 1.2rem 1rem; }
+  details.subsection { margin: 0.6rem 0; border: 1px solid var(--details-border); border-radius: 5px; background: var(--bg); }
+  details.subsection > summary { cursor: pointer; padding: 0.5rem 0.85rem; list-style: none; display: flex;
+    align-items: center; gap: 0.5rem; user-select: none; background: transparent; transition: background 0.15s ease; }
+  details.subsection > summary:hover { background: var(--summary-hover); }
+  details.subsection > summary::-webkit-details-marker { display: none; }
+  details.subsection > summary::before { content: "▶"; font-size: 0.65em; color: var(--h3);
+    transition: transform 0.2s ease; display: inline-block; flex-shrink: 0; }
+  details.subsection[open] > summary::before { transform: rotate(90deg); }
+  details.subsection .subsection-body { padding: 0.2rem 1rem 0.8rem; }
+  html { scroll-behavior: smooth; scroll-padding-top: 70px; }
+  .diagram-wrap { position: relative; margin: 1.4rem -1rem 0.6rem; border-top: 1px solid var(--details-border);
+    border-bottom: 1px solid var(--details-border); background: var(--details-bg);
+    padding: 1.4rem 1.2rem; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; cursor: grab; }
+  .diagram-wrap:active { cursor: grabbing; }
+  .diagram-wrap .mermaid { display: inline-block; min-width: max-content; }
+  .diagram-wrap .mermaid svg { min-width: 700px; height: auto !important; }
+</style>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  function getMermaidTheme() {
+    const t = document.documentElement.getAttribute('data-theme');
+    if (t === 'dark') return 'dark';
+    return 'base';
+  }
+  function initMermaid() {
+    mermaid.initialize({
+      startOnLoad: false, theme: getMermaidTheme(),
+      themeVariables: (function() {
+        const t = document.documentElement.getAttribute('data-theme');
+        if (t === 'dark') return {};
+        if (t === 'solar') return { primaryColor: '#eee8d5', primaryTextColor: '#586e75', primaryBorderColor: '#93a1a1', lineColor: '#586e75', background: '#fdf6e3', mainBkg: '#fdf6e3', nodeBorder: '#93a1a1', clusterBkg: '#f5efdc', titleColor: '#073642', edgeLabelBackground: '#fdf6e3' };
+        return { primaryColor: '#f3f5f8', primaryTextColor: '#24292e', primaryBorderColor: '#8a95a3', lineColor: '#6b7a8d', background: '#ffffff', mainBkg: '#f3f5f8', nodeBorder: '#8a95a3', clusterBkg: '#fafbfc', titleColor: '#0d1b3e', edgeLabelBackground: '#ffffff' };
+      })(),
+      flowchart: { curve: 'basis', htmlLabels: true, rankSpacing: 80, nodeSpacing: 50 }
+    });
+    document.querySelectorAll('.mermaid').forEach(el => { el.removeAttribute('data-processed'); });
+    mermaid.run({ nodes: document.querySelectorAll('.mermaid') });
+  }
+  document.addEventListener('DOMContentLoaded', initMermaid);
+  window.__reinitMermaid = initMermaid;
+</script>
+</head>
+<body>
+
+<div class="top-bar" role="toolbar" aria-label="Document controls">
+  <div class="group">
+    <span class="label">Sections</span>
+    <button type="button" id="expand-all">Expand all</button>
+    <button type="button" id="collapse-all">Collapse all</button>
+  </div>
+  <div class="group">
+    <span class="label">Theme</span>
+    <button type="button" class="theme-btn" data-theme="light">Light</button>
+    <button type="button" class="theme-btn" data-theme="dark">Dark</button>
+    <button type="button" class="theme-btn" data-theme="solar">Solar</button>
+  </div>
+  <div class="group">
+    <button type="button" id="top-btn" title="Back to top">↑ Top</button>
+  </div>
+</div>
+
+<div class="page-wrapper">
+
+<div class="static-section">
+
+<h1>Impact Study — Issue #91</h1>
+<p><strong>Title:</strong> Backend build &amp; tests not reproducible from clean checkout<br>
+<strong>Repository:</strong> tazama-lf/connection-studio &nbsp;|&nbsp;
+<strong>Study Date:</strong> 2026-07-03 &nbsp;|&nbsp;
+<strong>Author:</strong> Ahmad Khalid</p>
+
+<p>
+  <span class="badge badge-amber">Test-env gap</span>
+  <span class="badge badge-blue">No schema change</span>
+  <span class="badge badge-green">No frontend change</span>
+  <span class="badge badge-green">Track A: low risk</span>
+</p>
+
+<hr>
+
+<div class="diagram-wrap">
+<div class="mermaid">
+graph LR
+  A[Clean checkout] --> B{".env present?"}
+  B -->|No| C[jest setupFiles: dotenv/config]
+  C --> D[helpers.ts import]
+  D --> E[Throw: ENCRYPTION_KEY must be 32 bytes]
+  E --> F[6 of 12 suites fail to load]
+  B -->|Yes| G[All 12 suites load]
+
+  classDef bad fill:#f8d7da,stroke:#721c24,color:#721c24
+  classDef good fill:#d4edda,stroke:#155724,color:#155724
+  class E,F bad
+  class G good
+</div>
+</div>
+
+</div>
+
+<hr>
+
+<details class="section" open>
+<summary><h2>Summary</h2></summary>
+<div class="section-body">
+<p>Issue #91 originally raised three findings against <code>backend/</code>: a missing Prisma schema, six jest suites that fail to load without a 32-byte <code>ENCRYPTION_KEY</code>, and a breaking <code>@tazama-lf/tcs-lib</code> <code>1.0.157-rc.0</code>. In a follow-up the reporter retracted Finding #1 (backend does not import Prisma anywhere), and Finding #3 is handled through a tcs-lib pin.</p>
+<p>The substantive work for this issue is <strong>Finding #2</strong> — the test-env gap — plus removing the vestigial <code>@prisma/client</code> dependency. Track A is a config/docs fix; Track B moves the encryption-key validation off the module import path and hardens CI.</p>
+</div>
+</details>
+
+<details class="section" open>
+<summary><h2>Confirmed Root Cause</h2></summary>
+<div class="section-body">
+<ul>
+  <li><code>src/utils/helpers.ts:16-22</code> throws at module-import when <code>Buffer.from(ENCRYPTION_KEY, 'utf8').length !== 32</code>. <span class="badge badge-red">confirmed</span></li>
+  <li><code>backend/jest.config.ts:25-26</code> loads env via <code>setupFiles: ['dotenv/config']</code>, which only reads <code>.env</code>. <code>.env</code> is git-ignored; <code>.env.example</code> has a valid key but jest never reads it. <span class="badge badge-red">confirmed</span></li>
+  <li>Six suites transitively import <code>utils/helpers.ts</code> via <code>SftpService</code> / <code>NotificationService</code> / <code>JobService</code> / <code>DryRunService</code> / <code>SchedulerService</code>. <span class="badge badge-red">confirmed</span></li>
+  <li>Finding #1 (Prisma) is <strong>retracted</strong>: zero <code>prisma</code> matches inside <code>src/</code>. <code>@prisma/client</code> is declared in <code>backend/package.json:41</code> but never imported. <span class="badge badge-blue">informational</span></li>
+  <li>Finding #3 (tcs-lib RC) is real but out of scope; coordinated via <code>tazama-lf/tcs-lib#51</code> and a version pin at <code>backend/package.json:46</code>. <span class="badge badge-blue">informational</span></li>
+</ul>
+</div>
+</details>
+
+<details class="section" open>
+<summary><h2>Track A — Test-Env Fix + Prisma Cleanup</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open>
+<summary><h3>What Changes</h3></summary>
+<div class="subsection-body">
+<ul>
+  <li>Add <code>backend/.env.test</code> (new file, ~5 lines) with a 32-byte <code>ENCRYPTION_KEY</code> and <code>IV_LENGTH=16</code>.</li>
+  <li>Update <code>backend/jest.config.ts</code> to load <code>.env.test</code> explicitly via a small <code>test/jest.env.ts</code> setup file.</li>
+  <li>Remove <code>@prisma/client</code> and <code>prisma</code> from <code>backend/package.json</code>.</li>
+  <li>Remove <code>npx prisma generate</code> from the root <code>package.json</code> <code>backend:lint:eslint</code> script.</li>
+  <li>Add a short section to <code>backend/README.md</code> documenting the test-env expectation.</li>
+</ul>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Impact</h3></summary>
+<div class="subsection-body">
+<table>
+<thead><tr><th>Category</th><th>Value</th></tr></thead>
+<tbody>
+  <tr><td>Files changed</td><td>5</td></tr>
+  <tr><td>Schema migration required</td><td><span class="badge badge-green">No</span></td></tr>
+  <tr><td>Frontend changes required</td><td><span class="badge badge-green">No</span></td></tr>
+  <tr><td>Downtime required</td><td><span class="badge badge-green">No</span></td></tr>
+  <tr><td>Risk of regression</td><td><span class="badge badge-green">Low</span></td></tr>
+  <tr><td>Reversibility</td><td><span class="badge badge-green">Trivial (single-commit revert)</span></td></tr>
+</tbody>
+</table>
+
+<p><strong>What Track A fixes immediately</strong></p>
+<ul>
+  <li>All 12 backend jest suites load from a clean checkout.</li>
+  <li>Partial-green runs that hid six missing suites can no longer happen.</li>
+  <li>The <code>@prisma/client</code> red herring is removed.</li>
+</ul>
+
+<p><strong>What Track A does not fix</strong></p>
+<ul>
+  <li><code>src/utils/helpers.ts</code> still throws at import time — <code>.env.test</code> masks the symptom, not the design.</li>
+  <li>CI configuration (<code>node-ci.yml</code>) is not audited.</li>
+  <li><code>env.validation.ts</code> still permits any string for <code>ENCRYPTION_KEY</code>.</li>
+</ul>
+
+<p><em>Track A is safe to ship in isolation.</em></p>
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section" open>
+<summary><h2>Track B — Reproducibility Hardening</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open>
+<summary><h3>What Changes</h3></summary>
+<div class="subsection-body">
+<p>Track A plus source and CI hardening: move the 32-byte check off module-import, enforce length in the config validator, and add a clean-checkout smoke workflow.</p>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Schema Impact</h3></summary>
+<div class="subsection-body">
+<table>
+<thead><tr><th>Change</th><th>Migration</th><th>Risk</th></tr></thead>
+<tbody>
+  <tr><td>None</td><td>Not required</td><td><span class="badge badge-green">None</span></td></tr>
+</tbody>
+</table>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Backend Code Impact</h3></summary>
+<div class="subsection-body">
+<p><strong>Core rewrites</strong></p>
+<table>
+<thead><tr><th>File</th><th>Change</th></tr></thead>
+<tbody>
+  <tr><td><code>backend/src/utils/helpers.ts</code></td><td>Move the 32-byte length check into <code>encrypt</code>/<code>decrypt</code> via a lazy <code>getKey()</code>. Remove top-level throw.</td></tr>
+  <tr><td><code>backend/src/config/env.validation.ts</code></td><td>Add <code>@Length(32, 32)</code> on <code>ENCRYPTION_KEY</code> so misconfig fails at Nest boot.</td></tr>
+</tbody>
+</table>
+
+<p><strong>New files</strong></p>
+<table>
+<thead><tr><th>File</th><th>Purpose</th></tr></thead>
+<tbody>
+  <tr><td><code>backend/.env.test</code></td><td>Committed test-env source (Track A carry-over).</td></tr>
+  <tr><td><code>.github/workflows/backend-smoke.yml</code></td><td>Clean-checkout smoke build + full test.</td></tr>
+</tbody>
+</table>
+
+<p><strong>Enum/reference sweep files:</strong> none.</p>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Frontend Code Impact</h3></summary>
+<div class="subsection-body">
+<table>
+<thead><tr><th>File</th><th>Change</th></tr></thead>
+<tbody>
+  <tr><td>—</td><td>No frontend changes.</td></tr>
+</tbody>
+</table>
+<p><em>Test fixture scope:</em> no additional fixtures required; existing suites already exercise the encryption paths.</p>
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section" open>
+<summary><h2>Side Effects and Risks</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open>
+<summary><h3>Risks of Track A Alone</h3></summary>
+<div class="subsection-body">
+<table>
+<thead><tr><th>Risk</th><th>Likelihood</th><th>Mitigation</th></tr></thead>
+<tbody>
+  <tr><td>Refactor removes <code>.env.test</code> unnoticed</td><td><span class="badge badge-green">Low</span></td><td>CI check that fails if <code>.env.test</code> is missing.</td></tr>
+  <tr><td>Developers assume test key is prod-safe</td><td><span class="badge badge-green">Low</span></td><td>README note calling out test-only status.</td></tr>
+  <tr><td>Module top-level throw still bites non-jest callers</td><td><span class="badge badge-green">Low</span></td><td>Documented; addressed by Track B.</td></tr>
+</tbody>
+</table>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Risks of Track B</h3></summary>
+<div class="subsection-body">
+<table>
+<thead><tr><th>Risk</th><th>Likelihood</th><th>Mitigation</th></tr></thead>
+<tbody>
+  <tr><td>Deferred key check delays discovery of misconfigured prod</td><td><span class="badge badge-green">Low</span></td><td><code>env.validation.ts</code> enforces length at Nest boot.</td></tr>
+  <tr><td>Refactor regresses encrypt/decrypt</td><td><span class="badge badge-green">Low</span></td><td>Existing suites + new unit test for deferred path.</td></tr>
+  <tr><td>CI workflow conflicts with concurrent work</td><td><span class="badge badge-green">Low</span></td><td>Coordinate with owners of <code>node-ci.yml</code>.</td></tr>
+</tbody>
+</table>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Cross-Issue Dependencies</h3></summary>
+<div class="subsection-body">
+<ul>
+  <li>Issue #91 does not share files with any other currently open issue directory under <code>issues/connection-studio/</code>.</li>
+  <li>Finding #3 (tcs-lib RC) is coordinated separately in <code>tazama-lf/tcs-lib#51</code> and via the pin at <code>backend/package.json:46</code>. No source change here.</li>
+</ul>
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section" open>
+<summary><h2>Effort Estimate</h2></summary>
+<div class="section-body">
+<table>
+<thead><tr><th>Track</th><th>Files</th><th>Effort</th></tr></thead>
+<tbody>
+  <tr><td>Track A</td><td>5</td><td>~0.5 day</td></tr>
+  <tr><td>Track B</td><td>4 (plus Track A carry-over)</td><td>~1 day</td></tr>
+  <tr><td><strong>Total</strong></td><td><strong>9</strong></td><td><strong>~1.5 days</strong></td></tr>
+</tbody>
+</table>
+</div>
+</details>
+
+<details class="section" open>
+<summary><h2>Acceptance Criteria (Verification Checklist)</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open>
+<summary><h3>Track A</h3></summary>
+<div class="subsection-body">
+<ul>
+  <li>☐ <code>backend/.env.test</code> is committed with a 32-byte <code>ENCRYPTION_KEY</code> and <code>IV_LENGTH=16</code>.</li>
+  <li>☐ <code>backend/jest.config.ts</code> <code>setupFiles</code> loads <code>backend/.env.test</code> explicitly.</li>
+  <li>☐ <code>cd backend &amp;&amp; npm ci &amp;&amp; npm test</code> on a clean checkout reports 12 of 12 suites loaded.</li>
+  <li>☐ <code>@prisma/client</code> and <code>prisma</code> are removed from <code>backend/package.json</code>.</li>
+  <li>☐ Root <code>package.json</code> <code>backend:lint:eslint</code> no longer runs <code>npx prisma generate</code>.</li>
+  <li>☐ <code>backend/README.md</code> documents the test-env expectation.</li>
+</ul>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Track B</h3></summary>
+<div class="subsection-body">
+<ul>
+  <li>☐ <code>src/utils/helpers.ts</code> no longer throws at module-import time.</li>
+  <li>☐ <code>env.validation.ts</code> fails boot when <code>ENCRYPTION_KEY</code> is not 32 bytes.</li>
+  <li>☐ A clean-checkout CI smoke workflow builds and tests <code>backend/</code> with no local artefacts.</li>
+  <li>☐ CI fails on any jest suite load error, not only on assertion failures.</li>
+</ul>
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section" open>
+<summary><h2>Recommended Sequencing</h2></summary>
+<div class="section-body">
+<ol>
+  <li>Merge Track A first (single PR). Closes the immediate reproducibility gap; low-risk config/docs change.</li>
+  <li>Merge Track B in a follow-up PR after Track A is green on <code>dev</code>.</li>
+  <li>Do not adopt <code>@tazama-lf/tcs-lib</code> <code>1.0.157-rc.x</code> until <code>tazama-lf/tcs-lib#51</code> lands and <code>config.service.ts:178</code> is reconciled.</li>
+</ol>
+</div>
+</details>
+
+</div>
+
+<script>
+(function() {
+  const THEME_KEY = 'impact-study-91-theme';
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.theme === theme);
+    });
+    try { localStorage.setItem(THEME_KEY, theme); } catch(e) {}
+    if (window.__reinitMermaid) setTimeout(window.__reinitMermaid, 50);
+  }
+  const saved = (function() { try { return localStorage.getItem(THEME_KEY); } catch(e) { return null; } })();
+  applyTheme(saved || 'light');
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
+  });
+  document.getElementById('expand-all').addEventListener('click', () => {
+    document.querySelectorAll('details').forEach(d => d.open = true);
+  });
+  document.getElementById('collapse-all').addEventListener('click', () => {
+    document.querySelectorAll('details').forEach(d => d.open = false);
+  });
+  document.getElementById('top-btn').addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', () => {
+      const id = a.getAttribute('href').slice(1);
+      const target = document.getElementById(id);
+      if (!target) return;
+      let el = target;
+      while (el) {
+        if (el.tagName && el.tagName.toLowerCase() === 'details') el.open = true;
+        el = el.parentElement;
+      }
+    });
+  });
+  document.querySelectorAll('.diagram-wrap').forEach(function(wrap) {
+    var isDown = false, startX, scrollLeft;
+    wrap.addEventListener('mousedown', function(e) {
+      isDown = true; startX = e.pageX - wrap.offsetLeft; scrollLeft = wrap.scrollLeft;
+    });
+    wrap.addEventListener('mouseleave', function() { isDown = false; });
+    wrap.addEventListener('mouseup', function() { isDown = false; });
+    wrap.addEventListener('mousemove', function(e) {
+      if (!isDown) return;
+      e.preventDefault();
+      wrap.scrollLeft = scrollLeft - (e.pageX - wrap.offsetLeft - startX);
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
