@@ -1200,3 +1200,450 @@ The commit series here is 77 commits with ~15 merge commits back from `dev`. Onc
 `````
 
 [↑ Back to top](#pr-review-cms-233--replace-fraud_and_aml-container-cases-with-investigationgroup-linkage)
+
+---
+---
+---
+
+## Follow-up Review (2026-07-06)
+
+**Reviewed commit:** `084a48f0` — *"Merge branch 'paysys/fraud_and_aml'"* (2026-07-06 15:01 UTC)
+**Reviewed against:** `Changes Requested` posted on commit `d5902b5f` by `ahmad-paysys` (2026-07-06 12:50 UTC)
+**New commits in this round (post `d5902b5f`):**
+- `9d193199` — *fix: tx-plumbing changes*
+- `dfb20008` — *refactor: complete case creation made atomic and compensate rollback*
+- `e6a9319a` — *Add Prisma relation for group_id and alert_id*
+- `a8a58fe0` — *fix: SAR/STR Filing Flowable status made atomic*
+- `5644f5f1` — *fix: Add regression tests for the new failure branches*
+- `db26c5ae` — *fix: handleManualTriage transaction escape fixed*
+- `21704db0` — *fix: getAlertIdsWithInvestigationGroup materializes group IDs into memory*
+- `c2158a04` — *refactor: dead code removed*
+- `c6edd83a` — *fix: resolve lint error* (+ merge commits)
+
+**Developer response:**
+> "@ahmad-paysys all the reported issues are resolved. Please review again." — MuhammadAli-Paysys, 2026-07-06 15:01 UTC
+
+All CI checks green (Node.js CI build/style/tests, CodeQL, njsscan, hadolint, encoding, dependency review, gpg-verify, CodeRabbit) except DCO — one commit missing sign-off. Not blocking review, but should be fixed before merge.
+
+---
+
+### Changes Requested — Resolution Status
+
+### Item 1 — `handleManualTriage` returns stale `alert` payload (Blocking #1)
+
+**Status: RESOLVED**
+
+`backend/src/modules/triage/triage.service.ts:401-410` (commit `db26c5ae`):
+
+```ts
+const detachedAlert = await this.alertService.updateAlert(
+  alertId,
+  userId,
+  { caseId: null } as unknown as UpdateAlertDTO,
+  tx,
+);
+
+return { alert: detachedAlert, completeNewCaseTask, existingCase };
+```
+
+The final `updateAlert` result is captured as `detachedAlert` and returned to callers. Non-FRAUD_AND_AML branch still returns the earlier `alert` object at L422, which is correct — only the FRAUD_AND_AML branch performs the second `caseId: null` write, and only that branch needs to substitute the returned payload.
+
+---
+
+### Item 2 — `completeCaseCreation` FRAUD/AML split not atomic (Blocking #2)
+
+**Status: RESOLVED**
+
+`backend/src/modules/case/case.service.ts:897-1001` (commit `dfb20008`). The `$transaction` block now covers everything the prior round left outside:
+
+```ts
+const result = await this.prismaService.$transaction(async (prisma) => {
+  let investigationGroup: { id: number } | undefined;
+  if (isSupervisor && isFraudNAML) {
+    const alertId = await this.alertRepository.getAlertByCaseId(caseId, tenantId, prisma);
+    investigationGroup = await this.investigationGroupService.createInvestigationGroup(alertId, tenantId, prisma);
+  }
+  // ... case updates + task completion + comment ...
+  const alertId = await this.alertRepository.getAlertByCaseId(caseId, tenantId, prisma);
+  if (alertId) {
+    await this.alertRepository.updateAlert(alertId, { ..., caseId: isFraudNAML && isSupervisor ? null : caseId } as unknown as UpdateAlertDTO, prisma);
+  }
+  let amlCase: ... = null;
+  if (isFraudNAML && isSupervisor) {
+    amlCase = await this.caseCreationService.createCaseWithInvestigationTask(
+      CaseType.AML, userId, existingCase.tenant_id, updatedCase.priority,
+      CaseCreationType.AUTOMATIC_SYSTEM, role, investigationGroup!.id, prisma,
+    );
+  }
+  return { case: updatedCase, completedTask, amlCase, investigationGroup, isAutoCloseEligible };
+});
+```
+
+Group creation, alert update, and AML sibling creation are all threaded through the tx client. Flowable calls (`handleCaseStatusChanged`, `handleTaskCompleted`) remain after `$transaction` commits — correct. The two authoritative alert writes have been collapsed into a single conditional inside the tx, eliminating the previous double-write.
+
+---
+
+### Item 3 — SAR/STR Filing Flowable status drift (Blocking #3)
+
+**Status: RESOLVED**
+
+`backend/src/modules/task/services/task-lifecycle.service.ts:231-241` (commit `a8a58fe0`):
+
+```ts
+if (updatedTask.name !== 'SAR/STR Filing') {
+  await tx.case.update({
+    where: { case_id: existingTask.case_id },
+    data: { status: CaseStatus.STATUS_02_READY_FOR_ASSIGNMENT, case_owner_user_id: null, updated_at: new Date() },
+  });
+
+  await this.flowableService.handleCaseStatusChanged({
+    caseId: existingTask.case_id,
+    newStatus: CaseStatus.STATUS_02_READY_FOR_ASSIGNMENT,
+  });
+}
+```
+
+Both the Postgres update **and** the Flowable status notification are now inside the same predicate. `handleTaskUnassigned` remains outside the gate at L243-248 — correct, since the task really was unassigned regardless of case type. BPMN/Postgres drift for SAR/STR Filing unassigns is closed.
+
+---
+
+### Item 4 — `handleManualTriage` FRAUD/AML writes outside tx (Blocking #4)
+
+**Status: RESOLVED**
+
+`backend/src/modules/triage/triage.service.ts:366-410` (commits `9d193199`, `db26c5ae`). All three previously-escaping writes now receive `tx`:
+
+```ts
+if (alert.alert_type === CaseType.FRAUD_AND_AML) {
+  const investigationGroup = await this.investigationGroupService.createInvestigationGroup(alert.alert_id, tenantId, tx);
+  await this.caseCreationService.updateCaseStatus(
+    alert.case_id, CaseStatus.STATUS_02_READY_FOR_ASSIGNMENT, userId, tenantId,
+    priority, CaseType.FRAUD, investigationGroup.id, tx,
+  );
+
+  const amlCase = await this.caseCreateService.createCaseWithInvestigationTask(
+    CaseType.AML, userId, tenantId, priority, CaseCreationType.AUTOMATIC_SYSTEM,
+    'SUPERVISOR', investigationGroup.id, tx,
+  );
+  ...
+}
+```
+
+The tx-plumbing suggested in the prior review (extending `createInvestigationGroup`, `updateCaseStatus`, and `createCaseWithInvestigationTask` to accept an optional `Prisma.TransactionClient`) has been applied consistently. Flowable emissions from `createCaseWithInvestigationTask` are gated on `!tx` so they defer to `executeFlowableOperations` after the surrounding transaction commits — matching the pattern already established in `CaseCreationApprovalService`.
+
+---
+
+### Item 5 — Stale `onSwitchToCaseDetails` prop passed to `TaskDetailsModal` (Blocking #5)
+
+**Status: RESOLVED**
+
+`grep -rn "onSwitchToCaseDetails" frontend/src` returns no matches at head `084a48f0`. The stale prop, its destructuring, and its type declaration in `TaskLogTab.tsx` are all removed (3 lines dropped per the git stat). Type check passes.
+
+---
+
+### Item 6 — Add index on `cases.group_id` (Non-blocking #6)
+
+**Status: RESOLVED**
+
+New migration `backend/prisma/migrations/20260702140000_add_investigation_group_relations/migration.sql:14` (commit `e6a9319a`):
+
+```sql
+CREATE INDEX "cases_group_id_idx" ON "cases"("group_id");
+```
+
+Corresponding `@@index([group_id])` added in `schema.prisma:124`. The index is not partial (`WHERE group_id IS NOT NULL`) as I'd suggested — a small nit given that most `cases` rows will have `group_id = NULL`, so the index is larger than necessary. Not blocking; happy to accept as-is since Postgres b-tree indexes handle nullable columns efficiently in practice.
+
+---
+
+### Item 7 — `getAlertIdsWithInvestigationGroup` materializes group IDs (Non-blocking #7)
+
+**Status: RESOLVED**
+
+`getAlertIdsWithInvestigationGroup` and its callers are gone (commits `21704db0`, `c2158a04`). `grep -rn "getAlertIdsWithInvestigationGroup" backend/src/` returns no matches. `getAlertByCaseId` now uses the Prisma relation directly:
+
+```ts
+const caseRecord = await client.case.findFirst({
+  where: { case_id: caseId, tenant_id: tenantId },
+  select: {
+    alert: { select: { alert_id: true } },
+    investigationGroup: { select: { alert_id: true } },
+  },
+});
+const alertId = caseRecord?.alert?.alert_id ?? caseRecord?.investigationGroup?.alert_id;
+```
+
+Single query, no in-memory list, no N-scoping issue. Clean.
+
+---
+
+### Item 8 — Regression tests for new failure branches (Non-blocking #8)
+
+**Status: RESOLVED**
+
+Commit `5644f5f1` extends four spec files:
+
+- `backend/test/case-closure-approval.service.spec.ts` — `NotFoundException` branch for missing investigation task.
+- `backend/test/case.service.spec.ts` — `completeCaseCreation` FRAUD/AML happy path + rollback + stale-alert regression.
+- `backend/test/task-lifecycle.service.spec.ts` — SAR/STR Filing unassign should NOT touch case status or fire `handleCaseStatusChanged`.
+- `backend/test/triage.service.spec.ts` — AI triage rollback path + `handleManualTriage` returning `case_id: null`.
+
+Diff stat shows +91 lines added to `triage.service.spec.ts` and comparable additions to the others. Node.js CI `check tests` job passed at 15:07 UTC.
+
+---
+
+### Item 9 — Prisma `@relation` for `group_id` and `alert_id` (Informational)
+
+**Status: RESOLVED**
+
+`backend/prisma/schema.prisma` (commit `e6a9319a`):
+
+```prisma
+model Case {
+  ...
+  group_id            Int?
+  investigationGroup  InvestigationGroup? @relation(fields: [group_id], references: [id])
+  @@index([group_id])
+}
+
+model InvestigationGroup {
+  id         Int    @id @default(autoincrement())
+  alert_id   Int    @unique
+  ...
+  alert      Alert  @relation(fields: [alert_id], references: [alert_id])
+  cases      Case[]
+}
+
+model Alert {
+  ...
+  investigationGroup InvestigationGroup?
+}
+```
+
+New migration `20260702140000_add_investigation_group_relations` adds the FK constraints (`ON DELETE SET NULL` for `cases.group_id`, `ON DELETE RESTRICT` for `investigation_groups.alert_id` — sensible), plus renames the PK constraint to Prisma's naming convention. The migration header explicitly documents that data was validated against the constraints before merging. Nice touch.
+
+---
+
+### Resolution Summary Table
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | `handleManualTriage` returns stale `alert` payload | Resolved |
+| 2 | `completeCaseCreation` FRAUD/AML split not atomic | Resolved |
+| 3 | SAR/STR Filing Flowable status drift | Resolved |
+| 4 | `handleManualTriage` FRAUD/AML writes outside tx | Resolved |
+| 5 | Stale `onSwitchToCaseDetails` prop | Resolved |
+| 6 | Missing index on `cases.group_id` | Resolved |
+| 7 | `getAlertIdsWithInvestigationGroup` in-memory list | Resolved (removed) |
+| 8 | Regression tests for new failure branches | Resolved |
+| 9 | Prisma `@relation` for `group_id`/`alert_id` | Resolved |
+
+All 5 blocking items and all 4 non-blocking/informational items are resolved.
+
+---
+
+### New Issues Found in Updated Commits
+
+None. I reviewed the delta between `d5902b5f..084a48f0` (18 files, +456/-279) end-to-end:
+
+- `case.service.ts` — the new atomic path uses `getAlertByCaseId` twice inside the tx (once at L901 for the group creation, once at L966 for the alert update). Both calls receive the tx client, both are cheap indexed reads, so the double-lookup is a minor style nit rather than a bug. Not worth flagging.
+- `case-creation.service.ts` — the `createCase(..., tx)` signature now has `executeFlowableCaseCreationEvent` guarded by `if (!tx)`. Callers inside a tx are responsible for firing Flowable after commit. `CaseCreationApprovalService.approveCaseCreation` and the new atomic `completeCaseCreation` both do this correctly.
+- `alert.repository.ts` — the new relation-based `getAlertByCaseId` uses a single `findFirst` with nested selects. Behavior matches the prior separate-query path, and the tenant guard still bounds the underlying `case_id` lookup.
+- `triage.service.ts` — the manual-triage path now returns `detachedAlert` from the FRAUD_AND_AML branch; the AI triage compensating rollback is unchanged (still correct).
+- Prisma schema + migration — FK constraints are sensible; the `RENAME CONSTRAINT` on `investigation_groups_id → investigation_groups_pkey` is safe (idempotent, no data touched).
+- Frontend — only 3 lines removed in `TaskLogTab.tsx`, dropping the stale prop. No new frontend regressions.
+
+---
+
+### Updated Verdict
+
+**Verdict: Approved**
+
+All blocking items from the initial review are resolved with correct, well-scoped fixes. The transactional design across `completeCaseCreation`, `handleManualTriage`, and the SAR/STR Filing gate is now internally consistent and matches the pattern already established in `CaseCreationApprovalService`. The Prisma relation cleanup (Item 9) went further than strictly required — it enabled the simplification in `getAlertByCaseId` (Item 7) as a bonus, removing the in-memory join entirely.
+
+Test coverage was strengthened proportionally to the changes — every failure branch flagged in the prior round has an explicit unit test now.
+
+**One small pre-merge cleanup (not blocking):**
+- The `dco-check / dco` CI job is failing. One commit in the recent stack is missing `Signed-off-by:`. Rebase to add sign-off (or squash on merge and add a single sign-off to the squashed commit) before merging. The upstream repo enforces DCO; the merge button will be blocked until this is green.
+
+**Recommended for follow-up (out of scope, capture as tech debt):**
+- Squash-merge the 90+ commit branch to keep `git bisect` sane in this area of the code.
+- Consider whether the double `getAlertByCaseId` in the new `completeCaseCreation` tx path can collapse into a single lookup (minor).
+
+[↑ Back to top](#pr-review-cms-233--replace-fraud_and_aml-container-cases-with-investigationgroup-linkage)
+
+---
+
+### GitHub Review Comment
+
+`````markdown
+**Approved**
+
+All five blocking items from the previous round are resolved with correct, well-scoped fixes — I re-verified each one against head `084a48f0`. The transactional design across `completeCaseCreation`, `handleManualTriage`, and the SAR/STR Filing gate is now internally consistent and matches the `CaseCreationApprovalService` pattern. The Prisma relation cleanup went beyond what was strictly required and enabled removing `getAlertIdsWithInvestigationGroup` and its in-memory join entirely — a nice bonus.
+
+### Resolution summary
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | `handleManualTriage` returns stale `alert` payload | Resolved (`triage.service.ts:401-410`) |
+| 2 | `completeCaseCreation` FRAUD/AML split not atomic | Resolved (`case.service.ts:897-1001`) |
+| 3 | SAR/STR Filing Flowable status drift | Resolved (`task-lifecycle.service.ts:231-241`) |
+| 4 | `handleManualTriage` FRAUD/AML writes outside tx | Resolved (`triage.service.ts:366-410`) |
+| 5 | Stale `onSwitchToCaseDetails` prop | Resolved (removed from `TaskLogTab.tsx`) |
+| 6 | Missing index on `cases.group_id` | Resolved (`20260702140000_add_investigation_group_relations`) |
+| 7 | `getAlertIdsWithInvestigationGroup` in-memory list | Resolved (function removed, uses Prisma relation) |
+| 8 | Regression tests for new failure branches | Resolved (4 spec files extended in `5644f5f1`) |
+| 9 | Prisma `@relation` for `group_id`/`alert_id` | Resolved (`schema.prisma`) |
+
+Nice work threading `tx` cleanly through `createInvestigationGroup`, `updateCaseStatus`, and `createCaseWithInvestigationTask` — that's exactly the plumbing the previous review asked for, applied consistently across every caller.
+
+---
+
+### One small pre-merge cleanup (not blocking review, but blocks merge)
+
+**DCO check is failing** — one commit in this stack is missing `Signed-off-by:`. Either rebase to sign the offending commit, or squash on merge and ensure the squashed commit is signed. The repo enforces DCO so the merge button will remain disabled until this is green.
+
+```bash
+# Identify the unsigned commit(s):
+git log --format='%H %s%n%b' origin/dev..HEAD | grep -B1 -L 'Signed-off-by:'
+```
+
+---
+
+### Follow-up recommendations (out of scope for this PR, capture as tech debt)
+
+- **Squash-merge this branch.** 90+ commits with ~20 merge commits back from `dev` will make `git bisect` painful for anyone tracking a regression in this area later. Squash-on-merge collapses it to a single meaningful commit against `dev`.
+- **Minor: double `getAlertByCaseId` inside the new `completeCaseCreation` tx.** The atomic path calls it at both `case.service.ts:901` and `:966`. Both are inside the tx and cheap, but a single lookup passed via local variable would be marginally cleaner.
+
+Otherwise, ready to merge once DCO is green.
+`````
+
+[↑ Back to top](#pr-review-cms-233--replace-fraud_and_aml-container-cases-with-investigationgroup-linkage)
+
+---
+
+## Flowable Integration Follow-up (2026-07-07)
+
+**Reviewed commit:** `084a48f0` (unchanged since Follow-up Review)
+**Focus:** BPMN/Flowable interaction surfaces and residual atomicity gaps across the Postgres ↔ Flowable boundary.
+**Scope note:** this pass narrows on the Flowable-facing risks that survive the previous rounds' fixes. It is additive to the "Approved" verdict — none of the items below re-open blocking status, but each is a concrete failure mode worth capturing before merge or as follow-up tech debt.
+
+---
+
+### GitHub Review Comment
+
+`````markdown
+**Comment (non-blocking) — Flowable atomicity follow-up**
+
+The Postgres side of this refactor is in great shape after the last round. Re-reading the code specifically through the Flowable lens, though, there are five residual gaps at the Postgres↔Flowable boundary that are worth flagging. None re-open blocking status — the DB writes are all correct and the previous round's transactional discipline holds — but each is a concrete failure mode where Postgres and the BPMN engine can drift out of sync with no retry/outbox to recover.
+
+Filing as a comment rather than Changes Requested because (a) the DB state is always the source of truth in these paths, (b) partial-emission scenarios are best-effort by design elsewhere in the codebase, and (c) a proper fix (transactional outbox) is bigger than this PR. But please capture as tech debt.
+
+---
+
+### 1. `completeCaseCreation` — Flowable emissions run post-commit with no retry
+
+**Location:** [`backend/src/modules/case/case.service.ts:910-925`](backend/src/modules/case/case.service.ts#L910-L925)
+
+The `$transaction` at [case.service.ts:897-908](backend/src/modules/case/case.service.ts#L897-L908) correctly commits the AML sibling creation, `group_id` linkage, and the task-completion row in a single atomic step. But `handleCaseStatusChanged` and `handleTaskCompleted` fire **after** the commit, outside any retry envelope. If Flowable is unreachable or the process crashes between the commit and the emission, Postgres reflects "AML sibling created / task completed" while Flowable never learns of either event. There's no visible outbox or retry mechanism.
+
+**Consequence:** BPMN process instance stays in the pre-completion state; downstream Flowable-driven task creation will make invalid transitions or produce wrong tasks. Operators would have to reconcile manually.
+
+**Suggested follow-up:** transactional outbox pattern — write an `outbox_event` row inside the same tx, drained by a background worker with retry. Out of scope for this PR.
+
+---
+
+### 2. `handleManualTriage` — deferred AML `handleCaseCreated` needs verification
+
+**Location:** [`backend/src/modules/triage/triage.service.ts:366-410`](backend/src/modules/triage/triage.service.ts#L366-L410) + [`backend/src/modules/case/services/case-creation.service.ts` (`createCase` `!tx` guard)](backend/src/modules/case/services/case-creation.service.ts)
+
+In the FRAUD_AND_AML manual-triage branch, `createCaseWithInvestigationTask` is invoked with `tx`. That call chains into `createCase`, which now guards `executeFlowableCaseCreationEvent` behind `if (!tx)` to avoid emitting inside the transaction. This is the right pattern in principle — Flowable can't roll back, so the emission must be deferred.
+
+**But:** I cannot see, in the visible hunks, where the deferred `handleCaseCreated` for the AML sibling is fired **after** the tx commits in `handleManualTriage`. The approval-side path (`case-creation-approval.service.ts:1455-1468`) does this explicitly. The manual-triage path shows the sibling creation, comment insert, and alert detach — but no post-commit emission for the AML sibling in the hunks I audited.
+
+**Consequence if truly missing:** the AML case exists in Postgres but Flowable never gets a `caseCreated` event, so its BPMN process instance is never started. All downstream task creation for that AML case would be Postgres-only.
+
+**Requested action before merge:** please confirm the post-commit `handleCaseCreated({ caseId: amlCase.caseId, ... })` is fired in `handleManualTriage`. If it isn't, mirror the approval-side pattern:
+
+```ts
+const txResult = await this.alertRepository.transaction(async (tx) => { ... });
+
+if (isFraudAndAmlPath) {
+  this.flowableService.handleCaseCreated({ caseId: txResult.amlCase.caseId, ... });
+}
+```
+
+---
+
+### 3. AI-triage rollback is best-effort and non-awaited
+
+**Location:** [`backend/src/modules/triage/triage.service.ts:3136-3195`](backend/src/modules/triage/triage.service.ts#L3136-L3195)
+
+The compensating rollback in `handleAITriage` (when AML sibling creation fails after FRAUD is already created) does:
+
+- `Promise.all([caseRepository.updateCase(caseId, ABANDONED), caseRepository.updateCase(fraudCase.caseId, ABANDONED)])` — good, parallel and awaited.
+- `flowableService.handleCaseAbandoned({ caseId, reason })` — **not awaited**.
+- `flowableService.handleCaseAbandoned({ caseId: fraudCase.caseId, reason })` — **not awaited**.
+- `prisma.investigationGroup.delete(...)` — awaited.
+
+The two `handleCaseAbandoned` calls being fire-and-forget means:
+1. Their errors never affect control flow, so a Flowable outage during rollback is invisible.
+2. If the process crashes before those calls resolve, the abandonment is Postgres-only.
+
+The existing `AI_TRIAGE_FRAUD_AND_AML_ROLLBACK_FAILED` audit log covers the "rollback itself throws" case (the outer catch), but not "the Flowable notification silently dropped."
+
+**Suggested fix (low-risk):** `await` both `handleCaseAbandoned` calls and put them in a `Promise.allSettled` so a Flowable failure gets logged as `AI_TRIAGE_FRAUD_AND_AML_ROLLBACK_PARTIAL` while still allowing the group deletion to proceed:
+
+```ts
+const flowableResults = await Promise.allSettled([
+  this.flowableService.handleCaseAbandoned({ caseId, reason: rollbackReason }),
+  this.flowableService.handleCaseAbandoned({ caseId: fraudCase.caseId, reason: rollbackReason }),
+]);
+const flowableFailures = flowableResults.filter((r) => r.status === 'rejected');
+if (flowableFailures.length > 0) {
+  this.logger.error(`AI_TRIAGE_FRAUD_AND_AML_ROLLBACK_PARTIAL: ${flowableFailures.length}/2 Flowable notifications failed`, ...);
+  await this.loggingOrchestrationService.logActions({ operation: 'AI_TRIAGE_FRAUD_AND_AML_ROLLBACK_PARTIAL', ... });
+}
+```
+
+---
+
+### 4. Backfilled AML "history" tasks have no Flowable counterpart
+
+**Location:** [`backend/src/modules/case/services/case-creation-approval.service.ts:1377-1401`](backend/src/modules/case/services/case-creation-approval.service.ts#L1377-L1401)
+
+The approval-side FRAUD/AML split inserts `STATUS_30_COMPLETED` "Complete New Case" and "Approve Case Creation" rows on the AML sibling to make its timeline mirror the FRAUD case. The in-code comment already acknowledges this: *"BPMN never creates these tasks on the isFraudNAML=true route ... these are Postgres-only historical stubs."*
+
+This is a deliberate design choice, not a bug — but it does mean:
+- Any external reconciler comparing Postgres `task` history against Flowable process history will surface false-positive orphans on every AML sibling created via the approval path.
+- Ops dashboards that count tasks per BPMN process instance will see a persistent skew.
+
+**Suggested follow-up:** mark these Postgres-only rows with a boolean column (e.g., `task.is_historical_stub: bool`) or a sentinel `origin` enum so downstream consumers can filter. Out of scope for this PR.
+
+---
+
+### 5. `alertService.updateAlert` inside triage tx — event emission timing
+
+**Location:** [`backend/src/modules/triage/triage.service.ts:3081-3088`](backend/src/modules/triage/triage.service.ts#L3081-L3088)
+
+The final `alertService.updateAlert(alertId, userId, { caseId: null }, tx)` in `handleManualTriage` is called with the tx client. If `alertService.updateAlert` internally emits any side-effect event (Kafka, webhook, Flowable message) beyond the DB write, that event fires **before** the enclosing tx commits — so a subsequent rollback would leave the event emitted against unreached Postgres state.
+
+I couldn't confirm from the diff whether `alertService.updateAlert` has any emission side-effects; the surrounding code doesn't suggest any, but worth verifying.
+
+**Requested action:** confirm `alertService.updateAlert` is a pure DB write with no external emission. If it does emit anything, move that emission to a post-commit hook or an outbox row.
+
+---
+
+### Summary
+
+| # | Item | Severity | Blocking? |
+|---|------|----------|-----------|
+| 1 | `completeCaseCreation` post-commit Flowable calls have no retry | Minor (design) | No — tech debt |
+| 2 | `handleManualTriage` deferred AML `handleCaseCreated` unverified | **Major (if missing)** | Please confirm before merge |
+| 3 | AI-triage rollback `handleCaseAbandoned` calls not awaited | Minor | No |
+| 4 | Backfilled AML history tasks orphaned in Flowable | Informational | No — design choice, capture as tech debt |
+| 5 | `alertService.updateAlert` inside tx — verify no external emission | Informational | Please confirm |
+
+Items 2 and 5 are the only ones I'd like a quick confirmation on before merge — both are "please verify against the file, not the diff" asks rather than change requests. Everything else is genuinely follow-up.
+`````
+
+[↑ Back to top](#pr-review-cms-233--replace-fraud_and_aml-container-cases-with-investigationgroup-linkage)
