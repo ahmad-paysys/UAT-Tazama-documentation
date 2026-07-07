@@ -16,9 +16,9 @@
 
 **Claude** produced a complete review covering schema/migrations, backfill script, service wiring, alert repository, case lifecycle, and closure flows, with a table of contents and inline references — matching the format implied by `pull-requests.md`.
 
-**DeepSeek** ([CMS-PR-233-deepseek.md](../pull-requests/CMS-PR-233-deepseek.md)) executed the reconnaissance steps — read `pull-requests.md`, ran `gh pr view`, `gh pr diff`, fetched reviews and comments — and then stalled at the write step. The transcript shows five separate attempts to invoke the file-write tool, each failing with "I need to provide both filePath and content parameters" style errors. The model could not correctly form the tool call for `create_file` and looped on retries until abandoned. No review content was ever generated.
+**DeepSeek** ([CMS-PR-233-deepseek.md](https://github.com/ahmad-paysys/UAT-Tazama-documentation/blob/main/pull-requests/CMS-PR-233-deepseek.md)) executed the reconnaissance steps — read `pull-requests.md`, ran `gh pr view`, `gh pr diff`, fetched reviews and comments — and then stalled at the write step. The transcript shows five separate attempts to invoke the file-write tool, each failing with "I need to provide both filePath and content parameters" style errors. The model could not correctly form the tool call for `create_file` and looped on retries until abandoned. No review content was ever generated.
 
-**GLM** ([CMS-PR-233-GLM.md](../pull-requests/CMS-PR-233-GLM.md)) got further into gathering context (wrote the diff to `/tmp/pr233-diff.txt`, fetched reviews and comments) but then entered a "Recovered from a request error" loop while re-reading the diff file. Six retry cycles, all failed, no write attempted. The underlying error surfaced by Copilot was:
+**GLM** ([CMS-PR-233-GLM.md](https://github.com/ahmad-paysys/UAT-Tazama-documentation/blob/main/pull-requests/CMS-PR-233-GLM.md)) got further into gathering context (wrote the diff to `/tmp/pr233-diff.txt`, fetched reviews and comments) but then entered a "Recovered from a request error" loop while re-reading the diff file. Six retry cycles, all failed, no write attempted. The underlying error surfaced by Copilot was:
 
 ```
 Reason: {"message":"litellm.APIError: Error building chunks for logging/streaming usage calculation","type":null,"param":null,"code":"500"}
