@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Impact Study — Issue #108: transaction_data Naming Collision</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #24292e;
+    --h1: #0d1b3e;
+    --h2: #1a3a6b;
+    --h3: #2563a8;
+    --border: #d0d7de;
+    --border-soft: #e1e4e8;
+    --code-bg: #f6f8fa;
+    --table-head-bg: #0d1b3e;
+    --table-head-fg: #ffffff;
+    --table-head-border: #1a3a6b;
+    --row-even: #f3f5f8;
+    --row-odd: #ffffff;
+    --link: #1a3a6b;
+    --link-hover: #2563a8;
+    --bar-bg: #0d1b3e;
+    --bar-fg: #ffffff;
+    --bar-btn-bg: rgba(255,255,255,0.12);
+    --bar-btn-bg-hover: rgba(255,255,255,0.25);
+    --bar-btn-border: rgba(255,255,255,0.25);
+    --bar-btn-active: #2563a8;
+    --details-bg: #fafbfc;
+    --details-border: #d0d7de;
+    --summary-bg: #f3f5f8;
+    --summary-hover: #e9edf2;
+    --badge-green-bg: #d4edda;  --badge-green-fg: #155724;  --badge-green-bd: #b8dfc4;
+    --badge-amber-bg: #fff3cd;  --badge-amber-fg: #856404;  --badge-amber-bd: #f0d88a;
+    --badge-red-bg:   #f8d7da;  --badge-red-fg:   #721c24;  --badge-red-bd:   #f1aeb5;
+    --badge-blue-bg:  #d1ecf1;  --badge-blue-fg:  #0c5460;  --badge-blue-bd:  #a8d9e2;
+  }
+
+  [data-theme="dark"] {
+    --bg: #0d1117;
+    --fg: #c9d1d9;
+    --h1: #79c0ff;
+    --h2: #58a6ff;
+    --h3: #79c0ff;
+    --border: #30363d;
+    --border-soft: #21262d;
+    --code-bg: #161b22;
+    --table-head-bg: #1f6feb;
+    --table-head-fg: #ffffff;
+    --table-head-border: #388bfd;
+    --row-even: #161b22;
+    --row-odd: #0d1117;
+    --link: #58a6ff;
+    --link-hover: #79c0ff;
+    --bar-bg: #161b22;
+    --bar-fg: #c9d1d9;
+    --bar-btn-bg: rgba(255,255,255,0.06);
+    --bar-btn-bg-hover: rgba(255,255,255,0.14);
+    --bar-btn-border: rgba(255,255,255,0.18);
+    --bar-btn-active: #1f6feb;
+    --details-bg: #0d1117;
+    --details-border: #30363d;
+    --summary-bg: #161b22;
+    --summary-hover: #1f242c;
+    --badge-green-bg: #033a16; --badge-green-fg: #7ee787; --badge-green-bd: #196c2e;
+    --badge-amber-bg: #4d3800; --badge-amber-fg: #ffd33d; --badge-amber-bd: #8a6500;
+    --badge-red-bg:   #4c0014; --badge-red-fg:   #ff7b85; --badge-red-bd:   #8a0020;
+    --badge-blue-bg:  #032b40; --badge-blue-fg:  #79c0ff; --badge-blue-bd:  #1f6feb;
+  }
+
+  [data-theme="solar"] {
+    --bg: #fdf6e3;
+    --fg: #586e75;
+    --h1: #073642;
+    --h2: #268bd2;
+    --h3: #b58900;
+    --border: #eee8d5;
+    --border-soft: #eee8d5;
+    --code-bg: #eee8d5;
+    --table-head-bg: #073642;
+    --table-head-fg: #fdf6e3;
+    --table-head-border: #002b36;
+    --row-even: #f5efdc;
+    --row-odd: #fdf6e3;
+    --link: #268bd2;
+    --link-hover: #2aa198;
+    --bar-bg: #073642;
+    --bar-fg: #fdf6e3;
+    --bar-btn-bg: rgba(253,246,227,0.10);
+    --bar-btn-bg-hover: rgba(253,246,227,0.22);
+    --bar-btn-border: rgba(253,246,227,0.30);
+    --bar-btn-active: #b58900;
+    --details-bg: #fbf2d8;
+    --details-border: #eee8d5;
+    --summary-bg: #eee8d5;
+    --summary-hover: #e4dcc1;
+    --badge-green-bg: #dbe9b1; --badge-green-fg: #4d5d10; --badge-green-bd: #b5c97a;
+    --badge-amber-bg: #ffeec2; --badge-amber-fg: #7d5a00; --badge-amber-bd: #e6c970;
+    --badge-red-bg:   #fbd3cb; --badge-red-fg:   #8a1a08; --badge-red-bd:   #e89a8a;
+    --badge-blue-bg:  #cfe6f5; --badge-blue-fg:  #1c5e85; --badge-blue-bd:  #8ec0dc;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--fg);
+    background: var(--bg);
+    margin: 0;
+    padding: 4.5rem 1rem 2rem;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+
+  .page-wrapper { max-width: 960px; margin: 0 auto; }
+
+  /* Top bar */
+  .top-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    background: var(--bar-bg);
+    color: var(--bar-fg);
+    padding: 0.55rem 1rem;
+    z-index: 1000;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+  }
+  .top-bar .group { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+  .top-bar .label {
+    font-size: 0.75em;
+    opacity: 0.7;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-right: 0.25rem;
+  }
+  .top-bar button {
+    background: var(--bar-btn-bg);
+    color: var(--bar-fg);
+    border: 1px solid var(--bar-btn-border);
+    border-radius: 5px;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.82em;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s ease;
+  }
+  .top-bar button:hover { background: var(--bar-btn-bg-hover); }
+  .top-bar button.active {
+    background: var(--bar-btn-active);
+    border-color: var(--bar-btn-active);
+  }
+
+  h1 { color: var(--h1); font-size: 2rem; margin-top: 0; margin-bottom: 0.25rem; }
+  h2 { color: var(--h2); font-size: 1.4rem; margin: 0; padding: 0; border: none; }
+  h3 { color: var(--h3); font-size: 1.1rem; margin: 0; padding: 0; }
+
+  .static-section h2 {
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 0.3rem;
+    margin-top: 2.2rem;
+  }
+  .static-section h3 { margin-top: 1.8rem; }
+
+  p { margin: 0.6rem 0; }
+  ul, ol { margin: 0.5rem 0; padding-left: 1.6rem; }
+  li { margin: 0.25rem 0; }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 1.8rem 0; }
+
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.875em;
+    background: var(--code-bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    padding: 0.15em 0.4em;
+  }
+
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    padding: 1rem 1.2rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+  }
+  pre code { background: none; border: none; padding: 0; font-size: 0.85em; line-height: 1.5; }
+
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9em; }
+  thead tr { background: var(--table-head-bg); color: var(--table-head-fg); }
+  thead th {
+    padding: 0.6rem 0.85rem;
+    text-align: left;
+    font-weight: 600;
+    border: 1px solid var(--table-head-border);
+  }
+  tbody tr:nth-child(even) { background: var(--row-even); }
+  tbody tr:nth-child(odd)  { background: var(--row-odd); }
+  tbody td { padding: 0.5rem 0.85rem; border: 1px solid var(--border); vertical-align: top; }
+
+  .badge {
+    display: inline-block;
+    padding: 0.15em 0.6em;
+    border-radius: 999px;
+    font-size: 0.78em;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .badge-green { background: var(--badge-green-bg); color: var(--badge-green-fg); border: 1px solid var(--badge-green-bd); }
+  .badge-amber { background: var(--badge-amber-bg); color: var(--badge-amber-fg); border: 1px solid var(--badge-amber-bd); }
+  .badge-red   { background: var(--badge-red-bg);   color: var(--badge-red-fg);   border: 1px solid var(--badge-red-bd); }
+  .badge-blue  { background: var(--badge-blue-bg);  color: var(--badge-blue-fg);  border: 1px solid var(--badge-blue-bd); }
+
+  strong { font-weight: 600; }
+
+  /* TOC */
+  div.toc {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.1rem 1.4rem;
+    margin: 1.2rem 0 1.8rem;
+  }
+  div.toc p.toc-title {
+    font-weight: 700;
+    font-size: 0.95em;
+    margin: 0 0 0.5rem;
+    color: var(--h1);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  div.toc ol { margin: 0; padding-left: 1.3rem; }
+  div.toc li { margin: 0.2rem 0; font-size: 0.9em; }
+  div.toc ul { margin: 0.15rem 0; padding-left: 1.2rem; list-style: disc; }
+  div.toc a { color: var(--link); text-decoration: none; }
+  div.toc a:hover { text-decoration: underline; color: var(--link-hover); }
+
+  /* Collapsible sections */
+  details.section {
+    margin: 1rem 0;
+    border: 1px solid var(--details-border);
+    border-radius: 6px;
+    background: var(--details-bg);
+    overflow: hidden;
+  }
+  details.section > summary {
+    cursor: pointer;
+    padding: 0.7rem 1rem;
+    background: var(--summary-bg);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    user-select: none;
+    transition: background 0.15s ease;
+  }
+  details.section > summary:hover { background: var(--summary-hover); }
+  details.section > summary::-webkit-details-marker { display: none; }
+  details.section > summary::before {
+    content: "▶";
+    font-size: 0.7em;
+    color: var(--h2);
+    transition: transform 0.2s ease;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  details.section[open] > summary::before { transform: rotate(90deg); }
+  details.section .section-body { padding: 0.4rem 1.2rem 1rem; }
+
+  details.subsection {
+    margin: 0.6rem 0;
+    border: 1px solid var(--details-border);
+    border-radius: 5px;
+    background: var(--bg);
+  }
+  details.subsection > summary {
+    cursor: pointer;
+    padding: 0.5rem 0.85rem;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    user-select: none;
+    background: transparent;
+    transition: background 0.15s ease;
+  }
+  details.subsection > summary:hover { background: var(--summary-hover); }
+  details.subsection > summary::-webkit-details-marker { display: none; }
+  details.subsection > summary::before {
+    content: "▶";
+    font-size: 0.65em;
+    color: var(--h3);
+    transition: transform 0.2s ease;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  details.subsection[open] > summary::before { transform: rotate(90deg); }
+  details.subsection .subsection-body { padding: 0.2rem 1rem 0.8rem; }
+
+  html { scroll-behavior: smooth; scroll-padding-top: 70px; }
+
+  /* Mermaid diagram container — full-bleed, scrollable */
+  .diagram-wrap {
+    position: relative;
+    margin: 1.4rem -1rem 0.6rem;
+    border-top: 1px solid var(--details-border);
+    border-bottom: 1px solid var(--details-border);
+    background: var(--details-bg);
+    padding: 1.4rem 1.2rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    cursor: grab;
+  }
+  .diagram-wrap:active { cursor: grabbing; }
+  .diagram-wrap .mermaid { display: inline-block; min-width: max-content; }
+  .diagram-wrap .mermaid svg { min-width: 700px; height: auto !important; }
+</style>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  function getMermaidTheme() {
+    const t = document.documentElement.getAttribute('data-theme');
+    if (t === 'dark') return 'dark';
+    return 'base';
+  }
+  function initMermaid() {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: getMermaidTheme(),
+      themeVariables: (function() {
+        const t = document.documentElement.getAttribute('data-theme');
+        if (t === 'dark') return {};
+        if (t === 'solar') return { primaryColor: '#eee8d5', primaryTextColor: '#586e75', primaryBorderColor: '#93a1a1', lineColor: '#586e75', background: '#fdf6e3', mainBkg: '#fdf6e3', nodeBorder: '#93a1a1', clusterBkg: '#f5efdc', titleColor: '#073642', edgeLabelBackground: '#fdf6e3' };
+        return { primaryColor: '#f3f5f8', primaryTextColor: '#24292e', primaryBorderColor: '#8a95a3', lineColor: '#6b7a8d', background: '#ffffff', mainBkg: '#f3f5f8', nodeBorder: '#8a95a3', clusterBkg: '#fafbfc', titleColor: '#0d1b3e', edgeLabelBackground: '#ffffff' };
+      })(),
+      flowchart: { curve: 'basis', htmlLabels: true, rankSpacing: 80, nodeSpacing: 50 }
+    });
+    document.querySelectorAll('.mermaid').forEach(el => { el.removeAttribute('data-processed'); });
+    mermaid.run({ nodes: document.querySelectorAll('.mermaid') });
+  }
+  document.addEventListener('DOMContentLoaded', initMermaid);
+  window.__reinitMermaid = initMermaid;
+</script>
+</head>
+<body>
+
+<div class="top-bar" role="toolbar" aria-label="Document controls">
+  <div class="group">
+    <span class="label">Sections</span>
+    <button type="button" id="expand-all">Expand all</button>
+    <button type="button" id="collapse-all">Collapse all</button>
+  </div>
+  <div class="group">
+    <span class="label">Theme</span>
+    <button type="button" class="theme-btn" data-theme="light">Light</button>
+    <button type="button" class="theme-btn" data-theme="dark">Dark</button>
+    <button type="button" class="theme-btn" data-theme="solar">Solar</button>
+  </div>
+  <div class="group">
+    <button type="button" id="top-btn" title="Back to top">↑ Top</button>
+  </div>
+</div>
+
+<div class="page-wrapper">
+
+<div class="static-section">
+
+<h1>Impact Study — Issue #108: transaction_data Naming Collision</h1>
+
+<p><strong>Issue:</strong> <a href="https://github.com/tazama-lf/biar/issues/108">#108</a><br>
+<strong>Study Date:</strong> 2026-07-08<br>
+<strong>Author:</strong> Ahmad Khalid<br>
+<strong>Repository:</strong> tazama-lf/biar</p>
+
+<hr>
+
+<div class="diagram-wrap">
+<div class="mermaid">
+graph LR
+    subgraph ODS["CMS ODS (tazama_cms)"]
+        cms_td[transaction_data]
+    end
+    subgraph NIFI["NiFi (biar/nifi/tazama.xml)"]
+        proc[Transaction_Data processor]
+    end
+    subgraph OZONE["Ozone (Lakehouse)"]
+        eh[event_history.transaction]
+        pacs[pacs bronze]
+    end
+    subgraph BRONZE["Bronze (Hudi)"]
+        b_txns[bronze/transactions<br/>transactionData col]
+    end
+    subgraph SILVER["Silver / Gold"]
+        s_txns[silver/transactions]
+        g_txns[gold/transactions]
+    end
+    subgraph VIEWS["View builders"]
+        nnv[network_navigator_view]
+        tdv[transaction_detail_view]
+        thv[transaction_history_view]
+    end
+
+    cms_td --> proc --> OZONE
+    pacs -.wrong source.-> b_txns
+    eh   ==correct source==> b_txns
+    b_txns --> s_txns --> g_txns --> VIEWS
+
+    classDef wrong fill:#f8d7da,stroke:#a94442,color:#721c24
+    classDef right fill:#d4edda,stroke:#3c763d,color:#155724
+    class pacs wrong
+    class eh right
+</div>
+</div>
+
+<hr>
+
+<h2 id="toc-heading">Table of Contents</h2>
+
+<div class="toc">
+  <p class="toc-title">Contents</p>
+  <ol>
+    <li><a href="#summary">Summary</a></li>
+    <li><a href="#root-cause">Confirmed Root Cause</a></li>
+    <li><a href="#track-a">Track A — Hardening AC on #110</a></li>
+    <li><a href="#track-b">Track B — Delete the wrong-source pipeline (via #110)</a></li>
+    <li><a href="#risks">Side Effects and Risks</a></li>
+    <li><a href="#effort">Effort Estimate</a></li>
+    <li><a href="#acceptance">Acceptance Criteria (Verification Checklist)</a></li>
+    <li><a href="#sequencing">Recommended Sequencing</a></li>
+  </ol>
+</div>
+
+</div>
+
+<hr>
+
+<details class="section" open id="summary">
+<summary><h2>Summary</h2></summary>
+<div class="section-body">
+
+<p>The name <code>transaction_data</code> / <code>transactionData</code> appears in five unrelated places across the Lakehouse and CMS code. The root cause is that <code>TransactionsETL</code> sources from the wrong upstream (pacs bronze rather than <code>event_history.transaction</code>), and its Hudi column <code>transactionData</code> name misrepresents what it holds. The naming problem is a symptom of that wrong source. <strong>Track A</strong> is a hardening acceptance criterion folded into the #110 view-builder rewrite (no standalone code change). <strong>Track B</strong> is #110 itself — once that rewrite lands, all five collisions dissolve as a natural consequence.</p>
+
+</div>
+</details>
+
+<details class="section" open id="root-cause">
+<summary><h2>Confirmed Root Cause</h2></summary>
+<div class="section-body">
+
+<ul>
+  <li><code>bronze/transactions.transactionData</code> holds raw ISO 20022 pacs.008/002 payload, not TMS-normalised transaction data. Confirmed at <code>TransactionsETL.py:72-102</code> and <code>line 128</code>.</li>
+  <li>Both <code>network_navigator_view.py:68-81</code> and <code>transaction_detail_view.py:53-69</code> (and <code>transaction_history_view.py</code>) resolve the payload column through a candidate detection list <code>["transactionData", "transaction_data", "transaction", "payload", …]</code> and alias it as <code>transaction_data</code>. The <code>"transaction"</code> fallback is the load-bearing latent risk for #110.</li>
+  <li>NiFi processor <code>Transaction_Data</code> (committed at <code>biar/nifi/tazama.xml:5905</code>, table <code>transaction_data</code> at <code>line 26173</code>, pool <code>tazama_cms</code> at <code>lines 4779-4784</code>) is a <em>correctly</em>-named processor targeting the CMS ODS. It happens to collide with the mis-token used inside view builders.</li>
+  <li><strong>Live NiFi (2026-07-08 at <code>10.10.80.19:8088</code>) does not currently contain a running <code>Transaction_Data</code> processor.</strong> The committed repo XML has it; the deployed flow does not. The collision is a repo-hygiene concern; it is not causing any live incident <em>from the naming itself</em> today.</li>
+  <li><code>tazama_cms.transaction_data</code> is defined by CMS Prisma model <code>TransactionData</code> (<code>case-management-system/backend/prisma/schema.prisma</code> on dev) with a nested <code>transactionData Json</code> column and PK <code>transactionId Int @default(autoincrement())</code>. Confirmed against dev.</li>
+</ul>
+
+</div>
+</details>
+
+<details class="section" open id="track-a">
+<summary><h2>Track A — Hardening AC on #110 (recommended)</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open>
+<summary><h3>What Changes</h3></summary>
+<div class="subsection-body">
+<p>No standalone code changes for #108. Instead, add hardening acceptance criteria to the #110 rewrite: tighten view-builder candidate-column resolution to fail loudly on unexpected columns. See <a href="../110/solution-110.md">issues/biar/110/solution-110.md</a>.</p>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Impact</h3></summary>
+<div class="subsection-body">
+
+<table>
+  <thead><tr><th>Property</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td>Files changed</td><td>0 (this issue) — 3 view builders in #110</td></tr>
+    <tr><td>Schema migration required</td><td>No</td></tr>
+    <tr><td>Frontend changes required</td><td>No</td></tr>
+    <tr><td>Downtime required</td><td>No</td></tr>
+    <tr><td>Risk of regression</td><td><span class="badge badge-green">Low</span> (fail-fast on schema mismatch is safer than silent alias)</td></tr>
+    <tr><td>Reversibility</td><td>Trivial</td></tr>
+  </tbody>
+</table>
+
+<p>What this fixes immediately:</p>
+<ul>
+  <li>Nothing standalone; the hardening AC only takes effect when #110 ships.</li>
+</ul>
+
+<p>What this does not fix:</p>
+<ul>
+  <li>Everything until #110 lands. Developer confusion, doc drift, latent risk during migration.</li>
+</ul>
+
+<p>Track A is safe to ship in isolation (it is a documentation-only acceptance criterion).</p>
+
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section" open id="track-b">
+<summary><h2>Track B — Delete the wrong-source pipeline (via #110)</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open>
+<summary><h3>What Changes</h3></summary>
+<div class="subsection-body">
+<p>Track B is #110 in its entirety. Rewriting <code>TransactionsETL</code> to source from <code>event_history.transaction</code>, deleting <code>CombinedPacsETL</code>, and rebuilding <code>bronze/transaction</code>, <code>silver/transaction</code>, <code>gold/transaction</code> as singular tables. The <code>transactionData</code> column disappears entirely — not renamed, replaced.</p>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Schema Impact</h3></summary>
+<div class="subsection-body">
+
+<table>
+  <thead><tr><th>Change</th><th>Note</th></tr></thead>
+  <tbody>
+    <tr><td>Drop <code>bronze/transactions</code>, <code>silver/transactions</code>, <code>gold/transactions</code> Hudi tables</td><td>Rebuild as <code>bronze/transaction</code> (singular) etc. under #110</td></tr>
+  </tbody>
+</table>
+
+<p>Migration notes: pipeline reset (empty existing plural tables; NiFi replays event_history.transaction via its own watermark).</p>
+
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Backend Code Impact</h3></summary>
+<div class="subsection-body">
+
+<table>
+  <thead><tr><th>Area</th><th>Files</th></tr></thead>
+  <tbody>
+    <tr><td>Core rewrite</td><td><code>TransactionsETL.py</code>, <code>lakehouse_automation_pipeline.py</code>, <code>CombinedPacs.py</code> (deletion)</td></tr>
+    <tr><td>View builders (candidate list hardening — the #108-specific hook)</td><td><code>network_navigator_view.py</code>, <code>transaction_detail_view.py</code>, <code>transaction_history_view.py</code></td></tr>
+    <tr><td>Downstream (via #111)</td><td>See <a href="../111/impact-111.md">issues/biar/111/impact-111.md</a></td></tr>
+  </tbody>
+</table>
+
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Frontend Code Impact</h3></summary>
+<div class="subsection-body">
+<p>None from #108 directly. CMS-side changes (from #111) do not concern the naming issue.</p>
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section" open id="risks">
+<summary><h2>Side Effects and Risks</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open>
+<summary><h3>Risks of Track A Alone</h3></summary>
+<div class="subsection-body">
+
+<table>
+  <thead><tr><th>Risk</th><th>Likelihood</th><th>Mitigation</th></tr></thead>
+  <tbody>
+    <tr><td>Track A hardening AC forgotten during #110 landing</td><td><span class="badge badge-amber">Medium</span> (easy to lose in a big PR)</td><td>Include as explicit acceptance criterion on the #110 PR body</td></tr>
+  </tbody>
+</table>
+
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Risks of Track B</h3></summary>
+<div class="subsection-body">
+<p>See <a href="../110/impact-110.md">issues/biar/110/impact-110.md</a>. The #108-specific risk within Track B is the candidate-list trap: if the view builders retain the <code>"transaction"</code> fallback, and the new <code>bronze/transaction</code> bronze table's payload column ends up called <code>transaction</code> (the natural name given the ODS column), consumers silently return all-nulls with no error.</p>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Cross-Issue Dependencies</h3></summary>
+<div class="subsection-body">
+<ul>
+  <li><strong>#110</strong>: This issue closes as a consequence of #110. #108 has no independent code fix.</li>
+  <li><strong>#109</strong>: The NiFi <code>Transaction_Data</code> processor discussed in #108 is not currently deployed (see live NiFi finding); #109 addresses its remediation should it be enabled.</li>
+  <li><strong>#111</strong>: The view-builder candidate list hardening called out here is executed in the #110/#111 rewrite scope.</li>
+</ul>
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section" open id="effort">
+<summary><h2>Effort Estimate</h2></summary>
+<div class="section-body">
+
+<table>
+  <thead><tr><th>Track</th><th>Files</th><th>Effort</th></tr></thead>
+  <tbody>
+    <tr><td>A — Hardening AC</td><td>Issue tracker only</td><td>~15 min</td></tr>
+    <tr><td>B — Subsumed by #110</td><td>See #110</td><td>See #110</td></tr>
+  </tbody>
+</table>
+
+</div>
+</details>
+
+<details class="section" open id="acceptance">
+<summary><h2>Acceptance Criteria (Verification Checklist)</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open>
+<summary><h3>Track A</h3></summary>
+<div class="subsection-body">
+<ul>
+  <li>[ ] <code>#110</code> PR body lists: "candidate lists in view builders raise on unknown columns; <code>"transaction"</code> fallback removed."</li>
+  <li>[ ] <code>data-lineage.md</code> updated in #110 to reflect that <code>transactionData</code> is no longer a bronze column.</li>
+</ul>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Track B</h3></summary>
+<div class="subsection-body">
+<ul>
+  <li>[ ] All five collision vectors verified as resolved after #110 lands (verify by grep of <code>transaction_data</code> / <code>transactionData</code> — only the CMS Prisma model remains, and that is unambiguously CMS-scoped).</li>
+</ul>
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section" open id="sequencing">
+<summary><h2>Recommended Sequencing</h2></summary>
+<div class="section-body">
+
+<ol>
+  <li>Do not ship a standalone fix for #108.</li>
+  <li>Add the two Track A ACs to the #110 PR body.</li>
+  <li>Verify closure on merge of #110.</li>
+  <li>Close #108 with a link to the #110 merge commit.</li>
+</ol>
+
+</div>
+</details>
+
+</div>
+
+<script>
+(function() {
+  const THEME_KEY = 'impact-study-theme';
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.theme === theme);
+    });
+    try { localStorage.setItem(THEME_KEY, theme); } catch(e) {}
+    if (window.__reinitMermaid) setTimeout(window.__reinitMermaid, 50);
+  }
+
+  const saved = (function() { try { return localStorage.getItem(THEME_KEY); } catch(e) { return null; } })();
+  applyTheme(saved || 'light');
+
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
+  });
+
+  document.getElementById('expand-all').addEventListener('click', () => {
+    document.querySelectorAll('details').forEach(d => d.open = true);
+  });
+  document.getElementById('collapse-all').addEventListener('click', () => {
+    document.querySelectorAll('details').forEach(d => d.open = false);
+  });
+  document.getElementById('top-btn').addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', (e) => {
+      const id = a.getAttribute('href').slice(1);
+      const target = document.getElementById(id);
+      if (!target) return;
+      let el = target;
+      while (el) {
+        if (el.tagName && el.tagName.toLowerCase() === 'details') el.open = true;
+        el = el.parentElement;
+      }
+    });
+  });
+
+  // Drag-to-scroll on diagram containers
+  document.querySelectorAll('.diagram-wrap').forEach(function(wrap) {
+    var isDown = false, startX, scrollLeft;
+    wrap.addEventListener('mousedown', function(e) {
+      isDown = true; startX = e.pageX - wrap.offsetLeft; scrollLeft = wrap.scrollLeft;
+    });
+    wrap.addEventListener('mouseleave', function() { isDown = false; });
+    wrap.addEventListener('mouseup', function() { isDown = false; });
+    wrap.addEventListener('mousemove', function(e) {
+      if (!isDown) return;
+      e.preventDefault();
+      wrap.scrollLeft = scrollLeft - (e.pageX - wrap.offsetLeft - startX);
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
