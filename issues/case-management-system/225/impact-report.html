@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Impact Study — Issue #225: BIAR Case Management Trend Dashboard — no investigator data</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #24292e;
+    --h1: #0d1b3e;
+    --h2: #1a3a6b;
+    --h3: #2563a8;
+    --border: #d0d7de;
+    --border-soft: #e1e4e8;
+    --code-bg: #f6f8fa;
+    --table-head-bg: #0d1b3e;
+    --table-head-fg: #ffffff;
+    --table-head-border: #1a3a6b;
+    --row-even: #f3f5f8;
+    --row-odd: #ffffff;
+    --link: #1a3a6b;
+    --link-hover: #2563a8;
+    --bar-bg: #0d1b3e;
+    --bar-fg: #ffffff;
+    --bar-btn-bg: rgba(255,255,255,0.12);
+    --bar-btn-bg-hover: rgba(255,255,255,0.25);
+    --bar-btn-border: rgba(255,255,255,0.25);
+    --bar-btn-active: #2563a8;
+    --details-bg: #fafbfc;
+    --details-border: #d0d7de;
+    --summary-bg: #f3f5f8;
+    --summary-hover: #e9edf2;
+    --badge-green-bg: #d4edda;  --badge-green-fg: #155724;  --badge-green-bd: #b8dfc4;
+    --badge-amber-bg: #fff3cd;  --badge-amber-fg: #856404;  --badge-amber-bd: #f0d88a;
+    --badge-red-bg:   #f8d7da;  --badge-red-fg:   #721c24;  --badge-red-bd:   #f1aeb5;
+    --badge-blue-bg:  #d1ecf1;  --badge-blue-fg:  #0c5460;  --badge-blue-bd:  #a8d9e2;
+  }
+
+  [data-theme="dark"] {
+    --bg: #0d1117;
+    --fg: #c9d1d9;
+    --h1: #79c0ff;
+    --h2: #58a6ff;
+    --h3: #79c0ff;
+    --border: #30363d;
+    --border-soft: #21262d;
+    --code-bg: #161b22;
+    --table-head-bg: #1f6feb;
+    --table-head-fg: #ffffff;
+    --table-head-border: #388bfd;
+    --row-even: #161b22;
+    --row-odd: #0d1117;
+    --link: #58a6ff;
+    --link-hover: #79c0ff;
+    --bar-bg: #161b22;
+    --bar-fg: #c9d1d9;
+    --bar-btn-bg: rgba(255,255,255,0.06);
+    --bar-btn-bg-hover: rgba(255,255,255,0.14);
+    --bar-btn-border: rgba(255,255,255,0.18);
+    --bar-btn-active: #1f6feb;
+    --details-bg: #0d1117;
+    --details-border: #30363d;
+    --summary-bg: #161b22;
+    --summary-hover: #1f242c;
+    --badge-green-bg: #033a16; --badge-green-fg: #7ee787; --badge-green-bd: #196c2e;
+    --badge-amber-bg: #4d3800; --badge-amber-fg: #ffd33d; --badge-amber-bd: #8a6500;
+    --badge-red-bg:   #4c0014; --badge-red-fg:   #ff7b85; --badge-red-bd:   #8a0020;
+    --badge-blue-bg:  #032b40; --badge-blue-fg:  #79c0ff; --badge-blue-bd:  #1f6feb;
+  }
+
+  [data-theme="solar"] {
+    --bg: #fdf6e3;
+    --fg: #586e75;
+    --h1: #073642;
+    --h2: #268bd2;
+    --h3: #b58900;
+    --border: #eee8d5;
+    --border-soft: #eee8d5;
+    --code-bg: #eee8d5;
+    --table-head-bg: #073642;
+    --table-head-fg: #fdf6e3;
+    --table-head-border: #002b36;
+    --row-even: #f5efdc;
+    --row-odd: #fdf6e3;
+    --link: #268bd2;
+    --link-hover: #2aa198;
+    --bar-bg: #073642;
+    --bar-fg: #fdf6e3;
+    --bar-btn-bg: rgba(253,246,227,0.10);
+    --bar-btn-bg-hover: rgba(253,246,227,0.22);
+    --bar-btn-border: rgba(253,246,227,0.30);
+    --bar-btn-active: #b58900;
+    --details-bg: #fbf2d8;
+    --details-border: #eee8d5;
+    --summary-bg: #eee8d5;
+    --summary-hover: #e4dcc1;
+    --badge-green-bg: #dbe9b1; --badge-green-fg: #4d5d10; --badge-green-bd: #b5c97a;
+    --badge-amber-bg: #ffeec2; --badge-amber-fg: #7d5a00; --badge-amber-bd: #e6c970;
+    --badge-red-bg:   #fbd3cb; --badge-red-fg:   #8a1a08; --badge-red-bd:   #e89a8a;
+    --badge-blue-bg:  #cfe6f5; --badge-blue-fg:  #1c5e85; --badge-blue-bd:  #8ec0dc;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--fg);
+    background: var(--bg);
+    margin: 0;
+    padding: 4.5rem 1rem 2rem;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+
+  .page-wrapper { max-width: 960px; margin: 0 auto; }
+
+  .top-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    background: var(--bar-bg);
+    color: var(--bar-fg);
+    padding: 0.55rem 1rem;
+    z-index: 1000;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+  }
+  .top-bar .group { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+  .top-bar .label {
+    font-size: 0.75em;
+    opacity: 0.7;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-right: 0.25rem;
+  }
+  .top-bar button {
+    background: var(--bar-btn-bg);
+    color: var(--bar-fg);
+    border: 1px solid var(--bar-btn-border);
+    border-radius: 5px;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.82em;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s ease;
+  }
+  .top-bar button:hover { background: var(--bar-btn-bg-hover); }
+  .top-bar button.active {
+    background: var(--bar-btn-active);
+    border-color: var(--bar-btn-active);
+  }
+
+  h1 { color: var(--h1); font-size: 2rem; margin-top: 0; margin-bottom: 0.25rem; }
+  h2 { color: var(--h2); font-size: 1.4rem; margin: 0; padding: 0; border: none; }
+  h3 { color: var(--h3); font-size: 1.1rem; margin: 0; padding: 0; }
+
+  .static-section h2 {
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 0.3rem;
+    margin-top: 2.2rem;
+  }
+  .static-section h3 { margin-top: 1.8rem; }
+
+  p { margin: 0.6rem 0; }
+  ul, ol { margin: 0.5rem 0; padding-left: 1.6rem; }
+  li { margin: 0.25rem 0; }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 1.8rem 0; }
+
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.875em;
+    background: var(--code-bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    padding: 0.15em 0.4em;
+  }
+
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    padding: 1rem 1.2rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+  }
+  pre code { background: none; border: none; padding: 0; font-size: 0.85em; line-height: 1.5; }
+
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9em; }
+  thead tr { background: var(--table-head-bg); color: var(--table-head-fg); }
+  thead th {
+    padding: 0.6rem 0.85rem;
+    text-align: left;
+    font-weight: 600;
+    border: 1px solid var(--table-head-border);
+  }
+  tbody tr:nth-child(even) { background: var(--row-even); }
+  tbody tr:nth-child(odd)  { background: var(--row-odd); }
+  tbody td { padding: 0.5rem 0.85rem; border: 1px solid var(--border); vertical-align: top; }
+
+  .badge {
+    display: inline-block;
+    padding: 0.15em 0.6em;
+    border-radius: 999px;
+    font-size: 0.78em;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .badge-green { background: var(--badge-green-bg); color: var(--badge-green-fg); border: 1px solid var(--badge-green-bd); }
+  .badge-amber { background: var(--badge-amber-bg); color: var(--badge-amber-fg); border: 1px solid var(--badge-amber-bd); }
+  .badge-red   { background: var(--badge-red-bg);   color: var(--badge-red-fg);   border: 1px solid var(--badge-red-bd); }
+  .badge-blue  { background: var(--badge-blue-bg);  color: var(--badge-blue-fg);  border: 1px solid var(--badge-blue-bd); }
+
+  strong { font-weight: 600; }
+
+  div.toc {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.1rem 1.4rem;
+    margin: 1.2rem 0 1.8rem;
+  }
+  div.toc p.toc-title {
+    font-weight: 700;
+    font-size: 0.95em;
+    margin: 0 0 0.5rem;
+    color: var(--h1);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  div.toc ol { margin: 0; padding-left: 1.3rem; }
+  div.toc li { margin: 0.2rem 0; font-size: 0.9em; }
+  div.toc ul { margin: 0.15rem 0; padding-left: 1.2rem; list-style: disc; }
+  div.toc a { color: var(--link); text-decoration: none; }
+  div.toc a:hover { text-decoration: underline; color: var(--link-hover); }
+
+  details.section {
+    margin: 1rem 0;
+    border: 1px solid var(--details-border);
+    border-radius: 6px;
+    background: var(--details-bg);
+    overflow: hidden;
+  }
+  details.section > summary {
+    cursor: pointer;
+    padding: 0.7rem 1rem;
+    background: var(--summary-bg);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    user-select: none;
+    transition: background 0.15s ease;
+  }
+  details.section > summary:hover { background: var(--summary-hover); }
+  details.section > summary::-webkit-details-marker { display: none; }
+  details.section > summary::before {
+    content: "▶";
+    font-size: 0.7em;
+    color: var(--h2);
+    transition: transform 0.2s ease;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  details.section[open] > summary::before { transform: rotate(90deg); }
+  details.section .section-body { padding: 0.4rem 1.2rem 1rem; }
+
+  details.subsection {
+    margin: 0.6rem 0;
+    border: 1px solid var(--details-border);
+    border-radius: 5px;
+    background: var(--bg);
+  }
+  details.subsection > summary {
+    cursor: pointer;
+    padding: 0.5rem 0.85rem;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    user-select: none;
+    background: transparent;
+    transition: background 0.15s ease;
+  }
+  details.subsection > summary:hover { background: var(--summary-hover); }
+  details.subsection > summary::-webkit-details-marker { display: none; }
+  details.subsection > summary::before {
+    content: "▶";
+    font-size: 0.65em;
+    color: var(--h3);
+    transition: transform 0.2s ease;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  details.subsection[open] > summary::before { transform: rotate(90deg); }
+  details.subsection .subsection-body { padding: 0.2rem 1rem 0.8rem; }
+
+  html { scroll-behavior: smooth; scroll-padding-top: 70px; }
+
+  .diagram-wrap {
+    position: relative;
+    margin: 1.4rem -1rem 0.6rem;
+    border-top: 1px solid var(--details-border);
+    border-bottom: 1px solid var(--details-border);
+    background: var(--details-bg);
+    padding: 1.4rem 1.2rem;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    cursor: grab;
+  }
+  .diagram-wrap:active { cursor: grabbing; }
+  .diagram-wrap .mermaid { display: block; }
+  .diagram-wrap .mermaid svg { display: block; max-width: none !important; height: auto !important; min-height: 200px; }
+
+  .callout {
+    border-left: 4px solid var(--h3);
+    background: var(--code-bg);
+    border-radius: 0 6px 6px 0;
+    padding: 0.7rem 1rem;
+    margin: 1rem 0;
+  }
+  .callout.amber { border-color: #b08000; }
+  .callout.green { border-color: #155724; }
+  .callout.red   { border-color: #721c24; }
+</style>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  function getMermaidTheme() {
+    const t = document.documentElement.getAttribute('data-theme');
+    if (t === 'dark') return 'dark';
+    return 'base';
+  }
+  function initMermaid() {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: getMermaidTheme(),
+      themeVariables: (function() {
+        const t = document.documentElement.getAttribute('data-theme');
+        if (t === 'dark') return {};
+        if (t === 'solar') return { primaryColor: '#eee8d5', primaryTextColor: '#586e75', primaryBorderColor: '#93a1a1', lineColor: '#586e75', background: '#fdf6e3', mainBkg: '#fdf6e3', nodeBorder: '#93a1a1', clusterBkg: '#f5efdc', titleColor: '#073642', edgeLabelBackground: '#fdf6e3' };
+        return { primaryColor: '#f3f5f8', primaryTextColor: '#24292e', primaryBorderColor: '#8a95a3', lineColor: '#6b7a8d', background: '#ffffff', mainBkg: '#f3f5f8', nodeBorder: '#8a95a3', clusterBkg: '#fafbfc', titleColor: '#0d1b3e', edgeLabelBackground: '#ffffff' };
+      })(),
+      flowchart: { curve: 'basis', htmlLabels: true, rankSpacing: 120, nodeSpacing: 80 }
+    });
+    document.querySelectorAll('.mermaid').forEach(el => { el.removeAttribute('data-processed'); });
+    mermaid.run({ nodes: document.querySelectorAll('.mermaid') });
+  }
+  document.addEventListener('DOMContentLoaded', initMermaid);
+  window.__reinitMermaid = initMermaid;
+</script>
+</head>
+<body>
+
+<div class="top-bar" role="toolbar" aria-label="Document controls">
+  <div class="group">
+    <span class="label">Sections</span>
+    <button type="button" id="expand-all">Expand all</button>
+    <button type="button" id="collapse-all">Collapse all</button>
+  </div>
+  <div class="group">
+    <span class="label">Theme</span>
+    <button type="button" class="theme-btn" data-theme="light">Light</button>
+    <button type="button" class="theme-btn" data-theme="dark">Dark</button>
+    <button type="button" class="theme-btn" data-theme="solar">Solar</button>
+  </div>
+  <div class="group">
+    <button type="button" id="top-btn" title="Back to top">↑ Top</button>
+  </div>
+</div>
+
+<div class="page-wrapper">
+<div class="static-section">
+
+<h1>Impact Study — Issue #225: BIAR Case Management Trend Dashboard — no investigator data displayed</h1>
+
+<p>
+  <strong>Issue:</strong> <a href="https://github.com/tazama-lf/case-management-system/issues/225">#225 — BIAR Bug: Case Management Trend Dashboard - no investigator data displayed</a><br>
+  <strong>Date:</strong> 2026-07-10<br>
+  <strong>Author:</strong> Ahmad Khalid<br>
+  <strong>Repository:</strong> tazama-lf/case-management-system (with cross-repo scope: tazama-lf/biar, tazama-lf/Full-Stack-Docker-Tazama)
+</p>
+
+<hr>
+
+<h2 id="summary">Summary</h2>
+
+<p>The Case Management Trend Dashboard's <em>"Workload &amp; Investigator Productivity"</em> section shows raw <code>user_id</code> UUIDs instead of investigator display names. Everything upstream of NiFi is already in place on <code>dev</code>: CMS writes a Postgres row to <code>cms_usernames</code> on every successful login (Prisma migration <code>20260616124311_username</code>); a biar <code>CmsUsernamesETL</code> is registered and ready to write to <code>gold/cms_usernames</code>; the JupyterHub notebook already left-joins on <code>user_id</code> and falls back to UUIDs when no name is found. The single missing piece is a <code>QueryDatabaseTableRecord</code> NiFi processor for <code>tazama_cms.cms_usernames</code>. This is exactly the defect identified in <a href="https://github.com/tazama-lf/biar/issues/112">biar #112</a> — which Sandy asked to be checked in the 2026-07-07 comment on #225.</p>
+
+<p>Fixes are prepared: <a href="https://github.com/tazama-lf/Full-Stack-Docker-Tazama/pull/236">Full-Stack-Docker-Tazama PR #236</a> and <a href="https://github.com/tazama-lf/biar/pull/89">biar PR #89</a> both <span class="badge badge-amber">OPEN</span> and unmerged. Track A: merge them. Track B: replace the login-driven upsert with an event-driven Keycloak identity sync so names stay fresh for users who never log in.</p>
+
+<div class="diagram-wrap">
+<div class="mermaid">
+flowchart LR
+  KC[Keycloak<br/>identity of record] -->|inner-token 'name' claim| CMS[CMS auth.service<br/>storeUserName upsert]
+  CMS -->|Postgres write| PG[(tazama_cms.<br/>cms_usernames)]
+  PG -.->|❌ MISSING:<br/>no QueryDatabaseTableRecord<br/>processor in tazama.xml| NIFI[NiFi<br/>ingest]
+  NIFI --> ORCH[Automation Orchestrator API<br/>_ETL_REGISTRY dispatch]
+  ORCH --> ETL[CmsUsernamesETL<br/>pass-through to gold]
+  ETL --> GOLD[(gold/cms_usernames<br/>Hudi — empty)]
+  GOLD --> NB[Case_Management_Trend<br/>_Dashboard.ipynb]
+  NB --> UI[Notebook output<br/>UUIDs, no names]
+
+  style PG fill:#d4edda,stroke:#155724
+  style NIFI fill:#f8d7da,stroke:#721c24
+  style GOLD fill:#f8d7da,stroke:#721c24
+  style UI fill:#fff3cd,stroke:#856404
+</div>
+</div>
+
+<hr>
+
+<div class="toc">
+<p class="toc-title">Contents</p>
+<ol>
+  <li><a href="#confirmed">Confirmed root cause</a></li>
+  <li><a href="#track-a">Track A — Merge NiFi processor patch</a></li>
+  <li><a href="#track-b">Track B — Event-driven Keycloak identity sync</a></li>
+  <li><a href="#risks">Side effects and risks</a></li>
+  <li><a href="#cross-issue">Cross-issue dependencies</a></li>
+  <li><a href="#effort">Effort estimate</a></li>
+  <li><a href="#acceptance">Acceptance criteria</a></li>
+  <li><a href="#sequencing">Recommended sequencing</a></li>
+</ol>
+</div>
+
+</div><!-- /static-section -->
+
+<details class="section" open>
+<summary><h2 id="confirmed">1. Confirmed root cause</h2></summary>
+<div class="section-body">
+
+<p>Every upstream stage was verified against the current <code>origin/dev</code> of each repo. The chain terminates because one XML file has no entry for one table.</p>
+
+<table>
+  <thead>
+    <tr><th>Stage</th><th>File</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>tazama_cms.cms_usernames</code> table exists</td>
+      <td><code>backend/prisma/migrations/20260616124311_username/migration.sql</code></td>
+      <td><span class="badge badge-green">present on dev</span></td>
+    </tr>
+    <tr>
+      <td>Prisma model</td>
+      <td><code>backend/prisma/schema.prisma</code> L546–555</td>
+      <td><span class="badge badge-green">present on dev</span></td>
+    </tr>
+    <tr>
+      <td>CMS auth service writes on login</td>
+      <td><code>backend/src/modules/auth/auth.service.ts</code> L60–68, L267–301</td>
+      <td><span class="badge badge-green">present on dev</span></td>
+    </tr>
+    <tr>
+      <td>biar <code>CmsUsernamesETL</code> registered</td>
+      <td><code>automation-orchestrator/lakehouse_automation_pipeline.py</code> L21, L52–69</td>
+      <td><span class="badge badge-green">present on dev</span></td>
+    </tr>
+    <tr>
+      <td>biar ETL implementation</td>
+      <td><code>automation-orchestrator/Table_ETLs/cms_usernames.py</code> L15–65</td>
+      <td><span class="badge badge-green">present on dev</span></td>
+    </tr>
+    <tr>
+      <td>Notebook loads and joins</td>
+      <td><code>JupyterHub/notebooks/Case_Management_Trend_Dashboard.ipynb</code> cell 1, cell 14</td>
+      <td><span class="badge badge-green">present on dev</span></td>
+    </tr>
+    <tr>
+      <td>NiFi <code>QueryDatabaseTableRecord</code> for <code>cms_usernames</code></td>
+      <td><code>Full-Stack-Docker-Tazama/biar/nifi/tazama.xml</code> and mirror in biar repo</td>
+      <td><span class="badge badge-red">MISSING on dev</span></td>
+    </tr>
+    <tr>
+      <td>Prepared fix</td>
+      <td>PR #236 (Full-Stack-Docker-Tazama), PR #89 (biar)</td>
+      <td><span class="badge badge-amber">OPEN, unmerged</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Evidence that the processor is absent on <code>dev</code>:</p>
+
+<pre><code>$ grep -c 'cms_usernames' repos/Full-Stack-Docker-Tazama/biar/nifi/tazama.xml
+0
+
+# Set of &lt;Table Name&gt; values in tazama.xml on dev:
+account, account_holder, alerts, cases, comments, condition, entity,
+evaluation, network_map, rule, tasks, transaction, transaction_data, typology</code></pre>
+
+<p>Every other <code>tazama_cms</code> table has a <code>QueryDatabaseTableRecord</code> processor. <code>cms_usernames</code> does not.</p>
+
+<p>The notebook's fallback line explicitly documents the symptom (from cell 14):</p>
+
+<pre><code>if pd.notna(investigator_name) and str(investigator_name).strip():
+    print(f"  {int(idx+1)}. {investigator_name}  (ID: {investigator_id})")
+else:
+    print(f"  {int(idx+1)}. Name not found in cms_usernames — showing ID: {investigator_id}")</code></pre>
+
+</div>
+</details>
+
+<details class="section" open>
+<summary><h2 id="track-a">2. Track A — Merge NiFi processor patch</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open>
+<summary><h3>What changes</h3></summary>
+<div class="subsection-body">
+<p>Two files, both NiFi XML templates. The patch adds a <code>QueryDatabaseTableRecord</code> processor for <code>tazama_cms.cms_usernames</code> using the existing <code>tazama_cms</code> connection pool (<code>b0b69311-8545-36e2</code>), plus supporting <code>RemoteProcessGroup</code> <code>table=cms_usernames</code> entries so the batch is routed to the automation orchestrator with the correct dispatch key.</p>
+
+<table>
+  <thead>
+    <tr><th>Repo</th><th>File</th><th>PR</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Full-Stack-Docker-Tazama</td><td><code>biar/nifi/tazama.xml</code></td><td><a href="https://github.com/tazama-lf/Full-Stack-Docker-Tazama/pull/236">#236</a></td></tr>
+    <tr><td>biar</td><td><code>nifi/tazama.xml</code></td><td><a href="https://github.com/tazama-lf/biar/pull/89">#89</a></td></tr>
+  </tbody>
+</table>
+
+<p>The full PR diff is large (~48k lines) because NiFi's XML export rewrites <code>versionedComponentId</code>s across the whole template; reviewers should focus on the <code>&lt;value&gt;cms_usernames&lt;/value&gt;</code> blocks and confirm the surrounding processor structure matches the existing <code>alerts</code>/<code>cases</code>/<code>tasks</code>/<code>comments</code> pattern.</p>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Impact</h3></summary>
+<div class="subsection-body">
+<table>
+  <thead>
+    <tr><th>Dimension</th><th>Value</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Files changed</td><td>2 (NiFi XML templates in two repos)</td></tr>
+    <tr><td>Schema migration required</td><td><span class="badge badge-green">No</span> — migration already on dev</td></tr>
+    <tr><td>Frontend changes required</td><td><span class="badge badge-green">No</span></td></tr>
+    <tr><td>Downtime required</td><td>NiFi restart in UAT (~1 min rolling)</td></tr>
+    <tr><td>Risk of regression</td><td><span class="badge badge-green">Low</span> — additive template change</td></tr>
+    <tr><td>Reversibility</td><td><span class="badge badge-green">Full</span> — revert PR + redeploy</td></tr>
+  </tbody>
+</table>
+
+<p><strong>What Track A fixes immediately</strong></p>
+<ul>
+  <li><code>gold/cms_usernames</code> starts populating after the next NiFi poll interval.</li>
+  <li>Case Management Trend Dashboard resolves display names for anyone who has logged into CMS at least once since deployment.</li>
+  <li>Any future dashboard that joins on <code>cms_usernames.user_id</code> starts having data.</li>
+</ul>
+
+<p><strong>What Track A does not fix</strong></p>
+<ul>
+  <li>Users who have never logged into CMS stay absent from <code>cms_usernames</code>.</li>
+  <li>Users whose display name is changed in Keycloak but who don't subsequently log in stay stale in the DLH.</li>
+  <li>Disabled users are never marked as such.</li>
+  <li>The architectural pattern (per-service identity mirroring in CMS) is unchanged.</li>
+</ul>
+
+<div class="callout green"><strong>Track A is safe to ship in isolation.</strong> It has zero source-code changes, no schema migration, and no coupling to open issues #214 or #220.</div>
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section" open>
+<summary><h2 id="track-b">3. Track B — Event-driven Keycloak identity sync</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open>
+<summary><h3>Schema impact</h3></summary>
+<div class="subsection-body">
+<table>
+  <thead>
+    <tr><th>Change</th><th>Column</th><th>Purpose</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Add column</td><td><code>last_synced_at TIMESTAMP(6) NULL</code></td><td>Populated on every sync — detects staleness</td></tr>
+    <tr><td>Add column</td><td><code>disabled_at TIMESTAMP(6) NULL</code></td><td>Set when Keycloak disables the user</td></tr>
+    <tr><td>Add column</td><td><code>source TEXT NOT NULL DEFAULT 'keycloak-event'</code></td><td>Distinguishes login-fallback vs. event-driven rows during migration</td></tr>
+  </tbody>
+</table>
+
+<p>Additive-only migration; safe under concurrent writes from the still-running login-time upsert.</p>
+</div>
+</details>
+
+<details class="subsection">
+<summary><h3>Backend code impact</h3></summary>
+<div class="subsection-body">
+<p><strong>Core rewrites</strong></p>
+<table>
+  <thead>
+    <tr><th>File</th><th>Change</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>backend/src/modules/auth/auth.service.ts</code> L60–68</td><td>Delete the <code>storeUserName(token)</code> call</td></tr>
+    <tr><td><code>backend/src/modules/auth/auth.service.ts</code> L267–301</td><td>Delete <code>private async storeUserName</code> method</td></tr>
+  </tbody>
+</table>
+
+<p><strong>New files</strong></p>
+<table>
+  <thead>
+    <tr><th>File</th><th>Purpose</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>backend/src/modules/identity-sync/keycloak-sync.service.ts</code></td><td>Consumes Keycloak user CRUD events; upserts <code>cms_usernames</code></td></tr>
+    <tr><td><code>backend/src/modules/identity-sync/keycloak-sync.module.ts</code></td><td>Nest module registration</td></tr>
+    <tr><td><code>backend/src/modules/identity-sync/keycloak-sync.controller.ts</code></td><td>Webhook endpoint (if using Keycloak → CMS webhook transport)</td></tr>
+    <tr><td><code>backend/scripts/backfill-cms-usernames.ts</code></td><td>One-shot backfill from Keycloak Admin API</td></tr>
+    <tr><td><code>backend/prisma/migrations/{ts}_cms_usernames_sync_fields/migration.sql</code></td><td>Schema additions</td></tr>
+  </tbody>
+</table>
+
+<p><strong>ETL and NiFi</strong></p>
+<table>
+  <thead>
+    <tr><th>File</th><th>Change</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>automation-orchestrator/Table_ETLs/cms_usernames.py</code> L54–62</td><td>Consider <code>record_key="id"</code> → <code>"user_id"</code> per biar #112's minor design note (requires full Hudi reload)</td></tr>
+    <tr><td><code>biar/nifi/tazama.xml</code></td><td>Add <code>disabled_at</code> to Maximum-value Columns if it becomes a sync signal</td></tr>
+  </tbody>
+</table>
+</div>
+</details>
+
+<details class="subsection">
+<summary><h3>Frontend code impact</h3></summary>
+<div class="subsection-body">
+<p>None. The notebook already handles null names defensively; no CMS frontend surface reads <code>cms_usernames</code>.</p>
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section" open>
+<summary><h2 id="risks">4. Side effects and risks</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open>
+<summary><h3>Risks of Track A alone</h3></summary>
+<div class="subsection-body">
+<table>
+  <thead>
+    <tr><th>Risk</th><th>Likelihood</th><th>Mitigation</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Investigator exists in Keycloak but has never logged into CMS → dashboard still shows UUID</td>
+      <td><span class="badge badge-red">High</span> (matches Sandy's 2026-05-21 observation about "only one investigator")</td>
+      <td>Ship Track B; interim, have each investigator log in once</td>
+    </tr>
+    <tr>
+      <td>Keycloak name change without subsequent login → dashboard stale</td>
+      <td><span class="badge badge-amber">Medium</span></td>
+      <td>Ship Track B; interim, document the lag</td>
+    </tr>
+    <tr>
+      <td>NiFi template re-export accidentally alters other processors (PR #236 is ~48k lines)</td>
+      <td><span class="badge badge-green">Low</span></td>
+      <td>Careful review of <code>cms_usernames</code> blocks + smoke-test alerts/cases ingest post-deploy</td>
+    </tr>
+    <tr>
+      <td>Hudi <code>record_key="id"</code> could allow duplicate <code>user_id</code> across full reloads</td>
+      <td><span class="badge badge-green">Low</span></td>
+      <td>Notebook already de-duplicates via <code>row_number() over (partition by user_id order by updated_at desc)</code></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</details>
+
+<details class="subsection">
+<summary><h3>Risks of Track B</h3></summary>
+<div class="subsection-body">
+<table>
+  <thead>
+    <tr><th>Risk</th><th>Likelihood</th><th>Mitigation</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Keycloak event-listener SPI failure silently causes stale names</td><td><span class="badge badge-amber">Medium</span></td><td>Emit sync metrics; alert on missing <code>last_synced_at</code> heartbeats</td></tr>
+    <tr><td>Migration adds columns while login-time upsert still runs</td><td><span class="badge badge-green">Low</span></td><td>Additive nullable/defaulted columns; deploy migration before switching auth.service</td></tr>
+    <tr><td>Backfill script mis-authenticates or fails partially</td><td><span class="badge badge-amber">Medium</span></td><td>Idempotent, per-user error logging, re-runnable</td></tr>
+    <tr><td>Removing login-time upsert before event listener is fully live</td><td><span class="badge badge-amber">Medium</span></td><td>Deploy event listener + backfill first; retain login-time upsert one release before removing</td></tr>
+  </tbody>
+</table>
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section" open>
+<summary><h2 id="cross-issue">5. Cross-issue dependencies</h2></summary>
+<div class="section-body">
+
+<table>
+  <thead>
+    <tr><th>Issue</th><th>Files it touches</th><th>Overlap with #225</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><a href="../214/issue-214.md">#214</a> (FRAUD_AND_AML container cases)</td>
+      <td><code>triage.service.ts</code>, <code>case-creation.service.ts</code>, <code>case.service.ts</code>, <code>task.service.ts</code>, <code>case-reopening.service.ts</code>, <code>task-lifecycle.service.ts</code>, <code>schema.prisma</code> (Case model)</td>
+      <td><span class="badge badge-green">None on <code>cms_usernames</code></span> — only shared file is <code>schema.prisma</code> (different model). Migration numbering is the only concern.</td>
+    </tr>
+    <tr>
+      <td><a href="../220/issue-220.md">#220</a> (SLA vs. Priority)</td>
+      <td><code>alert-priority.service.ts</code>, priority enum sweep, <code>schema.prisma</code> (Case model), notebook-side SLA fixture</td>
+      <td><span class="badge badge-green">None on <code>cms_usernames</code></span> — same migration numbering concern only.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Track A has <strong>zero</strong> file overlap with either open issue. Track B's migration should be timestamped after whichever of #214/#220 lands last — Prisma orders migrations by directory timestamp, so no ordering conflict exists as long as Track B's migration folder timestamp is later.</p>
+
+<p>Sandy's 2026-06-29 comment on #225 asked to hold Track B-style work pending #214/#220. <strong>Track A does not touch that surface</strong> and can ship independently.</p>
+
+</div>
+</details>
+
+<details class="section" open>
+<summary><h2 id="effort">6. Effort estimate</h2></summary>
+<div class="section-body">
+
+<table>
+  <thead>
+    <tr><th>Track</th><th>Files</th><th>Effort</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>A — merge NiFi patch</td><td>2 XML templates</td><td>~2 hours (review + deploy)</td></tr>
+    <tr><td>B — event-driven identity sync</td><td>~6 backend + 1 migration + 1 ETL + 1 NiFi tweak</td><td>~6 developer-days</td></tr>
+    <tr><td><strong>Total</strong></td><td></td><td><strong>~6.25 developer-days</strong></td></tr>
+  </tbody>
+</table>
+
+</div>
+</details>
+
+<details class="section">
+<summary><h2 id="acceptance">7. Acceptance criteria</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open>
+<summary><h3>Track A</h3></summary>
+<div class="subsection-body">
+<ul>
+  <li>[ ] Full-Stack-Docker-Tazama PR #236 merged to <code>dev</code>.</li>
+  <li>[ ] biar PR #89 merged to <code>dev</code>.</li>
+  <li>[ ] After NiFi redeploy + one CMS login, <code>SELECT COUNT(*) FROM tazama_cms.cms_usernames</code> ≥ 1 AND the Hudi table at <code>gold/cms_usernames</code> has ≥ 1 row.</li>
+  <li>[ ] Case Management Trend Dashboard shows display names for users who have logged in.</li>
+  <li>[ ] "Name not found in cms_usernames — showing ID" fallback line does not appear for logged-in users.</li>
+</ul>
+</div>
+</details>
+
+<details class="subsection">
+<summary><h3>Track B</h3></summary>
+<div class="subsection-body">
+<ul>
+  <li>[ ] <code>KeycloakSyncService</code> receives Keycloak user CRUD events and reflects them into <code>cms_usernames</code>.</li>
+  <li>[ ] Backfill script populates <code>cms_usernames</code> for all pre-existing Keycloak users.</li>
+  <li>[ ] Names in DLH stay fresh even for users who don't log in.</li>
+  <li>[ ] <code>disabled_at</code> is set when a Keycloak user is disabled.</li>
+  <li>[ ] Login-time upsert removed from <code>auth.service.ts</code> (or retained as documented fallback).</li>
+</ul>
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section" open>
+<summary><h2 id="sequencing">8. Recommended sequencing</h2></summary>
+<div class="section-body">
+
+<ol>
+  <li><strong>Immediately: merge Track A PRs.</strong> Prepared, reviewed, no code changes needed. Unblocks Sandy's dashboard. Fixes #225 as literally reported and closes biar #112.</li>
+  <li><strong>After Track A ships:</strong> re-run the notebook against UAT to confirm names appear; close #225 and biar #112.</li>
+  <li><strong>Track B is independent of #214/#220</strong> — no file overlap. Schedule whenever capacity allows; do not block Track A on it.</li>
+  <li><strong>When Track B is scheduled</strong>, coordinate with the identity/auth track — it is the seed of a shared identity-sync service and other CMS-adjacent services will likely want the same feed.</li>
+</ol>
+
+<div class="callout amber"><strong>Interim workaround (before Track A merges):</strong> supervisors can log each investigator in at least once. After Track A, the dashboard will show their name automatically. Before Track A, this does nothing because the NiFi processor is missing.</div>
+
+</div>
+</details>
+
+</div><!-- /page-wrapper -->
+
+<script>
+(function() {
+  var saved = localStorage.getItem('theme') || 'light';
+  document.documentElement.setAttribute('data-theme', saved);
+
+  document.querySelectorAll('.theme-btn').forEach(function(btn) {
+    if (btn.getAttribute('data-theme') === saved) btn.classList.add('active');
+    btn.addEventListener('click', function() {
+      var t = btn.getAttribute('data-theme');
+      document.documentElement.setAttribute('data-theme', t);
+      localStorage.setItem('theme', t);
+      document.querySelectorAll('.theme-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      if (window.__reinitMermaid) window.__reinitMermaid();
+    });
+  });
+
+  document.getElementById('expand-all').addEventListener('click', function() {
+    document.querySelectorAll('details').forEach(function(d) { d.open = true; });
+  });
+  document.getElementById('collapse-all').addEventListener('click', function() {
+    document.querySelectorAll('details').forEach(function(d) { d.open = false; });
+  });
+  document.getElementById('top-btn').addEventListener('click', function() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  document.querySelectorAll('.diagram-wrap').forEach(function(wrap) {
+    var isDown = false, startX, scrollLeft;
+    wrap.addEventListener('mousedown', function(e) {
+      isDown = true; startX = e.pageX - wrap.offsetLeft; scrollLeft = wrap.scrollLeft;
+    });
+    wrap.addEventListener('mouseleave', function() { isDown = false; });
+    wrap.addEventListener('mouseup', function() { isDown = false; });
+    wrap.addEventListener('mousemove', function(e) {
+      if (!isDown) return;
+      e.preventDefault();
+      wrap.scrollLeft = scrollLeft - (e.pageX - wrap.offsetLeft - startX);
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
