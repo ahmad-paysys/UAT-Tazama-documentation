@@ -369,8 +369,33 @@ If the PR has gone through one or more CHANGES_REQUESTED cycles, structure the f
 ...
 ```
 
+### 6.1 Read ALL comments before writing the follow-up
+
+**Before drafting any follow-up review, re-fetch and re-read every comment on the PR — do not rely on the state captured in the previous round's review file.** Between rounds, authors and reviewers routinely post issue comments, inline review comments, and review-thread replies that resolve items *by explanation* rather than by code change. Missing these is the #1 cause of a follow-up incorrectly marking items NOT RESOLVED.
+
+Concretely, run all four fetches again at the start of every follow-up round — not just the diff:
+
+```bash
+gh pr view {number} --repo tazama-lf/{repo-name} --comments
+gh pr diff {number} --repo tazama-lf/{repo-name}
+gh api repos/tazama-lf/{repo-name}/pulls/{number}/reviews
+gh api repos/tazama-lf/{repo-name}/pulls/{number}/comments
+gh api repos/tazama-lf/{repo-name}/issues/{number}/comments  # issue-level PR comments (author replies to reviews often land here)
+```
+
+For every prior blocking or non-blocking item, check for author responses in *all* of the above before deciding a status. An item can be RESOLVED in four distinct ways:
+
+1. **Code fix** — a new commit changes the code. Cite the commit hash.
+2. **Explanation** — the author explains why the concern doesn't apply, or commits to a deployment/ops note. Quote the response and link to the comment (`https://github.com/.../pull/{number}#issuecomment-{id}`).
+3. **Declined as intentional** — the author confirms the flagged behaviour is deliberate. Mark as `➖ Declined by author` in the summary table and quote the justification.
+4. **Deferred to a follow-up PR / issue** — link the follow-up.
+
+Only mark an item `❌ Not resolved` after confirming there is no author response of any of the four kinds. If in doubt, quote the closest response verbatim and let the reader judge — don't silently assume silence.
+
+### 6.2 Follow-up section contents
+
 Each follow-up section contains:
-1. Resolution Status (one `### Item N` subsection per prior item)
+1. Resolution Status (one `### Item N` subsection per prior item) — every item must cite either the commit that fixed it OR the comment (with URL) that answered it OR an explicit `no author response` note.
 2. New Issues Found in Updated Commits (if any new problems were introduced)
 3. Updated Verdict (new verdict table + one-paragraph reasoning)
 
