@@ -4,6 +4,20 @@ When given a GitHub issue link, follow these instructions exactly to produce a c
 
 ---
 
+## 0. Preflight
+
+Before creating any files, run these checks:
+
+1. **Verify the issue is open.** Fetch the issue (see Section 2) and check `State`. If it is `Closed`, stop and confirm with the user before producing any docs — the issue may already be resolved.
+2. **Scan for cross-issue dependencies.** List existing issue directories for this repo:
+   ```bash
+   ls issues/{repo-name}/ 2>/dev/null
+   ```
+   Skim the titles/summaries of open issues in the same repo. If any share files with the issue you're about to process, flag it now and plan to document the overlap in the Cross-Issue Dependencies section of `impact-{number}.md`.
+3. **Verify the HTML template exists.** Confirm `issues/sample_report.html` is present. If it is missing, stop and ask the user — do not invent a substitute template.
+
+---
+
 ## 1. Setup
 
 Create a directory at:
@@ -30,9 +44,32 @@ Read every comment. The issue body may contain a partial or full design from the
 
 ## 3. Read the Code
 
-Before writing anything, verify every claim against the actual source code. Do not describe what code *probably* does — read the files and confirm line numbers, function names, and data flows. If a file or line the issue references does not exist or has moved, note that.
+Before writing anything, verify every claim against the actual source code. Do not describe what code *probably* does — read the files and confirm line numbers, function names, and data flows.
+
+**Stay on `dev` for the entire issue.** All citations must come from a single, consistent snapshot. If you need to inspect another branch, tag, or commit to answer a question, note it explicitly in the output (e.g. "as of commit `abc123` on branch `feature/x`") and return to `dev` before continuing.
+
+**If code the issue references has moved or been removed:**
+- If the referenced file/function has been renamed, moved, or refactored but the underlying concern still applies, document *both* the location the issue cites and the current location, and proceed against current `dev`.
+- If the underlying concern has already been fixed on `dev`, stop and confirm with the user before producing docs — the issue may be stale.
+- If you cannot locate the referenced code at all, say so explicitly in `issue-{number}.md` under "How It Works Today" and ask the user how to proceed.
 
 The repositories are cloned under the `repos/` directory. Navigate to them to read files directly.
+
+Before reading any code, ensure the local repo is in sync with the remote `dev` branch:
+
+- If `repos/{repo-name}/` does not exist, clone it from the `dev` branch:
+  ```bash
+  git clone -b dev git@github.com:tazama-lf/{repo-name}.git repos/{repo-name}
+  ```
+- If `repos/{repo-name}/` already exists:
+  - If the current branch is not `dev`, switch to it: `git -C repos/{repo-name} checkout dev`
+  - Always fetch and fast-forward to the latest remote `dev`:
+    ```bash
+    git -C repos/{repo-name} fetch origin dev
+    git -C repos/{repo-name} pull --ff-only origin dev
+    ```
+
+Only after the local repo is synced with `origin/dev` may you proceed with processing the issue. If the sync fails (dirty working tree, diverged history, auth failure), stop and report it — do not read stale code.
 
 For every claim you make in the output documents:
 - You must have read the file it refers to
@@ -44,6 +81,8 @@ For every claim you make in the output documents:
 ## 4. Produce the Output Files
 
 You produce **four files** for every issue, plus `github-issue-{number}.md` which is always produced — see section 5 for its format, which varies by issue size.
+
+**Scope guardrail.** Before writing `solution-{number}.md`, estimate the size of Track B. If Track B touches more than 20 files, requires a schema migration *plus* a frontend sweep, or otherwise looks like it will produce an unreviewable wall of before/after diffs, **stop and confirm scope with the user first.** Options to offer: (a) proceed as one large document, (b) split solution into multiple phased documents, (c) narrow Track B to a specific sub-scope. Do not silently produce a 3000-line solution file.
 
 ### File 1: `issue-{number}.md`
 
@@ -254,6 +293,16 @@ This file is always produced for every issue. Its content varies based on how mu
 
 ---
 
+**Classification trigger (mechanical — do not eyeball).** An issue is **significant** if *any* of the following are true:
+- Track B touches more than 3 files, OR
+- Track B requires a schema migration, OR
+- Track B requires frontend changes, OR
+- Track B spans more than one service/repo.
+
+Otherwise the issue is **small**. Apply this test before choosing between the two formats below.
+
+---
+
 ### Small issues (single fix, no significant Track B, or work small enough to leave as a comment on the linked issue)
 
 Produce a **single user story** — one concise block ready to post as a GitHub comment or link to a ticket. Format:
@@ -352,4 +401,4 @@ Short (under 70 characters).
 
 **Dates.** Use today's actual date for Report Date and Study Date fields.
 
-**Cross-issue dependencies.** If Track A or Track B touches a file that another open issue also modifies, call it out explicitly in the impact file and recommended sequencing. Check the other open issue directories before writing.
+**Cross-issue dependencies.** If Track A or Track B touches a file that another open issue also modifies, call it out explicitly in the impact file and recommended sequencing. The Preflight step (Section 0) already covers the initial scan — revisit it once you know the full file list for both tracks and update the Cross-Issue Dependencies section accordingly.
