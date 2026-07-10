@@ -4,6 +4,23 @@ When given a GitHub PR link, follow these instructions exactly to produce a comp
 
 ---
 
+## 0. Preflight
+
+Before creating any files, run these checks:
+
+1. **Verify PR state and readiness.** Fetch the PR (see Section 2) and check the JSON metadata:
+   ```bash
+   gh pr view {number} --repo tazama-lf/{repo-name} --json state,isDraft,baseRefName,headRefOid,mergeStateStatus,mergeable,statusCheckRollup
+   ```
+   - If `state` is `MERGED` or `CLOSED`, stop and confirm with the user before producing docs — the PR may no longer need review.
+   - If `isDraft` is `true`, confirm the user wants a review of a draft before proceeding.
+   - Note `statusCheckRollup` — record failing CI checks in the Overview.
+2. **Confirm base branch is correct.** For this repo's workflow, PRs typically target `dev`. If `baseRefName` is not `dev`, flag it as a potential blocking issue in the review (do not assume the author intended it).
+3. **Scope guardrail.** If the PR touches **more than 140 files**, stop and confirm scope with the user before writing. Offer: (a) proceed as one large review, (b) split "What Changed (Detailed)" into a grouped/summarised form, (c) narrow scope to specific files. Do not silently produce an unreviewable review file.
+4. **Out-of-scope PR check.** If the PR is purely a dependency bump (Renovate/Dependabot), a lockfile-only change, or a generated-file update with no human-authored logic, stop and ask the user whether they want the full-format review or a short-form note. Do not produce the full deliverable for a one-line version bump.
+
+---
+
 ## 1. Setup
 
 Create a file at:
@@ -45,6 +62,35 @@ Before writing anything, read the actual diff. Do not describe what code *probab
 - Confirm the before/after state
 - Understand what callers or dependents are affected
 
+Before reading any code, ensure the local repo is synced with the remote `dev` branch, then check out the PR's branch:
+
+- If `repos/{repo-name}/` does not exist, clone it from the `dev` branch:
+  ```bash
+  git clone -b dev git@github.com:tazama-lf/{repo-name}.git repos/{repo-name}
+  ```
+- If `repos/{repo-name}/` already exists:
+  - If the current branch is not `dev`, switch to it: `git -C repos/{repo-name} checkout dev`
+  - Always fetch and fast-forward to the latest remote `dev`:
+    ```bash
+    git -C repos/{repo-name} fetch origin dev
+    git -C repos/{repo-name} pull --ff-only origin dev
+    ```
+- Then check out the PR's head branch so the working tree reflects the PR under review:
+  ```bash
+  gh pr checkout {number} --repo tazama-lf/{repo-name}
+  ```
+  Run this from inside `repos/{repo-name}/`.
+- **Verify the checkout matches the PR's latest commit.** `gh pr checkout` can silently land on a stale local branch if one exists from a prior review or if the PR was force-pushed. Compare:
+  ```bash
+  git -C repos/{repo-name} rev-parse HEAD
+  gh pr view {number} --repo tazama-lf/{repo-name} --json headRefOid -q .headRefOid
+  ```
+  These SHAs must match. If they don't, delete the stale local branch and re-run `gh pr checkout`, or force-reset to the remote head. Do not proceed until they match.
+
+Only after the local repo is synced with `origin/dev` and the PR branch is checked out (with SHAs verified) may you proceed with the review. If any step fails (dirty working tree, diverged history, auth failure, PR branch conflicts), stop and report it — do not read stale code.
+
+**Source of truth once checked out.** After `gh pr checkout`, the working tree is authoritative for reading code. `gh pr diff` is a convenience for seeing the delta, but if it disagrees with the working tree (which can happen if the PR was updated between fetches), re-run the fetches and re-checkout — do not mix the two sources in a single review.
+
 If a security-relevant function is touched (auth guards, input handling, URL construction, HTML rendering), read enough surrounding code to understand the full data flow.
 
 ---
@@ -58,6 +104,17 @@ A PR may have one or more review rounds if the author pushed additional commits 
 - What was resolved or not resolved in the next push
 
 Use this to structure the file as one section per round (Initial Review, Follow-up Review, Final Review, etc.).
+
+**Handling force-pushed / rebased PRs.** If the author force-pushed and prior-round commit hashes no longer exist in the repo (`git cat-file -e {hash}` fails), do not silently produce broken commit citations. Instead:
+
+1. Fetch prior review activity from GitHub's API — reviews and inline comments remain accessible by review ID even after force-push:
+   ```bash
+   gh api repos/tazama-lf/{repo-name}/pulls/{number}/reviews
+   gh api repos/tazama-lf/{repo-name}/pulls/{number}/comments
+   ```
+2. In the follow-up section, note the force-push explicitly: `**Note:** Prior round reviewed commit `{old-hash}` which no longer exists after force-push on {date}. Prior findings reconstructed from GitHub review API.`
+3. Reconcile each prior finding against the new HEAD by content (file + function + concern) rather than by commit range. Cite the current HEAD SHA for the new evidence.
+4. If the rewrite is extensive enough that prior findings cannot be mapped, treat this round as a fresh review and note the reason.
 
 ---
 
@@ -150,6 +207,8 @@ Place the link after the section content and before the `---` separator.
 ### Overview
 
 One to three paragraphs. State plainly: what the PR does, what files it touches, what problem it solves. If the PR description contains useful context, summarise it here. If the PR bundles unrelated changes (e.g., a feature + test expansion + lockfile churn), identify each distinct concern.
+
+**Always state the base branch explicitly** (e.g. "Targets `dev` — correct for this repo's flow" or "Targets `main` — **flag as potential blocker**, this repo's PRs normally target `dev`"). Also note any failing CI checks recorded in Preflight.
 
 Include a file-change summary table:
 
@@ -248,6 +307,12 @@ If the core functional change has no test, call it out explicitly — do not sof
 ---
 
 ### CodeRabbit Activity (include only if CodeRabbit reviewed this PR)
+
+**Reconcile CodeRabbit findings against your own.** Before writing this section, cross-check every CodeRabbit finding against your "Issues and Observations" list. For each CodeRabbit finding:
+- If you also flagged it independently, note it as **corroborated** in both sections.
+- If CodeRabbit caught something you missed, add it to your Issues list at the appropriate severity — do not leave it only in the CodeRabbit section.
+- If you flagged something CodeRabbit missed, that's fine — do not remove it.
+- If you disagree with a CodeRabbit finding, state your reasoning explicitly. Do not silently omit it.
 
 One subsection per CodeRabbit pass. For each pass:
 
@@ -421,6 +486,8 @@ The Final Review section replaces the Summary and Verdict section from the initi
 
 **Back-to-top links are required.** Every `##` section must have one. Use them consistently.
 
-**Section separators.** Use a single `---` between sections within a review round. Use triple `---` between review rounds.
+**Section separators.** Use a single `---` between sections within a review round. Use triple `---` between review rounds (three `---` lines separated by blank lines, as shown in Section 6).
+
+**Back-to-top targets in multi-round files.** All back-to-top links point to the single H1 anchor at the very top of the file, regardless of which round the section belongs to. Do not create per-round back-to-top anchors — one file, one top.
 
 **Dates.** Use today's actual date for all review date fields (format: YYYY-MM-DD). Convert relative dates in PR comments to absolute dates before writing them.
