@@ -3,35 +3,51 @@
 **Repo:** tazama-lf/biar
 **Branch:** `fixes` → `dev`
 **Author:** hassanrizwan-paysys (Hassan Rizwan)
-**Date Reviewed:** 2026-07-09
-**Label:** bug
-**Size:** +1638 / −37794 lines across 16 files (net churn dominated by deleted notebook output cells and the removal of two obsolete dashboard notebooks)
-**Commits:** 9 (2a00fe7, 3632ff1, 942faf7, d2cc03d, c6731af, 6774f8b, d4bf427, b71bf10, 84b894c)
 **State:** OPEN
-**Existing approvals:** None. CodeRabbit has commented four times (2026-07-06 ×2, 2026-07-08, 2026-07-09) with nitpicks/minor findings; no human review yet.
-
----
+**Label:** bug
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [What Changed (Detailed)](#what-changed-detailed)
-  - [1. Account_HolderETL.py — credttm epoch-ms conversion](#1-account_holderetlpy--credttm-epoch-ms-conversion)
-  - [2. CommentsETL.py — created_at/updated_at epoch-ms conversion](#2-commentsetlpy--created_atupdated_at-epoch-ms-conversion)
-  - [3. TypologiesETL.py — permissive JSON parse, drop typology_name, getField access](#3-typologiesetlpy--permissive-json-parse-drop-typology_name-getfield-access)
-  - [4. alert_navigator.py — join bronze rules metadata into alerts_nav_rules](#4-alert_navigatorpy--join-bronze-rules-metadata-into-alerts_nav_rules)
-  - [5. lakehouse_query_api.py — path registry additions and typologies gold correction](#5-lakehouse_query_apipy--path-registry-additions-and-typologies-gold-correction)
-  - [6. Query.ipynb — tenant-scoped Hudi loader](#6-queryipynb--tenant-scoped-hudi-loader)
-  - [7. Lakehouse_Catalog.ipynb — inline documentation comments](#7-lakehouse_catalogipynb--inline-documentation-comments)
-  - [8. Dashboard notebooks — regen, tenant filters, deletions](#8-dashboard-notebooks--regen-tenant-filters-deletions)
-- [Code Quality Analysis](#code-quality-analysis)
-  - [Strengths](#strengths)
-  - [Issues and Observations](#issues-and-observations)
-- [Security Assessment](#security-assessment)
-- [Test Coverage](#test-coverage)
-- [CodeRabbit Activity](#coderabbit-activity)
-- [Summary and Verdict](#summary-and-verdict)
-- [GitHub Review Comment](#github-review-comment)
+- [Initial Review (2026-07-09)](#initial-review-2026-07-09)
+  - [Overview](#overview)
+  - [What Changed (Detailed)](#what-changed-detailed)
+    - [1. Account_HolderETL.py — credttm epoch-ms conversion](#1-account_holderetlpy--credttm-epoch-ms-conversion)
+    - [2. CommentsETL.py — created_at/updated_at epoch-ms conversion](#2-commentsetlpy--created_atupdated_at-epoch-ms-conversion)
+    - [3. TypologiesETL.py — permissive JSON parse, drop typology_name, getField access](#3-typologiesetlpy--permissive-json-parse-drop-typology_name-getfield-access)
+    - [4. alert_navigator.py — join bronze rules metadata into alerts_nav_rules](#4-alert_navigatorpy--join-bronze-rules-metadata-into-alerts_nav_rules)
+    - [5. lakehouse_query_api.py — path registry additions and typologies gold correction](#5-lakehouse_query_apipy--path-registry-additions-and-typologies-gold-correction)
+    - [6. Query.ipynb — tenant-scoped Hudi loader](#6-queryipynb--tenant-scoped-hudi-loader)
+    - [7. Lakehouse_Catalog.ipynb — inline documentation comments](#7-lakehouse_catalogipynb--inline-documentation-comments)
+    - [8. Dashboard notebooks — regen, tenant filters, deletions](#8-dashboard-notebooks--regen-tenant-filters-deletions)
+  - [Code Quality Analysis](#code-quality-analysis)
+    - [Strengths](#strengths)
+    - [Issues and Observations](#issues-and-observations)
+  - [Security Assessment](#security-assessment)
+  - [Test Coverage](#test-coverage)
+  - [CodeRabbit Activity](#coderabbit-activity)
+  - [Summary and Verdict](#summary-and-verdict)
+  - [GitHub Review Comment](#github-review-comment)
+- [Follow-up Review (2026-07-10)](#follow-up-review-2026-07-10)
+  - [Changes Requested — Resolution Status](#changes-requested--resolution-status)
+  - [New Changes in Updated Commits](#new-changes-in-updated-commits)
+  - [New Issues Found](#new-issues-found)
+  - [Resolution Summary Table](#resolution-summary-table)
+  - [Updated Verdict](#updated-verdict)
+  - [Updated GitHub Review Comment](#updated-github-review-comment)
+- [Final Review (2026-07-10)](#final-review-2026-07-10)
+  - [Follow-up Item Resolution](#follow-up-item-resolution)
+  - [Final Resolution Table](#final-resolution-table)
+  - [Final Verdict](#final-verdict)
+  - [Final GitHub Review Comment](#final-github-review-comment)
+
+---
+
+## Initial Review (2026-07-09)
+
+**Reviewed commit:** `84b894c86ff15fd703d4228deecf859ac0f952a2` (2026-07-09) — *"fix: fixed epoch ms conversion in comments for created at and updated at columns"*
+**Size at time of review:** +1638 / −37794 lines across 16 files (net churn dominated by deleted notebook output cells and the removal of two obsolete dashboard notebooks)
+**Commits reviewed:** 9 (`2a00fe7`, `3632ff1`, `942faf7`, `d2cc03d`, `c6731af`, `6774f8b`, `d4bf427`, `b71bf10`, `84b894c`)
+**Existing approvals:** None. CodeRabbit has commented four times (2026-07-06 ×2, 2026-07-08, 2026-07-09) with nitpicks/minor findings; no human review yet.
 
 ---
 
@@ -550,5 +566,485 @@ Pick one convention (prefix or suffix) so future entries are predictable.
 
 Please tick the boxes that apply and add a note about the two schema deltas (`gold/typologies` losing `typology_name`, `alerts_nav_rules` `pk` composition) in the description.
 ````
+
+[↑ Back to top](#pr-review-biar-107--fix-changes-in-notebooks)
+
+---
+---
+---
+
+## Follow-up Review (2026-07-10)
+
+**Reviewed commits:**
+- `278ea44b96e002bc4cd9bb89420129d992ba57bf` (2026-07-09 12:51 UTC) — *"fix: fixed naming convention in query api, fixed comment in comments etl and fixed typology name lineage"*
+- `4d00a0a6d1fa6d52abefdff857c3df0e422964f7` (2026-07-10 10:58 UTC) — *"fix: fixed parsing of datatype for tenant id column in tasks table from long to string, fixed alert navigator transaction status source for cms visualisation"*
+
+**Reviewed against:** Initial Review verdict of **Changes Requested** on commit `84b894c` (blocking items: `typology_name` dropped from Gold; `alerts_nav_rules` `pk` change).
+
+**Total commits on PR now:** 11 (added `278ea44`, `4d00a0a` since initial review)
+**Files touched by new commits:** `CommentsETL.py`, `TypologiesETL.py`, `datalakehouse-api/lakehouse_query_api.py`, `automation-orchestrator/Table_ETLs/TasksETL.py`, `automation-orchestrator/Table_ETLs/alert_navigator.py`
+**CodeRabbit activity since last review:** none new (auto-review paused).
+
+---
+
+### Changes Requested — Resolution Status
+
+#### Item 1 — `typology_name` silently dropped from `gold/typologies`
+
+**Status: RESOLVED**
+
+Commit `278ea44` restores `typology_name` in both the Silver `withColumn` chain and the Gold `select`, using the new `.getField(...)` access pattern that matches the rest of the file:
+
+```diff
+ .withColumn("typology_id_in_json",        F.col("typology_obj").getField("id"))
+ .withColumn("typology_cfg_in_json",       F.col("typology_obj").getField("cfg"))
++.withColumn("typology_name",              F.col("typology_obj").getField("typology_name").cast("string"))
+ .withColumn("flow_processor",             F.col("typology_obj").getField("workflow").getField("flowProcessor"))
+```
+
+```diff
+ F.col("typology_id_in_json").cast("string"),
+ F.col("typology_cfg_in_json").cast("string"),
++F.col("typology_name").cast("string"),
+ F.col("flow_processor").cast("string"),
+```
+
+The Gold schema again exposes `typology_name`, so any downstream consumer (CMS, `lakehouse_query_api`, ad-hoc queries) will continue to see the column. ✅
+
+#### Item 2 — `pk` composition changed on `alerts_nav_rules` — confirm rebuild behaviour
+
+**Status: RESOLVED (by explanation + deployment-note commitment)**
+
+Muneeb answered in [PR comment 4925249501](https://github.com/tazama-lf/biar/pull/107#issuecomment-4925249501) on 2026-07-09:
+
+> Confirmed. This change will not break the existing Hudi write path. `alerts_nav_rules` still writes to the same table/path, uses the same record key column name (`pk`), and `pk` remains a string hash, so the upsert can continue writing into the existing warehouse without requiring a new warehouse root.
+>
+> The only behavior change is record identity. Because `typology_cfg` and `rule_cfg` are now included in the hash inputs, rows already written with the previous `pk` composition will not be matched by future upserts. Hudi will treat the new hash as a new record key, so old and new logical rows may coexist if the existing `views/alert_navigator/rules_triggered` table is not rebuilt.
+>
+> So this is not a compatibility/write failure concern, but it is a data cleanup consideration. We can continue without a code change here, but I'll call out in the PR/deployment notes that existing environments should rebuild or clean `views/alert_navigator/rules_triggered` if they need to avoid duplicate logical rows from the key transition.
+
+That matches the analysis in the initial review and takes the item off the blocking list. Follow-up ask: ensure the deployment note actually lands (either in the PR description, the release notes, or an ops runbook) before merge.
+
+---
+
+### New Changes in Updated Commits
+
+#### A. `TypologiesETL.py` — `typology_name` restored via `.getField(...)` (commit `278ea44`)
+
+Covered under [Item 1](#item-1--typology_name-silently-dropped-from-goldtypologies) above.
+
+#### B. `CommentsETL.py` — inline comment corrected (commit `278ea44`)
+
+```diff
+-        # created_at / updated_at are stored as epoch microseconds
++        # created_at / updated_at are stored as epoch milliseconds
+         created_ts = F.to_timestamp((F.col("created_at").cast("double") / F.lit(1_000)))
+         updated_ts = F.to_timestamp((F.col("updated_at").cast("double") / F.lit(1_000)))
+```
+
+Addresses [Initial Review Issue 1](#issue-1--stale-inline-comment-in-commentsetlpy) and the CodeRabbit comment from 2026-07-09. ✅
+
+#### C. `lakehouse_query_api.py` — bronze alias naming normalised (commit `278ea44`)
+
+```diff
+-    "bronze_alerts":                      alerts_bronze_path,
+-    "rules_bronze":                       rules_bronze_path,
+-    "typologies_bronze":                  typologies_bronze_path,
++    "alerts_bronze":                   alerts_bronze_path,
++    "rules_bronze":                    rules_bronze_path,
++    "typologies_bronze":               typologies_bronze_path,
+```
+
+All three bronze aliases now use the `<name>_bronze` suffix pattern. Addresses [Initial Review Issue 5](#issue-5--inconsistent-bronze-alias-naming-in-gold_paths). ✅
+
+**Note:** since the `bronze_alerts` alias was only introduced in this same PR, there is no back-compat concern outside this branch. Any parallel work-in-progress on another branch that already imports `bronze_alerts` will need to rebase to `alerts_bronze`.
+
+#### D. `TasksETL.py` — `tenant_id` type change and Silver/Gold schema expansion (commit `4d00a0a`)
+
+Substantive changes:
+
+1. **`tenant_id` cast: `long` → `string`** in both Bronze and Silver:
+
+   ```diff
+   -.withColumn("tenant_id",            F.col("tenant_id").cast("long"))
+   +.withColumn("tenant_id",          F.col("tenant_id").cast("string"))
+   ```
+
+   The commit message says the source column is not integer-safe, hence the widening. **This is a Bronze/Silver/Gold schema break** for anyone who was already reading `tenant_id` as a bigint from `gold/tasks`. In practice this table is new-ish, but the change should be called out in the PR description.
+
+2. **`investigationNotes` column added** — new column plumbed through Bronze → Silver → Gold via `ensure_columns(..., {"investigationNotes": "string"})` at each stage. Correct pattern; matches how other optional columns are handled elsewhere in the file.
+
+3. **Silver explicit `select`** — an explicit column projection is added at the end of `silver()` that pins the output schema (`assigned_user_id`, `candidateGroup`, `candidate_group_norm`, `case_id`, `completed_at`, `completed_at_ms`, `created_at`, `created_at_ms`, `description`, `investigationNotes`, ...). Prevents column drift on Hudi upserts; positive change.
+
+4. **`_PACS008_COLS` module-level constant removed**, along with the `gold()` calls that used it to synthesise pacs008-style columns and the `tx_tenant_id` / `event_ts` coalesce block:
+
+   ```diff
+   -_PACS008_COLS = {
+   -    "tx_tenant_id": "string",
+   -    "dc_cdtr_id": "string",
+   -    ...
+   -    "event_ts": "timestamp",
+   -}
+   ...
+   -    s = self.ensure_columns(s, _PACS008_COLS)
+   -    s = s.withColumn("tx_tenant_id", F.coalesce(F.col("tx_tenant_id"), F.col("tenant_id").cast("string")))
+   -    if "event_ts" in s.columns and "creation_dt_tm" in s.columns:
+   -        s = s.withColumn("event_ts", F.coalesce(F.col("event_ts"), F.col("creation_dt_tm")))
+   ```
+
+   The pacs008 synthesis was joining Tasks with a pacs008-shaped payload — dead code for Tasks (which is not a payment message). Removal is correct in principle; if any downstream consumer of `gold/tasks` was reading `tx_tenant_id`, `dc_cdtr_id`, etc., it will now see missing columns.
+
+5. **Gold `select` significantly expanded** — from ~20 columns to ~35, adding `assigned_user_id`, `candidateGroup`, `tenant_id`, `completed_at`, `created_at`, `updated_at`, `description`, `investigationNotes`, `name`, `sla_deadline`, `status`, `status_norm`, `task_type_norm`, `created_at_ms`, `updated_at_ms`, `completed_at_ms`, `sla_deadline_ms`, `task_updated_date`, `task_completed_date`, and reorders `ingested_at_ts`.
+
+   Also note: `status_norm` is now emitted **in addition to** `status` — previously `status_norm` was aliased to `status` in the projection. If any consumer was reading `gold/tasks.status` expecting the normalised value, this is a breaking change:
+
+   ```diff
+   -F.col("status_norm").cast("string").alias("status"),
+   +F.col("status").cast("string").alias("status"),
+   +...
+   +F.col("status_norm").cast("string").alias("status_norm"),
+   ```
+
+   Same shift applies to `candidate_group` — the old projection aliased `candidate_group_norm → candidate_group`; the new projection keeps that alias but *also* re-emits `candidateGroup` (the raw source name). Both the raw and the normalised form are now exposed. Non-breaking for readers of `candidate_group`, but the schema roughly doubles for these fields.
+
+6. **Trailing newline added** — file now ends with a newline. ✅
+
+**Verdict on TasksETL:** the changes are directionally reasonable, but the `tenant_id` type change (long → string) and the `status` semantics change (was normalised, now raw) are undocumented schema breaks that should at minimum be listed in the PR description. If the case-management-system reads `gold/tasks`, coordination is warranted.
+
+#### E. `alert_navigator.py` — transaction status source reworked (commit `4d00a0a`)
+
+The `_build_header` transaction enrichment used a pacs002 → pacs008 bridge on `end_to_end_id`. The new version drops that structure entirely and instead:
+
+1. **Reads the transactions Gold table using Ozone column aliases** (`_safe_load` `select_expr` argument now uses `F.col(...).alias(...)` instead of bare column names):
+
+   ```diff
+   -                "tx_msg_id",
+   -                "tx_status",
+   -                "tx_amount",
+   -                "tx_ccy",
+   -                "transaction_id",
+   -                "end_to_end_id",
+   +                F.col("msgid").cast("string").alias("tx_msg_id"),
+   +                F.col("txsts").cast("string").alias("tx_status"),
+   +                F.col("amt").cast("double").alias("tx_amount"),
+   +                F.col("ccy").cast("string").alias("tx_ccy"),
+   +                F.col("txtp").cast("string").alias("tx_type"),
+   +                F.col("transaction_id").cast("string").alias("transaction_id"),
+   +                F.col("endtoendid").cast("string").alias("end_to_end_id"),
+   ```
+
+   **This is the substantive fix.** The previous code assumed the transactions Gold table exposed `tx_msg_id`, `tx_status`, `tx_amount`, `tx_ccy`, `end_to_end_id` under those names. In reality the Ozone-produced table uses the ISO20022 short names (`msgid`, `txsts`, `amt`, `ccy`, `txtp`, `endtoendid`). Under the old code, `_safe_load` would raise or return an empty projection and the join would silently drop transaction status/amount for every alert — matching the "fix alert navigator transaction status source for CMS visualisation" commit description.
+
+2. **Bridge helper rewritten.** The old two-step `pacs002 (no amount) → pacs008 (with amount) via end_to_end_id` bridge is replaced with:
+
+   - `tx_by_msg` — one row per `tx_msg_id` from any transaction (deduped), carrying status/amount/currency/end_to_end/transaction_id.
+   - `tx_by_e2e` — restricted to pacs.008 / pain.001 or any row with a non-null amount, deduped by `end_to_end_id`, providing amount/currency enrichment when the alert-triggering message lacked them.
+
+   The header receives both, coalescing `msg_*` (from the alert's own message) with `e2e_*` (from the linked settlement message):
+
+   ```python
+   .withColumn("_payment_bridge_e2e", F.coalesce(F.col("_payment_bridge_e2e"), F.col("msg_end_to_end_id")))
+   .join(tx_by_e2e, F.col("_payment_bridge_e2e") == F.col("lookup_end_to_end_id"), "left")
+   .withColumn("transaction_status", F.col("msg_tx_status"))
+   .withColumn("transaction_id",     F.coalesce(F.col("msg_transaction_id"), F.col("e2e_transaction_id")))
+   .withColumn("transaction_amount", F.coalesce(F.col("msg_tx_amount"),     F.col("e2e_tx_amount")))
+   .withColumn("transaction_currency", F.coalesce(F.col("msg_tx_ccy"),       F.col("e2e_tx_ccy")))
+   ```
+
+   And introduces `_payment_bridge_e2e` (an alert-side `tx_original_e2e_id` trimmed) as a *third* join key that lets the alert directly point at a settlement message when it exposes an original E2E ID.
+
+   The intermediate columns are all dropped before return. ✅
+
+3. **`transaction_status` now sourced from the alert's own message row** (`msg_tx_status`) rather than from the pacs008 settlement. This is a **semantic shift**:
+   - Before: status came from whichever pacs008 row matched by `end_to_end_id` (settlement outcome).
+   - After: status comes from the same message that triggered the alert (typically pacs002 with `txsts` set by Ozone).
+
+   Per the commit description this is intentional ("fixed alert navigator transaction status source"). It aligns the CMS-facing status with the exact transaction the analyst is looking at.
+
+**Correctness observations on the reworked bridge:**
+
+- `_payment_bridge_e2e` is a temporary column that is dropped by `.drop("_payment_bridge_e2e", ...)` at the end of the enrichment; but the outer `_build_header` also ends with `return header.drop("_payment_bridge_e2e")`. The second drop is a defensive no-op if `g_tx is not None`; if `g_tx is None`, `_payment_bridge_e2e` is still on the header from the initial `select`, so the outer drop actually matters. Correct handling.
+- `tx_by_e2e` filter `(F.col("tx_type").isin("pacs.008.001.10", "pain.001.001.11")) | F.col("tx_amount").isNotNull()` may double-count if a pacs.002 with a nonzero amount happens to exist — deduplicated by `end_to_end_id` afterwards, so at most one row per E2E survives. Fine.
+- The pacs.008 / pain.001 message-type strings are ISO version-suffixed literals — if Ozone bumps versions (`pacs.008.001.11`, etc.) the filter needs updating. Not blocking, but worth extracting to a module constant.
+
+[↑ Back to top](#pr-review-biar-107--fix-changes-in-notebooks)
+
+---
+
+### New Issues Found
+
+#### Issue F1 — `TasksETL.gold/tasks` schema breaks (`tenant_id` type, `status` semantics)
+
+**Severity: Major (Breaking Change Risk)**
+
+Two undocumented schema deltas in `automation-orchestrator/Table_ETLs/TasksETL.py`:
+
+1. `tenant_id` was cast to `long` in the previous Bronze/Silver and is now cast to `string`. Any Hudi consumer that already materialised a bigint column will now see a schema mismatch on the next upsert (Hudi allows some string ↔ bigint promotions in strict schema-evolution modes, but not by default).
+2. `gold/tasks.status` used to alias `status_norm` (normalised, upper-cased). It now aliases the raw `status`, and `status_norm` is exposed as a *separate* column. Any consumer filtering `WHERE status = 'OPEN'` (uppercase) will start missing rows if the raw form is `'open'`.
+
+**Fix:** either revert the `status` alias to `status_norm` (and rename the new raw column, e.g. `status_raw`), or explicitly list both schema changes in the PR description so downstream owners can adapt.
+
+#### Issue F2 — Hard-coded ISO message-type literals in alert_navigator `tx_by_e2e` filter
+
+**Severity: Informational (Maintainability)**
+
+```python
+tx_by_e2e = g_tx.filter(
+    (F.col("tx_type").isin("pacs.008.001.10", "pain.001.001.11"))
+    | F.col("tx_amount").isNotNull()
+).select(...)
+```
+
+Version-suffixed message-type literals inline in the ETL. If Ozone ever emits `pacs.008.001.11` or `pain.001.001.12`, the filter silently misses those rows and falls back to the `tx_amount IS NOT NULL` branch. Not urgent, but worth extracting to a module-level constant (`PAYMENT_MSG_TYPES = {...}`) for future upkeep.
+
+#### Issue F3 — TasksETL `investigationNotes` column plumbed but never referenced downstream in this PR
+
+**Severity: Informational**
+
+The `investigationNotes` column is added at Bronze, Silver, and Gold, but nothing in `biar` reads it (grep finds only the new lines). Presumably the CMS or a future dashboard will consume it — worth a one-line note in the PR description confirming the downstream owner.
+
+[↑ Back to top](#pr-review-biar-107--fix-changes-in-notebooks)
+
+---
+
+### Resolution Summary Table
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | `typology_name` silently dropped from `gold/typologies` | ✅ Resolved (`278ea44` restored the column via `.getField(...)`) |
+| 2 | `alerts_nav_rules` `pk` change — confirm rebuild vs upsert | ✅ Resolved (author confirmed in [comment 4925249501](https://github.com/tazama-lf/biar/pull/107#issuecomment-4925249501): no code change needed; deployment note to be added) |
+| 3 | Stale `epoch microseconds` comment in `CommentsETL.py` | ✅ Resolved (`278ea44`) |
+| 4 | `TENANT_FILTER_VALUE` hard-coded across notebooks | ➖ Declined by author — "proxy for true multi tenancy... changeable for each user/tenant". Treated as intentional. |
+| 5 | Inconsistent bronze alias naming in `GOLD_PATHS` | ✅ Resolved (`278ea44` — all now `<name>_bronze`) |
+| 6 | Whitespace churn in `TypologiesETL.py` | ➖ Informational; unchanged |
+| 7 | Extra JSON columns on `alerts_nav_rules` view without doc | ➖ Declined by author — "Payloads are intentional". Documented. |
+| 8 | PR checklist / description schema notes | ❌ Not resolved (and now more schema deltas landed: TasksETL `tenant_id` type + `status` semantics) |
+| **F1** | `TasksETL.gold/tasks` `tenant_id` type change and `status` alias shift | 🆕 New — Major |
+| **F2** | Hard-coded ISO message-type literals in alert_navigator | 🆕 New — Informational |
+| **F3** | `investigationNotes` plumbed without documented consumer | 🆕 New — Informational |
+
+[↑ Back to top](#pr-review-biar-107--fix-changes-in-notebooks)
+
+---
+
+### Updated Verdict
+
+**Verdict: Changes Requested**
+
+The author's [reply on 2026-07-09](https://github.com/tazama-lf/biar/pull/107#issuecomment-4925249501) resolves all prior blocking and non-blocking items: `typology_name` was restored, the `CommentsETL` comment was fixed, bronze aliases were normalised, the `alerts_nav_rules` `pk` question was answered with a commitment to a deployment note, and the `TENANT_FILTER_VALUE` and extra JSON payload asks were explicitly declined as intentional. The follow-up alert-navigator transaction-status rework in `4d00a0a` also fixes a genuine bug (the previous code was reading non-existent column names from the transactions Gold table, so status/amount were silently null on every alert), and the TasksETL Silver `select` pinning and pacs008 dead-code removal are welcome.
+
+One new blocking-class item was introduced by the TasksETL rework in `4d00a0a` and is unaddressed:
+
+#### Blocking
+
+1. **`gold/tasks` schema breaks in commit `4d00a0a`** — `tenant_id` widens from `long` to `string`; the Gold `status` column is no longer the normalised form (that moved to `status_norm`, and `status` now aliases the raw value). Downstream consumers may break. Either revert the `status` alias (and rename the raw column, e.g. `status_raw`) or document both deltas in the PR description. See [Issue F1](#issue-f1--tasksetlgoldtasks-schema-breaks-tenant_id-type-status-semantics).
+
+#### Non-blocking but recommended
+
+2. Land the promised deployment note about rebuilding / cleaning `views/alert_navigator/rules_triggered` in the PR description or release notes, per the author's commitment in [comment 4925249501](https://github.com/tazama-lf/biar/pull/107#issuecomment-4925249501). See [Item 2](#item-2--pk-composition-changed-on-alerts_nav_rules--confirm-rebuild-behaviour).
+3. Extract the ISO message-type literals in `alert_navigator._build_transaction_status` to a module constant. See [Issue F2](#issue-f2--hard-coded-iso-message-type-literals-in-alert_navigator-tx_by_e2e-filter).
+4. Note the intended downstream consumer of the new `investigationNotes` column in the PR description. See [Issue F3](#issue-f3--tasksetl-investigationnotes-column-plumbed-but-never-referenced-downstream-in-this-pr).
+5. Complete the PR checklist and add a short "Schema changes" section covering the deltas that landed in this PR (Gold `tasks.tenant_id` type + `status` semantics; `alerts_nav_rules.pk` widening + intentional JSON payload columns; `alerts_nav_rules` cleanup guidance).
+
+[↑ Back to top](#pr-review-biar-107--fix-changes-in-notebooks)
+
+---
+
+### Updated GitHub Review Comment
+
+`````markdown
+**Changes Requested (follow-up on commits `278ea44` + `4d00a0a`)**
+
+Thanks for the fixes and the detailed reply — the `typology_name` restore, `CommentsETL` comment, bronze alias normalisation, and the deployment-note commitment for `alerts_nav_rules` cleanup all resolve the prior blockers. The alert-navigator transaction-status rework in `4d00a0a` also fixes a real bug (the previous code was reading non-existent column names from the transactions Gold table). One new schema break in the same commit needs attention.
+
+---
+
+### Blocking
+
+**1. `gold/tasks` schema break in commit `4d00a0a` — `tenant_id` type and `status` semantics**
+
+Two undocumented deltas in `automation-orchestrator/Table_ETLs/TasksETL.py`:
+
+- `tenant_id` cast changed from `long` to `string` at Bronze, Silver, and Gold. Any consumer already reading it as a bigint will see a schema mismatch on the next upsert.
+- The Gold `status` column used to alias `status_norm` (normalised/upper-case); it now aliases the raw `status`, with `status_norm` exposed as a separate column:
+
+```diff
+-F.col("status_norm").cast("string").alias("status"),
++F.col("status").cast("string").alias("status"),
++F.col("status_norm").cast("string").alias("status_norm"),
+```
+
+Any consumer filtering `WHERE status = 'OPEN'` may miss rows if the raw form is `'open'`. Either revert the `status` alias to `status_norm` (and give the raw column a different name like `status_raw`) or list both changes in the PR description so the CMS / query-API owners can adapt.
+
+---
+
+### Non-blocking (please address in this PR if possible)
+
+**2. Land the `alerts_nav_rules` cleanup / deployment note**
+
+Per your reply on 2026-07-09, please add the promised note to the PR description (or release notes) so operators of existing environments know to rebuild or clean `views/alert_navigator/rules_triggered` after the `pk` change to avoid duplicate logical rows.
+
+**3. Extract ISO message-type literals in `alert_navigator`**
+
+```python
+tx_by_e2e = g_tx.filter(
+    (F.col("tx_type").isin("pacs.008.001.10", "pain.001.001.11"))
+    | F.col("tx_amount").isNotNull()
+).select(...)
+```
+
+If Ozone bumps message-type versions, the filter silently misses matches. A module-level constant (`PAYMENT_MSG_TYPES = {"pacs.008.001.10", "pain.001.001.11"}`) makes future upkeep easier.
+
+**4. Note the downstream consumer of `investigationNotes`**
+
+`TasksETL` now emits `investigationNotes` end-to-end; no biar code reads it. A one-liner in the PR description confirming which service consumes it will save the next reviewer a grep.
+
+**5. Complete the PR checklist**
+
+Please tick the applicable boxes and add a short "Schema changes" section to the description listing: `gold/tasks.tenant_id` (long → string) and `gold/tasks.status` (normalised → raw, plus new `status_norm`); `alerts_nav_rules.pk` widened + intentional JSON payload columns; `alerts_nav_rules` cleanup guidance for existing envs.
+`````
+
+[↑ Back to top](#pr-review-biar-107--fix-changes-in-notebooks)
+
+---
+---
+---
+
+## Final Review (2026-07-10)
+
+**Reviewed commit:** `ef519dfb3f48b5a29d0e0284c6986e3d10e969a7` (2026-07-10 14:05 UTC) — *"fix: fixed status column naming in gold tasks as per change request"*
+**Reviewed against:** CHANGES_REQUESTED on commit `4d00a0a` (blocker F1: `gold/tasks.status` semantics + `tenant_id` type).
+**Developer response:** [PR comment 4936149760](https://github.com/tazama-lf/biar/pull/107#issuecomment-4936149760) (2026-07-10 14:05:03Z) — Muneeb agreed on the `status` compatibility concern, pushed a code fix, confirmed the `tenant_id` string change is intentional and will be documented in the deployment notes, and committed to landing release/deployment notes for the `alerts_nav_rules` cleanup, the `investigationNotes` downstream consumer, and the ISO message-type follow-up:
+
+> Thanks, agreed on the `gold/tasks.status` compatibility concern.
+>
+> I've updated `TasksETL` so `gold/tasks.status` again aliases the normalized `status_norm` value, preserving the previous consumer contract for filters such as `status = 'OPEN'`. The raw source value is now exposed separately as `status_raw`.
+>
+> I'm leaving the `tenant_id` string change as-is because it matches the incoming Ozone task payload shape, but I'll call it out in the PR / deployment notes so existing environments know this may require a table rebuild or metadata cleanup if they already have bigint Hudi schema history.
+>
+> I'll also add the release/deployment notes for:
+> - rebuilding or cleaning `views/alert_navigator/rules_triggered` after the `pk` change,
+> - the `investigationNotes` downstream consumer note,
+> - and the ISO message-type literal follow-up in `alert_navigator`.
+
+**Total commits on PR now:** 12 (added `ef519df` since follow-up review)
+
+---
+
+### Follow-up Item Resolution
+
+#### Item F1 — `gold/tasks` schema breaks (`tenant_id` type, `status` semantics)
+
+**Status: RESOLVED**
+
+Commit `ef519df` addresses the `status` half of the concern directly:
+
+```diff
+-F.col("status").cast("string").alias("status"),
++F.col("status_norm").cast("string").alias("status"),
++F.col("status").cast("string").alias("status_raw"),
+```
+
+Verified against `pr-107` head at `automation-orchestrator/Table_ETLs/TasksETL.py:270-271`:
+
+```python
+F.col("status_norm").cast("string").alias("status"),
+F.col("status").cast("string").alias("status_raw"),
+...
+F.col("status_norm").cast("string").alias("status_norm"),
+```
+
+Downstream consumers filtering `WHERE status = 'OPEN'` continue to see the normalised value; the raw source value is preserved under `status_raw`; and `status_norm` is still exposed as a separate column (a mild redundancy — `status` and `status_norm` are now identical projections — but not a break; both may be dropped in a later cleanup). ✅
+
+For the `tenant_id` half, the author accepts the change as intentional (source shape is a string in the Ozone payload) and commits to a deployment note. This matches the "declined-as-intentional with docs" resolution pattern in `pull-requests.md` §6.1, item 3. ✅
+
+#### Item 2 (from follow-up) — Deployment note for `alerts_nav_rules` cleanup
+
+**Status: COMMITTED — pending landing**
+
+Muneeb's reply commits to adding the deployment note alongside the other release notes. This is a documentation-only follow-up and is on the ops-notes / release-notes lane rather than the code lane; not blocking.
+
+#### Item F2 — ISO message-type literal extraction
+
+**Status: COMMITTED as follow-up**
+
+Muneeb commits to a release-note callout for the ISO literal follow-up in `alert_navigator`. Treating as accepted follow-up. Not blocking.
+
+#### Item F3 — `investigationNotes` downstream consumer
+
+**Status: COMMITTED — pending landing in release notes**
+
+Muneeb commits to a downstream-consumer note. Not blocking.
+
+[↑ Back to top](#pr-review-biar-107--fix-changes-in-notebooks)
+
+---
+
+### Final Resolution Table
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | `typology_name` silently dropped from `gold/typologies` | ✅ Resolved (`278ea44`) |
+| 2 | `alerts_nav_rules` `pk` change — confirm rebuild vs upsert | ✅ Resolved by explanation ([comment 4925249501](https://github.com/tazama-lf/biar/pull/107#issuecomment-4925249501)); deployment note committed |
+| 3 | Stale `epoch microseconds` comment in `CommentsETL.py` | ✅ Resolved (`278ea44`) |
+| 4 | `TENANT_FILTER_VALUE` hard-coded across notebooks | ➖ Declined as intentional ([comment 4925249501](https://github.com/tazama-lf/biar/pull/107#issuecomment-4925249501)) |
+| 5 | Inconsistent bronze alias naming in `GOLD_PATHS` | ✅ Resolved (`278ea44`) |
+| 6 | Whitespace churn in `TypologiesETL.py` | ➖ Informational; unchanged |
+| 7 | Extra JSON columns on `alerts_nav_rules` view without doc | ➖ Declined as intentional ([comment 4925249501](https://github.com/tazama-lf/biar/pull/107#issuecomment-4925249501)) |
+| 8 | PR checklist / description schema notes | ⚠️ Author committed to release notes ([comment 4936149760](https://github.com/tazama-lf/biar/pull/107#issuecomment-4936149760)); still pending landing |
+| F1 | `TasksETL.gold/tasks` `tenant_id` type change and `status` alias shift | ✅ Resolved (`ef519df` for `status`; `tenant_id` accepted as intentional with committed deployment note) |
+| F2 | Hard-coded ISO message-type literals in `alert_navigator` | ⚠️ Follow-up committed in release notes; code left as-is (intentional) |
+| F3 | `investigationNotes` plumbed without documented consumer | ⚠️ Committed to release notes ([comment 4936149760](https://github.com/tazama-lf/biar/pull/107#issuecomment-4936149760)) |
+
+[↑ Back to top](#pr-review-biar-107--fix-changes-in-notebooks)
+
+---
+
+### Final Verdict
+
+**Verdict: Approve with minor cleanup requested**
+
+All code-level blockers are resolved. The `gold/tasks.status` regression is fixed cleanly by aliasing `status_norm → status` and exposing the raw value as `status_raw`. The remaining open items are all documentation asks the author has explicitly committed to landing in the PR/deployment notes:
+
+- `alerts_nav_rules` cleanup guidance for existing environments (from the `pk` widening),
+- `gold/tasks.tenant_id` long→string change,
+- `investigationNotes` downstream-consumer note,
+- ISO message-type literal follow-up in `alert_navigator._build_transaction_status`.
+
+None of these should block merge, but they should land in this PR's description / release notes (or a linked ops runbook) so downstream owners have a single place to check. There is also a mild redundancy in `TasksETL.gold()` — `status` and `status_norm` are now identical projections — worth a one-liner cleanup in a later PR but not this one's problem.
+
+#### Blocking
+
+None.
+
+#### Non-blocking (please address before merge — documentation only)
+
+1. Land the four release/deployment notes Muneeb committed to in [comment 4936149760](https://github.com/tazama-lf/biar/pull/107#issuecomment-4936149760).
+2. Complete the PR checklist boxes that apply.
+
+Optional follow-up cleanup (future PR): drop the redundant `status_norm` alias from `gold/tasks` since `status` now already exposes the same value.
+
+[↑ Back to top](#pr-review-biar-107--fix-changes-in-notebooks)
+
+---
+
+### Final GitHub Review Comment
+
+`````markdown
+**Approve with minor cleanup requested**
+
+Thanks — `ef519df` cleanly resolves the `gold/tasks.status` regression by aliasing `status_norm → status` and exposing the raw value as `status_raw`. Combined with your earlier fixes (`typology_name` restore, bronze alias normalisation, `CommentsETL` comment) and the explanations for the `alerts_nav_rules` `pk` and `TENANT_FILTER_VALUE` items, there are no code-level blockers left.
+
+Please land the release/deployment notes you committed to in [your reply](https://github.com/tazama-lf/biar/pull/107#issuecomment-4936149760) before merge — they cover:
+
+- rebuilding or cleaning `views/alert_navigator/rules_triggered` after the `pk` change,
+- the `gold/tasks.tenant_id` long → string change,
+- the `investigationNotes` downstream consumer,
+- and the ISO message-type literal follow-up in `alert_navigator`.
+
+Also please tick the applicable checkboxes on the PR checklist.
+
+Optional follow-up (later PR): `gold/tasks.status` and `gold/tasks.status_norm` now project the same value — the `status_norm` alias can be dropped in a cleanup pass.
+`````
 
 [↑ Back to top](#pr-review-biar-107--fix-changes-in-notebooks)
