@@ -1,23 +1,24 @@
 # Testing Report
 
-## Case Management System — Investigation Model & SLA/Priority Overhaul
+## Case Management System — Investigation Model, SLA/Priority Overhaul & BIAR Alert Enrichment
 
 **Prepared for:** Product Owner
 **Date:** 13 July 2026
-**Development scope:** paysys-pmo tracker issues **#814** and **#823**
+**Development scope:** paysys-pmo tracker issues **#814** and **#823**, plus BIAR alert-enrichment work
 **Underlying CMS issues:** [CMS #214](https://github.com/tazama-lf/case-management-system/issues/214), [CMS #220](https://github.com/tazama-lf/case-management-system/issues/220)
-**Implementation:** [CMS PR #233](https://github.com/tazama-lf/case-management-system/pull/233), [CMS PR #234](https://github.com/tazama-lf/case-management-system/pull/234), [CMS PR #240](https://github.com/tazama-lf/case-management-system/pull/240), [BIAR PR #118](https://github.com/tazama-lf/biar/pull/118)
+**Implementation:** [CMS PR #233](https://github.com/tazama-lf/case-management-system/pull/233), [CMS PR #234](https://github.com/tazama-lf/case-management-system/pull/234), [CMS PR #240](https://github.com/tazama-lf/case-management-system/pull/240), [BIAR PR #107](https://github.com/tazama-lf/biar/pull/107), [BIAR PR #118](https://github.com/tazama-lf/biar/pull/118)
 
 ---
 
 ## 1. Executive Summary
 
-This report defines the **User Acceptance Testing (UAT)** scope for two significant improvements to the Case Management System (CMS) that were developed in parallel and are being released together. Both changes are visible in the CMS web application and, downstream, in the BIAR data-lakehouse dashboards.
+This report defines the **User Acceptance Testing (UAT)** scope for three related improvements to the Case Management System (CMS) that were developed in parallel and are being released together. All three are visible in the CMS web application and, downstream, in the BIAR data-lakehouse dashboards.
 
 | Track | Business Problem | What Changed |
 |-------|------------------|--------------|
 | **Track A — Investigation Modelling** (paysys-pmo #814 / CMS #214) | A single FRAUD_AND_AML alert generated **three** cases in the system — one synthetic "container" plus one FRAUD and one AML investigation — causing triple-counted reports, permission bypass, an unnatural "Completed" status, and forced supervisor closures. | The container case has been removed. A FRAUD_AND_AML alert now creates **exactly two cases** (FRAUD and AML), each with its own owner, its own lifecycle, and standard permissions. Reports and totals reconcile correctly. |
 | **Track B — SLA / Priority Split** (paysys-pmo #823 / CMS #220) | A single `Priority` field was being silently overwritten every hour by a background job based on case age. Supervisors' manual escalations were reverted within an hour. Priority meant "how old", not "how serious." | Priority (severity) and SLA state (timing) are now two independent, orthogonal fields. Priority is stable (LOW / MEDIUM / HIGH) and only changed via an audited supervisor action. A new SLA State (ON_TRACK / AT_RISK / DUE_SOON / BREACHED) is derived live from the case's deadline. |
+| **Track C — BIAR Alert Enrichment** (BIAR PR #107) | Alert visualisations in the CMS did not expose the **sub-rule references**, **band information**, or **exit-condition reasons** behind an alert. Investigators had to guess *why* a rule fired. Investigation notes captured on tasks did not flow to the downstream data lakehouse, and the Alert Navigator lineage for transaction status / ID / amount was inconsistent. | Alert visualisations now display **band, exit-condition reasons, and sub-rule references** for each rule on the alert. **Investigation notes** are now carried end-to-end into the lakehouse for downstream analytics. **Alert Navigator** transaction lineage (status, ID, amount, currency) now enriches correctly from the current transactions Gold schema. |
 
 **Overall status of the tracks**
 
@@ -25,6 +26,7 @@ This report defines the **User Acceptance Testing (UAT)** scope for two signific
 |-------|--------------------:|-------------|
 | paysys-pmo #814 (CMS #214) | 8 / 9 | Only the external Tazama review sub-issue (#834) is open — no development pending. |
 | paysys-pmo #823 (CMS #220) | 9 / 10 | Only the external Tazama review sub-issue (#833) is open — no development pending. |
+| BIAR Alert Enrichment (BIAR PR #107) | Merged | No sub-issue tracker — delivered as a single BIAR change. |
 
 The system is therefore ready for Product Owner acceptance testing against the criteria in this document.
 
@@ -73,6 +75,18 @@ The consequences were serious:
 | **SLA State** | Timing — where we are against the deadline | On Track / At Risk / Due Soon / Breached | Derived live from `now` vs the case's deadline. | Not stored — computed at read time so it can never be stale. |
 
 Priority calibrates the SLA clock: HIGH = 24-hour target, MEDIUM = 72-hour, LOW = 168-hour (tenant-configurable). If a supervisor bumps priority mid-investigation, the deadline is re-anchored on the case's **original creation date** — an old case cannot be gamed into "on track" by lowering its priority.
+
+### 2.3 Track C — Why alert enrichment matters
+
+Investigators reviewing an alert previously saw *that* a rule fired but not the finer detail behind it. Specifically:
+
+- **Sub-rule references** — a rule can trigger for several underlying reasons (sub-rules). Without seeing which sub-rule fired, the investigator has to reconstruct the "why" manually.
+- **Band** — the band captures the qualitative bucket of the rule's evaluation. It gives the investigator a quick "how bad" indicator per rule, independent of the raw score.
+- **Exit-condition reasons** — the natural-language rationale for why the rule stopped where it did. Essential for evidence packs and audit review.
+- **Investigation notes** — investigators capture notes on tasks during a case. Previously these did not travel into the BIAR lakehouse, so downstream analytics and management dashboards could not surface investigator context.
+- **Alert Navigator transaction lineage** — the Alert Navigator view is used to trace an alert back to the underlying transaction (status, ID, amount, currency). Previously this enrichment was inconsistent because it drew from the wrong Gold-schema fields.
+
+**After this release:** all three enrichments (band, exit-condition reasons, sub-rule references) appear on the alert visualisations that back the CMS alert view; investigation notes flow to the lakehouse for downstream reporting; and Alert Navigator lineage is accurate against the current transactions Gold schema.
 
 ---
 
@@ -159,6 +173,34 @@ The following acceptance criteria define what must be true for the Product Owner
 **B9. Performance**
 - SLA cron job completes within **60 seconds** for a caseload of 10,000 open cases (system-observable, not directly UI-visible).
 
+### 3.3 Track C — BIAR Alert Enrichment
+
+**C1. Sub-rule references on the alert view**
+- On any alert whose rules have sub-rules, the alert detail view (or the alert visualisation the investigator uses) displays a **sub-rule reference** for each firing rule.
+- Alerts whose rules have no sub-rules render cleanly with the field simply absent (no error, no empty placeholder that misleads).
+
+**C2. Band displayed per rule**
+- Each firing rule on an alert exposes its **band** value.
+- The band value is displayed in a way that a non-technical investigator can interpret (a label or a colour-coded chip, matching the way other rule attributes are shown).
+
+**C3. Exit-condition reason displayed per rule**
+- Each firing rule on an alert exposes its **exit-condition reason** as human-readable text.
+- The reason text appears alongside the rule outcome and remains visible when the investigator scrolls through multiple rules on the same alert.
+
+**C4. Investigation notes flow to lakehouse**
+- Investigation notes entered on a task in the CMS are captured in the lakehouse `investigationNotes` field on the corresponding task record.
+- Editing an existing note in the CMS results in the updated content appearing on the next lakehouse refresh cycle.
+- Notes are preserved end-to-end without truncation (subject to any documented length limits).
+
+**C5. Alert Navigator transaction lineage is accurate**
+- Opening the Alert Navigator (or the CMS view backed by it) for any alert shows the correct **transaction status**, **transaction ID**, **transaction amount**, and **transaction currency** for the underlying transaction.
+- These fields match what is recorded on the transaction itself (they no longer draw from a stale or wrong source).
+- Instructing / instructed agent details continue to populate as before.
+
+**C6. Backward compatibility**
+- `gold/tasks.status` continues to expose the **normalised upper-case** status (backward compatibility with existing dashboards).
+- The raw source status is available separately as `status_raw` — dashboards depending on either value continue to work.
+
 ---
 
 ## 4. Test Environment & Preparation
@@ -176,6 +218,8 @@ Before executing the tests below, the tester should:
    - At least two existing FRAUD cases and two AML cases already open.
    - One existing case pre-populated with **Priority = HIGH** and an SLA deadline within 2 hours (to observe SLA state transitions in real time).
    - A historical alert / case created before this release, to verify migrated priority values (old NEW/URGENT/CRITICAL/BREACH values should now show as LOW/MEDIUM/HIGH per migration).
+   - **At least one alert triggered by a rule that carries sub-rules, band, and exit-condition reasons** (for Track C — sub-rule reference, band, and exit-condition reason display).
+   - **At least one task on an existing case with an investigation note already recorded** (for Track C — lakehouse propagation check).
 4. **BIAR dashboards** (optional cross-service check): access to the BIAR dashboard for confirming lakehouse-side counts. This is not the Product Owner's primary responsibility but is available for cross-verification.
 
 ---
@@ -418,6 +462,82 @@ If the tester has access to the BIAR dashboard:
 
 ---
 
+### Scenario 13 — Sub-rule references, band, and exit-condition reasons are visible on the alert
+
+**Acceptance criteria covered:** C1, C2, C3
+
+1. Sign in as **Investigator A**. Navigate to **Alerts Dashboard**.
+2. Locate an alert produced by a rule that is known to have sub-rules, banded evaluation, and exit-condition reasons.
+3. Open the alert detail view (or the alert visualisation panel).
+4. Inspect each firing rule listed on the alert.
+
+**Expected result**
+- Each firing rule shows a **sub-rule reference** (where applicable) — an identifier or short label linking to the specific sub-rule that triggered.
+- Each firing rule shows a **band** value — presented as a label or colour-coded chip.
+- Each firing rule shows a **human-readable exit-condition reason** — a short explanation of why the rule concluded as it did.
+
+5. Open a second alert whose rules do **not** have sub-rules.
+
+**Expected result**
+- The alert renders cleanly with the sub-rule reference simply absent. No error, no misleading empty placeholder.
+
+---
+
+### Scenario 14 — Investigation notes flow through to the lakehouse
+
+**Acceptance criteria covered:** C4
+
+1. Sign in as **Investigator A**. Open a case with at least one task.
+2. Open the task and add an **investigation note** (for example: "Verified against KYC record on 13 July 2026 — inconsistency in beneficiary address").
+3. Save the note.
+4. Wait for the next lakehouse refresh cycle (or ask a system administrator to run the Tasks ETL).
+5. In the BIAR dashboard (or a Jupyter notebook against the `gold/tasks` table), locate the task by ID and inspect the `investigationNotes` column.
+
+**Expected result**
+- The note text is present, complete, and matches what was entered in the CMS.
+
+6. Return to the CMS, edit the same note, and save.
+7. After the next refresh, re-check the lakehouse.
+
+**Expected result**
+- The updated content is reflected. No duplication.
+
+---
+
+### Scenario 15 — Alert Navigator shows correct transaction lineage
+
+**Acceptance criteria covered:** C5
+
+1. Sign in as **Investigator A**. Navigate to the **Alert Navigator** (or the CMS view that surfaces transaction lineage for an alert).
+2. Open an alert whose underlying transaction status, ID, amount, and currency are known (from operational records).
+3. Inspect the transaction lineage fields.
+
+**Expected result**
+- **Transaction status** matches the known value on the transaction record.
+- **Transaction ID** matches.
+- **Transaction amount** and **currency** match.
+- **Instructing agent** and **instructed agent** continue to display correctly (regression check).
+
+---
+
+### Scenario 16 — Backward compatibility of task status representation
+
+**Acceptance criteria covered:** C6
+
+If the tester has access to BIAR dashboards / notebooks:
+
+1. Open any pre-existing dashboard that reads `gold/tasks.status`.
+
+**Expected result**
+- The dashboard continues to render task statuses in **upper-case normalised form** as it did before.
+
+2. Open a notebook or dashboard that reads `gold/tasks.status_raw`.
+
+**Expected result**
+- The raw source value is populated and available for consumers that need it.
+
+---
+
 ## 6. Regression Areas to Watch
 
 While testing the above, the tester should also confirm that the following pre-existing capabilities continue to work unchanged:
@@ -435,7 +555,7 @@ While testing the above, the tester should also confirm that the following pre-e
 
 The Product Owner may accept this release when:
 
-- [ ] All Scenarios 1–11 have been executed and passed.
+- [ ] All Scenarios 1–16 have been executed and passed.
 - [ ] Every acceptance criterion in Section 3 has been observed as true at least once.
 - [ ] Regression areas in Section 6 have been spot-checked without discovering new issues.
 - [ ] Any defects raised during UAT are triaged and either fixed or explicitly deferred with Product Owner agreement.
@@ -463,4 +583,4 @@ The following items are **not** part of this development and should not block ac
 
 ---
 
-*Document prepared based on paysys-pmo tracker issues #814 and #823, CMS issues #214 and #220, CMS pull requests #233, #234, #240, and BIAR pull request #118. For technical detail beyond the acceptance criteria in this document, refer to the impact and solution documents held in the UAT board repository under `issues/case-management-system/214/` and `issues/case-management-system/220/`.*
+*Document prepared based on paysys-pmo tracker issues #814 and #823, CMS issues #214 and #220, CMS pull requests #233, #234, #240, and BIAR pull requests #107 and #118. For technical detail beyond the acceptance criteria in this document, refer to the impact and solution documents held in the UAT board repository under `issues/case-management-system/214/` and `issues/case-management-system/220/`.*
