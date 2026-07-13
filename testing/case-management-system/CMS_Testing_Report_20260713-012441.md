@@ -105,14 +105,14 @@ The following acceptance criteria define what must be true for the Product Owner
 - On any FRAUD or AML case, the Close-Case modal offers exactly three outcomes: **Closed Confirmed**, **Closed Refuted**, **Closed Inconclusive**.
 - The **"Completed"** outcome (STATUS_84) does not appear anywhere in the application.
 - No **"Sub-Cases Closure Status"** table appears in the Close-Case modal.
-- No supervisor-only **"Close Case (AFTER report)"** button appears; a normal investigator can close FRAUD or AML independently.
+- No supervisor-only **distinct "Close Case (AFTER report)"** button appears. Supervisors do see a "Generate Investigation Report" submit path (`frontend/src/features/cases/components/CloseCaseModal.tsx:233-244`) that drives closure after report approval, while investigators see "Submit for Approval" (`frontend/src/features/cases/components/CloseCaseModal.tsx:221-231`); this is the standard supervisor-approval flow, not a hidden second closure button. A normal investigator can submit closure of FRAUD or AML independently.
 
 **A3. Case Filters screen**
 - The Status filter drop-down does **not** contain "Completed" (STATUS_84).
 - No STATUS_84 badge colour appears anywhere in the UI (case rows, case detail, dashboards).
 
 **A4. Permissions**
-- A user who is neither owner nor assignee of a FRAUD or AML case receives a **403** on any attempt to access, close, or modify it.
+- A user who is neither owner nor assignee of an *owned or task-assigned* FRAUD or AML case receives a **403** on any attempt to access, close, or modify it. Unassigned cases and cases still in `STATUS_02_READY_FOR_ASSIGNMENT` remain visible to investigators by design (`backend/src/modules/case/services/case-query.service.ts:864-873`), matching the dashboard's pickup semantics.
 - FRAUD_AND_AML no longer receives any permission special-case.
 
 **A5. Independence of sibling cases**
@@ -157,7 +157,7 @@ The following acceptance criteria define what must be true for the Product Owner
 - A non-supervisor call is rejected by `TazamaAuthGuard` with **HTTP 401** (`UnauthorizedException` thrown at `backend/src/guards/tazama-auth.guard.ts:50` via `evaluateClaimResult` at lines 163-170). The guard file imports only `UnauthorizedException` — no `ForbiddenException` is thrown anywhere on this path.
 - Every successful priority change is captured by the `@Audit()` interceptor, producing an audit-store record with actor, timestamp, and outcome.
 - **Critical gap — no frontend affordance:** the CMS frontend has **no UI control** that calls this endpoint. There is no `changePriority` client method on `caseService.ts`, no `ChangePriorityModal`, and no supervisor row-action or menu item on the case list / case detail views (verified by grep across `frontend/src` for `changePriority` / `"Change Priority"` / `PATCH /cases/*/priority` — zero hits). A supervisor **cannot change a case's priority through the product UI today**; the endpoint is reachable only via direct API call (curl / Postman with a `CMS_SUPERVISOR` JWT). Adding the UI surface is a required follow-up before B5 can be exercised as a user-facing capability.
-- **Additional gap — orphaned domain event:** `CasePriorityService.changePriority` emits `case.priority.changed`, but a codebase-wide search for `@OnEvent('case.priority.changed')` returns **zero listeners**. Consequently nothing writes to `caseHistory`, and the case-history / task-log tab does not surface priority changes even if the endpoint is invoked directly. Flowable is bypassed entirely — the only BPMN reference to priority is the initial-triage form field (`bpmn/cms.bpmn20.xml:59`); no service task, execution listener, or task listener consumes priority changes.
+- **Additional gap — orphaned domain event:** `CasePriorityService.changePriority` emits `case.priority.changed`, but a codebase-wide search for `@OnEvent('case.priority.changed')` returns **zero listeners**. Consequently nothing writes to `caseHistory`, and the case-history / task-log tab does not surface priority changes even if the endpoint is invoked directly. Flowable is bypassed entirely — the only BPMN reference to priority is the initial-triage form field (`backend/src/modules/bpmn/cms.bpmn20.xml:59`); no service task, execution listener, or task listener consumes priority changes.
 
 **B6. Notifications**
 - Each `(case, SLA-state)` transition fires **at most one** notification, enforced by the unique constraint `(case_id, sla_state)` on the escalation-records ledger. No hourly re-notification on breached cases.
@@ -175,7 +175,7 @@ The following acceptance criteria define what must be true for the Product Owner
 
 **B8. Reports**
 - The Workload report's High Priority bucket contains cases with Priority = HIGH (a severity measure), **not** old cases.
-- Report totals should reconcile: `totalCases ≈ low + medium + high`. Note: `totalCases` is computed as an independent `prisma.case.count` (`backend/src/modules/report/report.service.ts:461`), not as the sum of the Low/Medium/High buckets, and the Prisma `priority` field is nullable (`backend/prisma/schema.prisma:84`) — so a null-priority case would break the identity. The tester should observe the identity holds in the UAT dataset.
+- Report totals should reconcile: `totalCases ≈ low + medium + high`. Note: `totalCases` is computed as an independent `prisma.case.count` (`backend/src/modules/report/report.service.ts:461`), not as the sum of the Low/Medium/High buckets. `Case.priority` is non-nullable with `@default(LOW)` (`backend/prisma/schema.prisma:109`), so the buckets should partition the total — but because the two counts are issued as independent queries with independent filter derivations, the tester should still observe the identity holds in the UAT dataset.
 
 ### 3.3 Track C — BIAR Alert Enrichment
 
@@ -425,7 +425,7 @@ This scenario has three sub-cases covering the three anchoring behaviours descri
 **Expected result**
 - The SLA deadline is recomputed as `sla_started_at + 24 h` (the HIGH target). Because `sla_started_at` was 48 h ago, the recomputed deadline is already in the past.
 - The SLA State badge immediately shows **Breached**.
-- A single `CASE_SLA_BREACHED` notification fires for the assignee.
+- A single `CASE_SLA_BREACHED` group notification fires to the supervisors candidate group (`backend/src/modules/alert-priority/alert-priority.service.ts:133-138` — `sendGroupNotification` to `CANDIDATE_GROUPS.SUPERVISORS`), not to the assignee individually.
 - An audit record for the priority change is created (see Scenario 7 for the audit-visibility runtime check).
 
 #### 9b — Priority change on a reopened case (anchor is the reopen moment, not creation)
