@@ -74,7 +74,7 @@ The consequences were serious:
 | **Priority** | Severity — a risk judgement | Low / Medium / High | Auto at triage from risk score; only supervisors can change afterwards, with a mandatory reason and an audit record. | Stored, never mutated by any background job. |
 | **SLA State** | Timing — where we are against the deadline | On Track / At Risk / Due Soon / Breached | Derived live from `now` vs the case's deadline. | Not stored — computed at read time so it can never be stale. |
 
-Priority calibrates the SLA clock: HIGH = 24-hour target, MEDIUM = 72-hour, LOW = 168-hour (tenant-configurable). If a supervisor bumps priority mid-investigation, the deadline is re-anchored on the case's **original creation date** — an old case cannot be gamed into "on track" by lowering its priority.
+Priority calibrates the SLA clock: HIGH = 24-hour target, MEDIUM = 72-hour, LOW = 168-hour (tenant-configurable). The clock starts when a case reaches **Ready For Assignment** (that moment is recorded as `sla_started_at`). If a supervisor bumps priority mid-investigation, the deadline is recomputed as `sla_started_at + priority-target` — anchored to when the SLA clock started, not to the moment of the change. For cases still in DRAFT / PENDING_CASE_CREATION_APPROVAL, the clock has not yet started, so `sla_due_at` is `null` and a priority change on such a case leaves it `null`. Note that if a case is reopened, the SLA clock is restarted from the reopen moment — so on a reopened case, `sla_started_at` is not the original creation date. This design still prevents the old "old case gamed into on-track by lowering its priority" pattern, because within a single active investigation the anchor is fixed.
 
 ### 2.3 Track C — Why alert enrichment matters
 
@@ -97,9 +97,9 @@ The following acceptance criteria define what must be true for the Product Owner
 ### 3.1 Track A — Investigation Modelling
 
 **A1. Case count and list**
-- A FRAUD_AND_AML alert produces exactly **two** cases in every list, filter, and export (one FRAUD, one AML).
-- No row anywhere in the application has case type `FRAUD_AND_AML`.
-- The Case Type filter option `FRAUD_AND_AML` (if still shown as a filter value) returns zero results.
+- **Manual triage path:** a FRAUD_AND_AML alert manually triaged by an investigator produces exactly **two** cases (one FRAUD, one AML). Neither has case type `FRAUD_AND_AML`.
+- **Reports and dashboards** apply a container-exclusion filter (`NON_CONTAINER_CASE_FILTER`), so aggregate totals, case-type breakdowns, and investigator workload all count each FRAUD_AND_AML alert as two cases.
+- **Known partial gap on the Cases dashboard:** when the triage-completion path (auto-completion of a triage task with a predicted outcome) resolves a FRAUD_AND_AML case, the originating case retains `case_type = FRAUD_AND_AML` in addition to the FRAUD and AML siblings being created. This is not stripped by the Cases dashboard listing (`getAllCases` does not apply the container-exclusion filter). Filtering the Cases list by `FRAUD_AND_AML` may therefore return these originating rows. **Flag as a defect to raise before sign-off** if the Product Owner requires the "exactly two cases everywhere" behaviour on the dashboard as well as in reports.
 
 **A2. Close-Case modal**
 - On any FRAUD or AML case, the Close-Case modal offers exactly three outcomes: **Closed Confirmed**, **Closed Refuted**, **Closed Inconclusive**.
@@ -121,21 +121,20 @@ The following acceptance criteria define what must be true for the Product Owner
 - Suspending or reopening one case has no effect on any other case.
 
 **A6. Reports and dashboards**
-- Total Cases counts each alert once (a single FRAUD_AND_AML alert contributes 2 to totals, not 3).
-- Case Type breakdown shows **FRAUD** and **AML** buckets only — no `FRAUD_AND_AML` bucket.
-- Closed Cases = Closed Confirmed + Closed Refuted + Closed Inconclusive (plus system auto-closures 71/72). Totals reconcile.
-- Average Resolution Time is not distorted by instant container closures.
-- Investigator Workload does not attribute the (former) ownerless container to any investigator.
+- **Guaranteed by code:** Reports apply the container-exclusion filter. A single FRAUD_AND_AML alert contributes **2** cases (not 3) to report totals.
+- **Guaranteed by code:** Case Type breakdown shows **FRAUD** and **AML** buckets only — no `FRAUD_AND_AML` bucket.
+- **Guaranteed by code:** Investigator Workload does not attribute the (former) ownerless container to any investigator.
+- **Observable at runtime (not code-enforced):** Closed Cases should equal Closed Confirmed + Closed Refuted + Closed Inconclusive plus system auto-closures 71/72. Total Cases should equal Open + Closed. Average Resolution Time should not be distorted by former instant container closures. The tester should observe and confirm these identities in the UAT dataset.
 
-**A7. Performance**
-- Triage of a FRAUD_AND_AML alert completes within **5 seconds** from the user's perspective.
+**A7. Performance (observable target — not enforced by code)**
+- Triage of a FRAUD_AND_AML alert should complete within **5 seconds** from the user's perspective. This is a target to be measured during UAT; there is no code-level timeout or benchmark that enforces it.
 
 ### 3.2 Track B — SLA / Priority Split
 
-**B1. Priority values and colours**
+**B1. Priority values**
 - Every Priority drop-down, badge, filter, and export shows only **Low**, **Medium**, **High**.
-- `NEW`, `URGENT`, `CRITICAL`, and `BREACH` do not appear anywhere.
-- Badge colours: **Low** — blue / green; **Medium** — amber / yellow; **High** — red / orange.
+- The legacy values `NEW`, `URGENT`, `CRITICAL`, and `BREACH` do not appear anywhere as Priority values. (`BREACHED` still exists in the codebase as an **SLA State** value — a separate concept — which is expected; see B4.)
+- Low / Medium / High badges are visually distinct from each other. Specific colour choices are to be observed by the tester in the UAT environment (not enforced by code-level constants checked in this report).
 
 **B2. Priority stability**
 - A case whose priority has been set (whether by triage or by a supervisor) does **not** have that value changed by any background process, over any elapsed time.
@@ -143,8 +142,12 @@ The following acceptance criteria define what must be true for the Product Owner
 - New cases still receive a priority automatically at triage, derived from the risk score.
 
 **B3. SLA deadline**
-- Every new case has a **deadline** attached at creation, derived from priority: HIGH = 24 h, MEDIUM = 72 h, LOW = 168 h (or the tenant-configured values).
-- If a supervisor changes priority mid-case, the deadline is **recalculated from the case's original creation date**, not from the moment of the change.
+- The SLA clock starts when a case first reaches **STATUS_02 Ready For Assignment** (RFA). That moment is recorded as `sla_started_at`, and the deadline `sla_due_at = sla_started_at + priority-target` is stamped at that time.
+- Cases in **DRAFT** or **PENDING_CASE_CREATION_APPROVAL** have `sla_due_at = null` by design (the clock has not started yet).
+- Priority-target values: **HIGH = 24 h**, **MEDIUM = 72 h**, **LOW = 168 h** (tenant-configurable via SLA policies).
+- If a supervisor changes priority on a case whose SLA clock has already started, the deadline is recomputed as **`sla_started_at + new-priority-target`** — anchored to the moment the SLA clock started (`sla_started_at`), **not** to the case's original `created_at` and **not** to the moment of the change.
+- If a supervisor changes priority on a case that has **not yet reached RFA**, `sla_due_at` is left as `null` (nothing to recompute) and no error is thrown.
+- If a case is **reopened**, the SLA clock is restarted from the reopen moment — the new `sla_started_at` is the reopen timestamp, not the original creation. A subsequent priority change on a reopened case is therefore anchored to the reopen moment.
 
 **B4. SLA State badge**
 - The case list and case detail views display an **SLA State** badge **independently** of the Priority badge.
@@ -153,12 +156,16 @@ The following acceptance criteria define what must be true for the Product Owner
 
 **B5. Priority-change permissions and audit**
 - A non-supervisor attempting to change priority receives a **403**.
-- Every priority change creates an **audit record** capturing actor, timestamp, old value, new value, and reason.
-- Audit records are visible in the case history / task log tab.
+- Every priority change is captured by the audit interceptor, producing an audit-store record with actor, timestamp, old value, new value, and reason.
+- **Runtime check (not code-guaranteed):** Whether the priority-change record surfaces in the **case history / task log tab** in the UI is a separate wiring concern — the domain event emitted on priority change has no listener writing into `caseHistory`. The tester should confirm at runtime whether these audit records appear in the case-history view, and flag as a follow-up if they do not.
 
 **B6. Notifications**
-- Each `(case, SLA-state)` transition fires **at most one** notification — no hourly re-notification on breached cases.
-- Distinct notifications exist for: SLA At-Risk (unclaimed — "claim-chase"), SLA Due-Soon (owned — "support-chase"), SLA Due-Soon (unclaimed), and SLA Breached.
+- Each `(case, SLA-state)` transition fires **at most one** notification, enforced by the unique constraint `(case_id, sla_state)` on the escalation-records ledger. No hourly re-notification on breached cases.
+- **Three** distinct notification types are emitted:
+  - **`CASE_CLAIM_CHASE`** — case reaches **AT_RISK** while **unclaimed** (nudges someone to claim it).
+  - **`CASE_SUPPORT_CHASE`** — case reaches **DUE_SOON** while **owned** (nudges the owner / supervisor).
+  - **`CASE_SLA_BREACHED`** — case crosses the deadline.
+- **Known gap:** an unclaimed case that reaches **DUE_SOON** does **not** currently trigger a dedicated notification of its own — this transition falls through the escalation logic. Flag as a possible follow-up if the Product Owner requires an unclaimed-Due-Soon nudge.
 - The notification payload includes: case ID, case type, SLA state, time remaining, and assignee (where applicable).
 
 **B7. Filtering**
@@ -170,8 +177,8 @@ The following acceptance criteria define what must be true for the Product Owner
 - The Workload report's High Priority bucket contains cases with Priority = HIGH (a severity measure), **not** old cases.
 - Report totals reconcile: `totalCases = low + medium + high`.
 
-**B9. Performance**
-- SLA cron job completes within **60 seconds** for a caseload of 10,000 open cases (system-observable, not directly UI-visible).
+**B9. Performance (observable target — not enforced by code)**
+- SLA cron job should complete within **60 seconds** for a caseload of 10,000 open cases. This is a target to be measured during UAT (system-observable, not directly UI-visible); there is no code-level benchmark or timeout that enforces it.
 
 ### 3.3 Track C — BIAR Alert Enrichment
 
@@ -218,6 +225,8 @@ Before executing the tests below, the tester should:
    - At least two existing FRAUD cases and two AML cases already open.
    - One existing case pre-populated with **Priority = HIGH** and an SLA deadline within 2 hours (to observe SLA state transitions in real time).
    - A historical alert / case created before this release, to verify migrated priority values (old NEW/URGENT/CRITICAL/BREACH values should now show as LOW/MEDIUM/HIGH per migration).
+   - **A case that has been reopened at least once** (so its `sla_started_at` reflects the reopen moment, not the original creation) — used to verify that a supervisor priority change on a reopened case anchors correctly to the reopen moment (see Scenario 9).
+   - **A case currently in DRAFT / PENDING_CASE_CREATION_APPROVAL** (no SLA deadline yet) — used to verify that a priority change on a pre-RFA case leaves `sla_due_at` as null without error (see Scenario 9).
    - **At least one alert triggered by a rule that carries sub-rules, band, and exit-condition reasons** (for Track C — sub-rule reference, band, and exit-condition reason display).
    - **At least one task on an existing case with an investigation note already recorded** (for Track C — lakehouse propagation check).
 4. **BIAR dashboards** (optional cross-service check): access to the BIAR dashboard for confirming lakehouse-side counts. This is not the Product Owner's primary responsibility but is available for cross-verification.
@@ -235,17 +244,20 @@ Each scenario is a self-contained walkthrough. Steps assume the tester is signed
 1. Sign in as **Investigator A**.
 2. Navigate to **Alerts Dashboard** from the main navigation.
 3. Locate a fresh FRAUD_AND_AML alert (or ingest one). Click the alert row to open the **Alert Details** modal.
-4. Trigger triage from the modal (use the manual triage flow).
+4. Trigger triage from the modal using the **manual triage flow**.
 5. Once triage completes, close the modal and navigate to the **Cases** area.
 6. Filter or search by the alert reference / customer.
 
-**Expected result**
+**Expected result (manual triage path)**
 - Exactly **two** case rows appear for this alert — one with case type **FRAUD** and one with case type **AML**.
 - Neither case has type `FRAUD_AND_AML`.
-- Both cases have an owner assigned (no ownerless "container" appears in the list).
-- The triage-to-cases transition completes in under 5 seconds.
+- Both cases have an owner assigned.
+- The triage-to-cases transition should complete in under 5 seconds (observable target, not code-enforced).
 
 7. Open the FRAUD case. Under the **Linked Items** (or equivalent) area, confirm the AML sibling is discoverable via the shared investigation group. There is **no** "parent case" panel.
+
+**Expected result (triage-completion / auto-completion path — known gap)**
+- If the alert is resolved via the triage-task auto-completion path (predicted outcome), the originating case retains `case_type = FRAUD_AND_AML` in addition to the FRAUD and AML sibling cases being created. Reports strip these out via the container-exclusion filter, but the Cases dashboard filtered by `FRAUD_AND_AML` **may still return the originating row**. This behaviour is a known partial gap against A1 — raise it as a defect for the Product Owner's decision before sign-off.
 
 ---
 
@@ -306,15 +318,16 @@ Each scenario is a self-contained walkthrough. Steps assume the tester is signed
 4. Inspect the **Case Type** filter. If `FRAUD_AND_AML` is still present as a legacy filter value, select it and apply the filter.
 
 **Expected result**
-- Zero rows return.
+- Ideally zero rows. In practice, if any historical alerts have been resolved via the triage-completion path since this release, the originating rows may still appear (see A1's known gap). If rows are returned, note them and raise as a defect for the Product Owner's decision.
 
 5. Navigate to **Reports → Case Status** (or equivalent).
-6. Compare Total Cases with (Open Cases + Closed Cases). Compare Closed Cases with the sum of Closed Confirmed + Closed Refuted + Closed Inconclusive (+ system auto-closures).
+6. Observe Total Cases against (Open Cases + Closed Cases). Observe Closed Cases against the sum of Closed Confirmed + Closed Refuted + Closed Inconclusive (+ system auto-closures 71/72).
 
 **Expected result**
-- Both identities balance exactly. No orphan "Completed" bucket exists.
-- The **Case Type breakdown** chart shows only FRAUD and AML segments — no `FRAUD_AND_AML` segment.
-- The **Investigator Workload** chart contains no unowned "container" entries.
+- **Guaranteed:** No orphan "Completed" bucket exists in any status breakdown.
+- **Guaranteed:** The **Case Type breakdown** chart shows only FRAUD and AML segments — no `FRAUD_AND_AML` segment.
+- **Guaranteed:** The **Investigator Workload** chart contains no unowned "container" entries.
+- **Observable (not code-enforced):** the tester should confirm that `Total = Open + Closed` and `Closed = 81 + 82 + 83 + 71 + 72` balance in the UAT dataset. Note any discrepancy for the Product Owner.
 
 ---
 
@@ -370,7 +383,7 @@ Each scenario is a self-contained walkthrough. Steps assume the tester is signed
 
 **Expected result**
 - Priority remains **High**. No background job has reverted it.
-- The case history / task log tab shows an audit entry: who changed the priority, when, from what to what, and the reason.
+- An audit record exists for the priority change (actor, timestamp, old value, new value, reason). **Runtime check:** confirm whether this audit record surfaces in the case history / task log tab in the UI (see B5's note — this wiring is not code-guaranteed; if the record is only visible in the audit store rather than the case-history UI, flag as a follow-up).
 
 ---
 
@@ -392,7 +405,12 @@ Each scenario is a self-contained walkthrough. Steps assume the tester is signed
 **Expected result**
 - The SLA State badge transitions **On Track → At Risk → Due Soon → Breached**.
 - The Priority badge remains unchanged throughout (still **High**).
-- The assigned investigator (or supervisor for unclaimed cases) receives **one** in-app notification per transition — no repeated hourly alerts.
+- Notifications fire according to B6's three-type taxonomy — **at most one per `(case, SLA-state)` transition**:
+  - On **AT_RISK** for an **unclaimed** case: a `CASE_CLAIM_CHASE` notification fires (nudging someone to claim).
+  - On **DUE_SOON** for an **owned** case: a `CASE_SUPPORT_CHASE` notification fires (nudging owner / supervisor).
+  - On **BREACHED**: a `CASE_SLA_BREACHED` notification fires.
+  - **Known gap:** on **DUE_SOON** for an **unclaimed** case, no dedicated notification fires. If the Product Owner expects a nudge in this scenario, flag as a follow-up.
+- No repeated hourly alerts on any transition.
 
 ---
 
@@ -400,16 +418,43 @@ Each scenario is a self-contained walkthrough. Steps assume the tester is signed
 
 **Acceptance criteria covered:** B3, B5
 
-1. Identify a case that has been open for **48 hours** currently at **Priority = Medium** (deadline was set at creation to +72 h; case is currently On Track with ~24 h to go).
+This scenario has three sub-cases covering the three anchoring behaviours described in B3.
+
+#### 9a — Priority change on a case in Ready For Assignment (never reopened)
+
+1. Identify a case whose `sla_started_at` is **48 hours** ago (i.e., it reached RFA 48 h ago and has not been reopened since), currently at **Priority = Medium** (deadline = `sla_started_at + 72 h`, so ~24 h remaining, SLA state On Track).
 2. Sign in as **Supervisor**. Open the case and use **Change Priority** to move to **High**. Provide a reason.
 3. Refresh the case.
 
 **Expected result**
-- The SLA deadline is now recalculated based on the original creation timestamp + 24 h (the HIGH target). Since the case is already 48 h old, the deadline has already passed and the SLA State badge should immediately show **Breached**.
-- A single Breach notification fires for the assignee.
-- An audit record for the priority change is present in the case history.
+- The SLA deadline is recomputed as `sla_started_at + 24 h` (the HIGH target). Because `sla_started_at` was 48 h ago, the recomputed deadline is already in the past.
+- The SLA State badge immediately shows **Breached**.
+- A single `CASE_SLA_BREACHED` notification fires for the assignee.
+- An audit record for the priority change is created (see Scenario 7 for the audit-visibility runtime check).
 
-4. Attempt to change priority as an **Investigator** (non-supervisor) via the same action.
+#### 9b — Priority change on a reopened case (anchor is the reopen moment, not creation)
+
+1. Identify or prepare a case that has been **reopened** at some point after its original creation. Note the reopen timestamp — this is the case's current `sla_started_at`.
+2. Sign in as **Supervisor**. Change priority on this case.
+3. Refresh the case.
+
+**Expected result**
+- The new deadline = `sla_started_at (reopen moment) + new-priority-target`. It is **not** anchored to the case's original creation date.
+- SLA state updates accordingly. If the reopen moment is recent and the priority is bumped to HIGH, the case may still show On Track even though its original creation is old.
+
+#### 9c — Priority change on a case that has never reached RFA (DRAFT / PENDING)
+
+1. Identify a case still in **DRAFT** or **PENDING_CASE_CREATION_APPROVAL** (no `sla_due_at` yet).
+2. Sign in as **Supervisor**. Change priority on this case.
+3. Refresh the case.
+
+**Expected result**
+- The action succeeds. `sla_due_at` remains **null** — nothing to recompute yet. No error, no SLA State badge (or a "not yet started" state, matching B4).
+- The audit record is still created.
+
+#### 9d — Non-supervisor is blocked
+
+1. Attempt to change priority as an **Investigator** (non-supervisor) via the same action on any case.
 
 **Expected result**
 - The action is blocked (button hidden or a **403** response is returned).
@@ -421,16 +466,15 @@ Each scenario is a self-contained walkthrough. Steps assume the tester is signed
 **Acceptance criteria covered:** A6, B7, B8
 
 1. Navigate to **Reports**.
-2. Open the **Case Status Report**. Confirm:
-   - Total = Open + Closed.
-   - Closed = Confirmed + Refuted + Inconclusive (+ system auto-closures).
+2. Open the **Case Status Report**. Observe:
+   - **Runtime check:** Total = Open + Closed. Closed = Confirmed + Refuted + Inconclusive (+ system auto-closures). Note any discrepancy.
 3. Open the **Workload Report** (or the priority-breakdown chart).
    - Note the count of the **High Priority** bucket.
    - Drill into the bucket.
 
 **Expected result**
-- Every case in the High bucket has Priority = **High** (severity). The bucket is not populated by cases that are simply old.
-- Totals reconcile: `low + medium + high = totalCases`.
+- **Guaranteed by code:** Every case in the High bucket has Priority = **High** (severity). The bucket is not populated by cases that are simply old.
+- **Guaranteed by code:** Priority-bucket totals reconcile: `low + medium + high = totalCases` (all derived from the same underlying query).
 4. Verify the priority buckets show the new values (Low / Medium / High) — no legacy NEW / URGENT / CRITICAL / BREACH values in any legend or bar label.
 
 ---
@@ -570,6 +614,14 @@ The following items are **not** part of this development and should not block ac
 - Any changes to the alert-ingestion pipeline itself. Alert content and detection logic are unchanged.
 - Changes to authentication, tenancy, or role-management screens.
 - Any BIAR-side dashboard redesign — only the lakehouse schema and ingestion are updated to keep parity with CMS.
+
+### Known gaps / possible follow-ups (surfaced during code fact-check)
+
+These are not scope of this delivery, but the tester should confirm the Product Owner's intent on each:
+
+- **A1 — triage-completion container:** the auto-completion (predicted-outcome) triage path leaves the originating case with `case_type = FRAUD_AND_AML`. Reports strip these via the container-exclusion filter, but the Cases dashboard listing does not. Decide whether the Cases dashboard should apply the same filter.
+- **B5 — priority-change audit visibility in case history:** the priority-change domain event has no listener writing to `caseHistory`. Audit records exist in the audit store; whether they render in the case-history / task-log tab is a separate wiring question to confirm at runtime.
+- **B6 — unclaimed DUE_SOON notifications:** no dedicated notification currently fires when an unclaimed case reaches DUE_SOON. Decide whether such a nudge is expected.
 
 ---
 
