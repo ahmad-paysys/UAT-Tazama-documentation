@@ -18,7 +18,7 @@ This report defines the **User Acceptance Testing (UAT)** scope for three relate
 |-------|------------------|--------------|
 | **Track A — Investigation Modelling** (paysys-pmo #814 / CMS #214) | A single FRAUD_AND_AML alert generated **three** cases in the system — one synthetic "container" plus one FRAUD and one AML investigation — causing triple-counted reports, permission bypass, an unnatural "Completed" status, and forced supervisor closures. | The container case has been removed. A FRAUD_AND_AML alert now creates **exactly two cases** (FRAUD and AML), each with its own owner, its own lifecycle, and standard permissions. Reports and totals reconcile correctly. |
 | **Track B — SLA / Priority Split** (paysys-pmo #823 / CMS #220) | A single `Priority` field was being silently overwritten every hour by a background job based on case age. Supervisors' manual escalations were reverted within an hour. Priority meant "how old", not "how serious." | Priority (severity) and SLA state (timing) are now two independent, orthogonal fields. Priority is stable (LOW / MEDIUM / HIGH) and only changed via an audited supervisor action. A new SLA State (ON_TRACK / AT_RISK / DUE_SOON / BREACHED) is derived live from the case's deadline. |
-| **Track C — BIAR Alert Enrichment** (BIAR PR #107) | Alert visualisations in the CMS did not expose the **sub-rule references**, **band information**, or **exit-condition reasons** behind an alert. Investigators had to guess *why* a rule fired. Investigation notes captured on tasks did not flow to the downstream data lakehouse, and the Alert Navigator lineage for transaction status / ID / amount was inconsistent. | Alert visualisations now display **band, exit-condition reasons, and sub-rule references** for each rule on the alert. **Investigation notes** are now carried end-to-end into the lakehouse for downstream analytics. **Alert Navigator** transaction lineage (status, ID, amount, currency) now enriches correctly from the current transactions Gold schema. |
+| **Track C — BIAR Alert Enrichment** (BIAR PR #107) | Alert visualisations did not consistently expose the **sub-rule references** behind an alert. Investigators had to guess *why* a rule fired. **Band** and **exit-condition reason** were not modelled downstream at all. Investigation notes captured on tasks did not flow to the downstream data lakehouse, and the Alert Navigator lineage for transaction status / ID / amount was inconsistent. | The CMS alert view now displays a **sub-rule reference** for each firing rule. **Band** and **exit-condition reason** are now emitted to the BIAR lakehouse (`alerts_nav_rules`) for downstream analytics — they are not yet rendered in the CMS UI. **Investigation notes** are carried end-to-end into the lakehouse. **Alert Navigator** transaction lineage (status, ID, amount, currency) now enriches correctly from the current transactions Gold schema. |
 
 **Overall status of the tracks**
 
@@ -86,7 +86,7 @@ Investigators reviewing an alert previously saw *that* a rule fired but not the 
 - **Investigation notes** — investigators capture notes on tasks during a case. Previously these did not travel into the BIAR lakehouse, so downstream analytics and management dashboards could not surface investigator context.
 - **Alert Navigator transaction lineage** — the Alert Navigator view is used to trace an alert back to the underlying transaction (status, ID, amount, currency). Previously this enrichment was inconsistent because it drew from the wrong Gold-schema fields.
 
-**After this release:** all three enrichments (band, exit-condition reasons, sub-rule references) appear on the alert visualisations that back the CMS alert view; investigation notes flow to the lakehouse for downstream reporting; and Alert Navigator lineage is accurate against the current transactions Gold schema.
+**After this release:** the CMS alert view surfaces the **sub-rule reference** on each firing rule. **Band** and **exit-condition reason** are emitted to the BIAR lakehouse (`alerts_nav_rules`) for downstream analytics but are **not yet rendered in the CMS UI** — CMS-side rendering is a follow-up. Investigation notes flow to the lakehouse for downstream reporting, and Alert Navigator lineage is accurate against the current transactions Gold schema.
 
 ---
 
@@ -180,13 +180,13 @@ The following acceptance criteria define what must be true for the Product Owner
 - On any alert whose rules have sub-rules, the alert detail view (or the alert visualisation the investigator uses) displays a **sub-rule reference** for each firing rule.
 - Alerts whose rules have no sub-rules render cleanly with the field simply absent (no error, no empty placeholder that misleads).
 
-**C2. Band displayed per rule**
-- Each firing rule on an alert exposes its **band** value.
-- The band value is displayed in a way that a non-technical investigator can interpret (a label or a colour-coded chip, matching the way other rule attributes are shown).
+**C2. Band available per rule (lakehouse only in this release)**
+- Each firing rule's **band** value (with the matched band reason where applicable) is emitted to the BIAR lakehouse `alerts_nav_rules` view as part of this release. Verify via a BIAR dashboard or a Jupyter query against `alerts_nav_rules`.
+- **Not surfaced in the CMS alert view in this release** — the CMS frontend does not render band values. Rendering in CMS is a follow-up if the Product Owner requires investigator-facing display.
 
-**C3. Exit-condition reason displayed per rule**
-- Each firing rule on an alert exposes its **exit-condition reason** as human-readable text.
-- The reason text appears alongside the rule outcome and remains visible when the investigator scrolls through multiple rules on the same alert.
+**C3. Exit-condition reason available per rule (lakehouse only in this release)**
+- Each firing rule's **exit-condition reason** is emitted to the BIAR lakehouse `alerts_nav_rules` view (`matched_exit_condition_reason` and `exit_condition_reasons_json`). Verify via a BIAR dashboard or a Jupyter query against `alerts_nav_rules`.
+- **Not surfaced in the CMS alert view in this release** — the CMS frontend does not render exit-condition reasons. Rendering in CMS is a follow-up if the Product Owner requires investigator-facing display.
 
 **C4. Investigation notes flow to lakehouse**
 - Investigation notes entered on a task in the CMS are captured in the lakehouse `investigationNotes` field on the corresponding task record.
@@ -499,24 +499,26 @@ If the tester has access to the BIAR dashboard:
 
 ---
 
-### Scenario 13 — Sub-rule references, band, and exit-condition reasons are visible on the alert
+### Scenario 13 — Sub-rule reference is visible on the alert (and band / exit-condition reason are queryable in BIAR)
 
 **Acceptance criteria covered:** C1, C2, C3
 
 1. Sign in as **Investigator A**. Navigate to **Alerts Dashboard**.
-2. Locate an alert produced by a rule that is known to have sub-rules, banded evaluation, and exit-condition reasons.
+2. Locate an alert produced by a rule that is known to have sub-rules.
 3. Open the alert detail view (or the alert visualisation panel).
 4. Inspect each firing rule listed on the alert.
 
-**Expected result**
-- Each firing rule shows a **sub-rule reference** (where applicable) — an identifier or short label linking to the specific sub-rule that triggered.
-- Each firing rule shows a **band** value — presented as a label or colour-coded chip.
-- Each firing rule shows a **human-readable exit-condition reason** — a short explanation of why the rule concluded as it did.
+**Expected result (CMS UI)**
+- Each firing rule shows a **sub-rule reference** ("Sub-ref: ...") where the alert payload includes one.
+- Band and exit-condition reason are **not expected to appear in the CMS view** in this release (see C2, C3) — they are emitted to the BIAR lakehouse only.
 
 5. Open a second alert whose rules do **not** have sub-rules.
 
 **Expected result**
 - The alert renders cleanly with the sub-rule reference simply absent. No error, no misleading empty placeholder.
+
+**Cross-check (BIAR side, for C2 and C3)**
+- If the tester has BIAR access: query `alerts_nav_rules` for the alert ID and confirm that `matched_band_reason`, `band_reasons_json`, and `matched_exit_condition_reason` columns are populated as expected for the rules on that alert.
 
 ---
 
@@ -615,6 +617,7 @@ These are not scope of this delivery, but the tester should confirm the Product 
 - **A1 — latent AI-triage container gap:** the AI-triage code path in `triage.service.ts` contains a FRAUD_AND_AML branch that would leave the originating case with `case_type = FRAUD_AND_AML` alongside FRAUD and AML sibling cases. This branch is not reachable today because the AI/ML prediction component is not implemented (`predictAlert` returns a hardcoded false-positive) and `getAllCases` does not apply the `NON_CONTAINER_CASE_FILTER`. Address both — either strip the FRAUD_AND_AML branch or apply the container-exclusion filter to the Cases dashboard listing — **before** the AI-triage feature is enabled.
 - **B5 — priority-change audit visibility in case history:** the priority-change domain event has no listener writing to `caseHistory`. Audit records exist in the audit store; whether they render in the case-history / task-log tab is a separate wiring question to confirm at runtime.
 - **B6 — unclaimed DUE_SOON notifications:** no dedicated notification currently fires when an unclaimed case reaches DUE_SOON. Decide whether such a nudge is expected.
+- **C2 / C3 — CMS-side rendering of band and exit-condition reason:** these fields are emitted to the BIAR lakehouse (`alerts_nav_rules`) but the CMS alert view does not render them. If the Product Owner requires investigator-facing display in CMS, raise as a follow-up scope item.
 
 ---
 
