@@ -1,41 +1,52 @@
-# PR Review: CMS #244 — fix: fixed the case search to incorporate new columns and added filters to search SLA states
+# PR Review: CMS #244 — fix: add SLA-state filter and expand case search normalization
 
 **Repo:** tazama-lf/case-management-system
 **Branch:** `paysys/SLA-task` → `dev`
 **Author:** ibadkhan088 (Ibad Ahmed Khan)
-**Date Reviewed:** 2026-07-13
 **Label:** bug
-**Size:** +362 / -84 lines across 11 files
-**Commits:** 1 (`b4f66ce`)
 **State:** OPEN (mergeStateStatus: BLOCKED, mergeable: MERGEABLE)
-**Existing approvals:** None (CodeRabbit posted 1 actionable comment, resolved by author as an accepted trade-off)
+**Existing approvals:** None (CodeRabbit posted 1 actionable comment on the initial commit, declined by author as an accepted trade-off)
 
 ---
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [What Changed (Detailed)](#what-changed-detailed)
-  - [1. `backend/src/modules/case/dto/get-all-cases.dto.ts` — new optional `slaState` query param](#1-backendsrcmodulescasedtoget-all-casesdtots--new-optional-slastate-query-param)
-  - [2. `backend/src/modules/case/services/case-query.service.ts` — search refactor + SLA state search + SLA state filter](#2-backendsrcmodulescaseservicescase-queryservicets--search-refactor--sla-state-search--sla-state-filter)
-  - [3. `backend/test/case-query.service.spec.ts` — new tests for SLA filter/search, case-id prefix, priority partial match](#3-backendtestcase-queryservicespects--new-tests)
-  - [4. Frontend hook `useCaseDashboard.ts` — `slaStateFilter` state and pagination reset](#4-frontendsrcfeaturescaseshooksusecasedashboardts--slastatefilter-state-and-pagination-reset)
-  - [5. Frontend `caseService.ts` — forward `slaState` in query string](#5-frontendsrcfeaturescasesservicescaseservicets--forward-slastate-in-query-string)
-  - [6. Frontend `CaseDashboardContainer.tsx` / `CaseDashboardContent.tsx` — wire new callback](#6-frontendsrcfeaturescasescomponentscasedashboardcontainertsx--casedashboardcontenttsx--wire-new-callback)
-  - [7. Frontend `CaseFilters.tsx` — SLA state dropdown, saved-filter payload, clear handler refactor, placeholder change](#7-frontendsrcfeaturescasescomponentscasefilterstsx--sla-state-dropdown-saved-filter-payload-clear-handler-refactor-placeholder-change)
-  - [8. Frontend test files — added `slaStateFilter` / callback to fixtures, updated placeholder assertions](#8-frontend-test-files)
-- [Code Quality Analysis](#code-quality-analysis)
-  - [Strengths](#strengths)
-  - [Issues and Observations](#issues-and-observations)
-- [Security Assessment](#security-assessment)
-- [Test Coverage](#test-coverage)
-- [CodeRabbit Activity](#coderabbit-activity)
-- [Summary and Verdict](#summary-and-verdict)
-- [GitHub Review Comment](#github-review-comment)
+- [Initial Review (2026-07-13)](#initial-review-2026-07-13)
+  - [Overview](#overview)
+  - [What Changed (Detailed)](#what-changed-detailed)
+    - [1. `backend/src/modules/case/dto/get-all-cases.dto.ts` — new optional `slaState` query param](#1-backendsrcmodulescasedtoget-all-casesdtots--new-optional-slastate-query-param)
+    - [2. `backend/src/modules/case/services/case-query.service.ts` — search refactor + SLA state search + SLA state filter](#2-backendsrcmodulescaseservicescase-queryservicets--search-refactor--sla-state-search--sla-state-filter)
+    - [3. `backend/test/case-query.service.spec.ts` — new tests for SLA filter/search, case-id prefix, priority partial match](#3-backendtestcase-queryservicespects--new-tests)
+    - [4. Frontend hook `useCaseDashboard.ts` — `slaStateFilter` state and pagination reset](#4-frontendsrcfeaturescaseshooksusecasedashboardts--slastatefilter-state-and-pagination-reset)
+    - [5. Frontend `caseService.ts` — forward `slaState` in query string](#5-frontendsrcfeaturescasesservicescaseservicets--forward-slastate-in-query-string)
+    - [6. Frontend `CaseDashboardContainer.tsx` / `CaseDashboardContent.tsx` — wire new callback](#6-frontendsrcfeaturescasescomponentscasedashboardcontainertsx--casedashboardcontenttsx--wire-new-callback)
+    - [7. Frontend `CaseFilters.tsx` — SLA state dropdown, saved-filter payload, clear handler refactor, placeholder change](#7-frontendsrcfeaturescasescomponentscasefilterstsx--sla-state-dropdown-saved-filter-payload-clear-handler-refactor-placeholder-change)
+    - [8. Frontend test files — added `slaStateFilter` / callback to fixtures, updated placeholder assertions](#8-frontend-test-files)
+  - [Code Quality Analysis](#code-quality-analysis)
+    - [Strengths](#strengths)
+    - [Issues and Observations](#issues-and-observations)
+  - [Security Assessment](#security-assessment)
+  - [Test Coverage](#test-coverage)
+  - [CodeRabbit Activity](#coderabbit-activity)
+  - [Summary and Verdict](#summary-and-verdict)
+- [Follow-up Review (2026-07-13)](#follow-up-review-2026-07-13)
+  - [Resolution Status](#resolution-status)
+    - [Item 1 — Frontend behavioural tests for SLA dropdown, clear-filters, saved-filter round-trip](#item-1--frontend-behavioural-tests-for-sla-dropdown-clear-filters-saved-filter-round-trip)
+    - [Item 2 — Style consistency in `caseService.ts` (braced `if`)](#item-2--style-consistency-in-caseservicets-braced-if)
+    - [Item 3 — Tighten PR title before merge](#item-3--tighten-pr-title-before-merge)
+  - [New Issues Found in Updated Commits](#new-issues-found-in-updated-commits)
+  - [Final Verdict](#final-verdict)
+  - [GitHub Review Comment](#github-review-comment)
 
 ---
 
-## Overview
+## Initial Review (2026-07-13)
+
+**Reviewed commit:** `b4f66cec42f415aaab0a1490b7d7cce34c850e08` — *"fix: fixed the case search to incorporate new columns and added filte…rs to search SLA states"* (2026-07-13)
+**Size at time of review:** +362 / -84 lines across 11 files
+**CI at time of review:** One transient `validate-pr-title` failure on a superseded run; all other checks green.
+
+### Overview
 
 This PR extends the case search and filtering surface to include the derived `SlaState` value (`ON_TRACK`, `AT_RISK`, `DUE_SOON`, `BREACHED`), and refines the existing free-text search to accept an explicit `"Case"`/`"CASE-"` ID prefix, partial priority matching, and separator-normalised enum matching (so `"at risk"` / `"at-risk"` / `"AT_RISK"` all match).
 
@@ -61,13 +72,13 @@ Frontend changes plumb `slaStateFilter` through the dashboard hook, container, c
 | `frontend/src/features/cases/components/__tests__/CaseDashboardContent.test.tsx` | Same fixture updates |
 | `frontend/src/features/cases/components/__tests__/CaseFilters.test.tsx` | Updates placeholder assertions and adds `slaStateFilter` / `onSlaStateFilterChange` props |
 
-[↑ Back to top](#pr-review-cms-244--fix-fixed-the-case-search-to-incorporate-new-columns-and-added-filters-to-search-sla-states)
+[↑ Back to top](#pr-review-cms-244--fix-add-sla-state-filter-and-expand-case-search-normalization)
 
 ---
 
-## What Changed (Detailed)
+### What Changed (Detailed)
 
-### 1. `backend/src/modules/case/dto/get-all-cases.dto.ts` — new optional `slaState` query param
+#### 1. `backend/src/modules/case/dto/get-all-cases.dto.ts` — new optional `slaState` query param
 
 ```diff
 - import { CaseStatus, Priority, CaseType } from '@prisma/client-cms';
@@ -90,7 +101,7 @@ Class-validator + Prisma-generated enum wiring is consistent with the surroundin
 
 ---
 
-### 2. `backend/src/modules/case/services/case-query.service.ts` — search refactor + SLA state search + SLA state filter
+#### 2. `backend/src/modules/case/services/case-query.service.ts` — search refactor + SLA state search + SLA state filter
 
 **a) Slate-state destructuring and separator normalisation** ([case-query.service.ts:319-321, 378-380](repos/case-management-system/backend/src/modules/case/services/case-query.service.ts#L319))
 
@@ -217,7 +228,7 @@ if (slaState) {
 
 ---
 
-### 3. `backend/test/case-query.service.spec.ts` — new tests
+#### 3. `backend/test/case-query.service.spec.ts` — new tests
 
 Six new test cases exercise the new logic:
 
@@ -231,7 +242,7 @@ Fixtures use realistic `sla_due_at` / `sla_started_at` offsets from `now` so `co
 
 ---
 
-### 4. `frontend/src/features/cases/hooks/useCaseDashboard.ts` — `slaStateFilter` state and pagination reset
+#### 4. `frontend/src/features/cases/hooks/useCaseDashboard.ts` — `slaStateFilter` state and pagination reset
 
 ```diff
   const [sarStrStatusFilter, setSarStrStatusFilter] = useState<string>('');
@@ -248,7 +259,7 @@ Consistent with the surrounding filter pattern.
 
 ---
 
-### 5. `frontend/src/features/cases/services/caseService.ts` — forward `slaState` in query string
+#### 5. `frontend/src/features/cases/services/caseService.ts` — forward `slaState` in query string
 
 ```diff
   if (query?.sarStrStatus) {
@@ -259,17 +270,17 @@ Consistent with the surrounding filter pattern.
 
 `GetUserCasesQueryDto` gets the field, and the request builder appends it. Trivial.
 
-**Style nit:** the existing `sarStrStatus` block uses a braced `if`, the new `slaState` block uses a single-line `if` — minor inconsistency, not blocking.
+**Style nit:** the existing `sarStrStatus` block uses a braced `if`, the new `slaState` block uses a single-line `if` — minor inconsistency, not blocking. *(Resolved in follow-up commit `8f88adc8` — see [Item 2](#item-2--style-consistency-in-caseservicets-braced-if).)*
 
 ---
 
-### 6. `frontend/src/features/cases/components/CaseDashboardContainer.tsx` / `CaseDashboardContent.tsx` — wire new callback
+#### 6. `frontend/src/features/cases/components/CaseDashboardContainer.tsx` / `CaseDashboardContent.tsx` — wire new callback
 
 Straight prop-drilling: `filterActions.setSlaStateFilter` → `onSlaStateFilterChange` → `CaseFilters`. No logic added at these layers.
 
 ---
 
-### 7. `frontend/src/features/cases/components/CaseFilters.tsx` — SLA state dropdown, saved-filter payload, clear handler refactor, placeholder change
+#### 7. `frontend/src/features/cases/components/CaseFilters.tsx` — SLA state dropdown, saved-filter payload, clear handler refactor, placeholder change
 
 Key additions:
 
@@ -353,21 +364,21 @@ Prevents users from re-selecting the placeholder as an active saved filter. Smal
 
 ---
 
-### 8. Frontend test files
+#### 8. Frontend test files
 
 - `CaseDashboardContainer.test.tsx`: adds `slaStateFilter: ''` to the filters fixture and `setSlaStateFilter: vi.fn()` to filterActions.
 - `CaseDashboardContent.test.tsx`: same fixture updates + `onSlaStateFilterChange: vi.fn()`.
 - `CaseFilters.test.tsx`: adds the prop pair to `defaultProps` and updates three `getByPlaceholderText('Search cases...')` assertions to the new placeholder.
 
-No new frontend behavioural tests were added for the SLA dropdown itself (rendering the four options, calling `onSlaStateFilterChange`, wiring `handleClearFilters` clearing SLA, or the saved-filter round-trip through `slaState`). See [Issues and Observations](#issues-and-observations) Issue 2.
+No new frontend behavioural tests were added for the SLA dropdown itself (rendering the four options, calling `onSlaStateFilterChange`, wiring `handleClearFilters` clearing SLA, or the saved-filter round-trip through `slaState`). See [Issues and Observations](#issues-and-observations) Issue 2. *(Resolved in follow-up commit `8f88adc8` — see [Item 1](#item-1--frontend-behavioural-tests-for-sla-dropdown-clear-filters-saved-filter-round-trip).)*
 
-[↑ Back to top](#pr-review-cms-244--fix-fixed-the-case-search-to-incorporate-new-columns-and-added-filters-to-search-sla-states)
+[↑ Back to top](#pr-review-cms-244--fix-add-sla-state-filter-and-expand-case-search-normalization)
 
 ---
 
-## Code Quality Analysis
+### Code Quality Analysis
 
-### Strengths
+#### Strengths
 
 - **Clear inline commentary at each new branch.** The comments explaining *why* `slaState` can't go into the where clause, *why* the "Case" prefix short-circuits the other search branches, and *why* the `searchEnumMatch` normalisation is needed are non-obvious and non-redundant. They read like the kind of comment the CLAUDE.md guidance actually asks for.
 - **Refactor discipline.** The search reorganisation preserves all existing branches (case_id, case_type, status, alert message, confidence_per, SAR/STR task status) intact and adds priority + SLA-state alongside them. The switch from `searchUpper.includes` to `searchEnumMatch.includes` is applied consistently.
@@ -376,9 +387,9 @@ No new frontend behavioural tests were added for the SLA dropdown itself (render
 - **Tests exercise the new logic against the real `computeCaseSlaState` (not a mocked SLA function).** The parameterised `it.each` over `'risk' | 'at risk' | 'at-risk' | 'AT_RISK'` locks in the separator-normalisation contract precisely where the mistake is easiest to make.
 - **DTO validation is in place** — `@IsEnum(SlaState)` protects the API from garbage values without any extra server-side guard.
 
-### Issues and Observations
+#### Issues and Observations
 
-#### Issue 1 — SLA-state candidate scan is unbounded
+##### Issue 1 — SLA-state candidate scan is unbounded
 
 **Severity: Informational (Performance / Data Integrity — acknowledged trade-off)**
 
@@ -392,7 +403,7 @@ I concur that a persisted `sla_state` column would just replace this scan with a
 
 ---
 
-#### Issue 2 — Frontend has no behavioural test for the new SLA dropdown or the saved-filter round-trip
+##### Issue 2 — Frontend has no behavioural test for the new SLA dropdown or the saved-filter round-trip
 
 **Severity: Minor (Test Coverage)**
 
@@ -403,36 +414,13 @@ The backend tests are thorough. The frontend tests only extend fixtures — none
 - `handleClearFilters` clears the SLA state (there is no explicit assertion in `CaseFilters.test.tsx` that clicking the clear button calls `onSlaStateFilterChange('')`).
 - Applying a saved filter whose payload contains `slaState: 'AT_RISK'` calls `onSlaStateFilterChange('AT_RISK')`.
 
-None of these are difficult to add — the surrounding tests already do the equivalent for priority and status filters. Suggest one test each:
-
-```typescript
-it('renders SLA state options and calls onSlaStateFilterChange', async () => {
-  const onSlaStateFilterChange = vi.fn();
-  render(<CaseFilters {...defaultProps} onSlaStateFilterChange={onSlaStateFilterChange} />);
-  const select = screen.getByLabelText(/SLA State/i);
-  await userEvent.selectOptions(select, 'AT_RISK');
-  expect(onSlaStateFilterChange).toHaveBeenCalledWith('AT_RISK');
-});
-
-it('clears SLA state when the clear-filters button is clicked', async () => {
-  const onSlaStateFilterChange = vi.fn();
-  render(
-    <CaseFilters
-      {...defaultProps}
-      slaStateFilter="AT_RISK"
-      onSlaStateFilterChange={onSlaStateFilterChange}
-    />,
-  );
-  await userEvent.click(screen.getByRole('button', { name: /clear/i }));
-  expect(onSlaStateFilterChange).toHaveBeenCalledWith('');
-});
-```
+None of these are difficult to add — the surrounding tests already do the equivalent for priority and status filters.
 
 Non-blocking; the backend covers the correctness-critical logic.
 
 ---
 
-#### Issue 3 — Style inconsistency in `caseService.ts`
+##### Issue 3 — Style inconsistency in `caseService.ts`
 
 **Severity: Informational (Code Quality)**
 
@@ -447,17 +435,17 @@ The surrounding block consistently uses braced `if` statements; the new line use
 
 ---
 
-#### Issue 4 — PR title is truncated; commit body carries the tail
+##### Issue 4 — PR title is truncated; commit body carries the tail
 
 **Severity: Informational (Metadata)**
 
 The title `fix: fixed the case search to incorporate new columns and added filte…` exceeds the 100-character Conventional Commits header limit and is cut off. The commit message body preserves the tail (`…rs to search SLA states`). Consider a tighter title on merge, e.g. `fix: add SLA-state filter and expand case search normalization`. Not blocking — the failing `validate-pr-title` run is an unrelated "Set up job" infra failure on a superseded workflow run; four sibling runs on the same PR passed.
 
-[↑ Back to top](#pr-review-cms-244--fix-fixed-the-case-search-to-incorporate-new-columns-and-added-filters-to-search-sla-states)
+[↑ Back to top](#pr-review-cms-244--fix-add-sla-state-filter-and-expand-case-search-normalization)
 
 ---
 
-## Security Assessment
+### Security Assessment
 
 | Concern | Assessment |
 |---------|-----------|
@@ -470,11 +458,11 @@ The title `fix: fixed the case search to incorporate new columns and added filte
 
 No new security vulnerabilities introduced by this PR.
 
-[↑ Back to top](#pr-review-cms-244--fix-fixed-the-case-search-to-incorporate-new-columns-and-added-filters-to-search-sla-states)
+[↑ Back to top](#pr-review-cms-244--fix-add-sla-state-filter-and-expand-case-search-normalization)
 
 ---
 
-## Test Coverage
+### Test Coverage
 
 **Backend:** Strong. Six new tests cover:
 - SLA state explicit filter (asserts candidate lookup runs first and constrains the paginated query).
@@ -485,26 +473,26 @@ No new security vulnerabilities introduced by this PR.
 
 Fixtures use realistic date offsets so `computeCaseSlaState` returns actual states rather than being mocked out — this is the right choice because the derivation is the thing under test.
 
-**Frontend:** Weak-to-adequate. Only fixture updates and placeholder-assertion updates. No behavioural test of:
+**Frontend (initial commit):** Weak-to-adequate. Only fixture updates and placeholder-assertion updates. No behavioural test of:
 - SLA dropdown rendering / interaction.
 - Clear-filters clearing the SLA state.
 - Saved-filter payload round-trip carrying `slaState`.
 
-See [Issue 2](#issue-2--frontend-has-no-behavioural-test-for-the-new-sla-dropdown-or-the-saved-filter-round-trip).
+*(Improved in follow-up commit `8f88adc8` — see [Item 1](#item-1--frontend-behavioural-tests-for-sla-dropdown-clear-filters-saved-filter-round-trip).)*
 
 **CI evidence:** `node-ci / check tests` passed on the PR head; test suites are green.
 
 **PR checklist:** The PR description on GitHub is bare (no template checklist visible). Cannot assess checkbox state.
 
-[↑ Back to top](#pr-review-cms-244--fix-fixed-the-case-search-to-incorporate-new-columns-and-added-filters-to-search-sla-states)
+[↑ Back to top](#pr-review-cms-244--fix-add-sla-state-filter-and-expand-case-search-normalization)
 
 ---
 
-## CodeRabbit Activity
+### CodeRabbit Activity
 
 CodeRabbit posted one actionable comment; it maps to my own [Issue 1](#issue-1--sla-state-candidate-scan-is-unbounded). Corroborated.
 
-### Pass 1 — SLA candidate scan performance
+#### Pass 1 — SLA candidate scan performance
 
 **Commit reviewed:** `b4f66cec42f415aaab0a1490b7d7cce34c850e08`
 **Findings:** 1 actionable comment
@@ -523,11 +511,11 @@ CodeRabbit acknowledged and recorded a learning ([comment 3571241467](https://gi
 
 I agree with the author's reasoning — a persisted `sla_state` column would trade this problem for a staleness/refresh-orchestration problem, and raw SQL relocates rather than solves the per-row-per-`NOW()` evaluation. This is not a merge blocker.
 
-[↑ Back to top](#pr-review-cms-244--fix-fixed-the-case-search-to-incorporate-new-columns-and-added-filters-to-search-sla-states)
+[↑ Back to top](#pr-review-cms-244--fix-add-sla-state-filter-and-expand-case-search-normalization)
 
 ---
 
-## Summary and Verdict
+### Summary and Verdict
 
 **Verdict: Approve with minor cleanup requested**
 
@@ -535,45 +523,71 @@ Functionally correct, well-commented, and adequately tested on the backend. The 
 
 The main items are minor cleanups: frontend behavioural tests for the SLA dropdown / clear-filters / saved-filter round-trip, a style-consistency nit in `caseService.ts`, and a tighter PR/merge title. None of these should hold up the merge.
 
-### Blocking
+#### Blocking
 
 None.
 
-### Non-blocking but recommended
+#### Non-blocking but recommended
 
 1. **Frontend behavioural tests for the SLA dropdown, clear-filters behavior, and saved-filter round-trip** — see [Issue 2](#issue-2--frontend-has-no-behavioural-test-for-the-new-sla-dropdown-or-the-saved-filter-round-trip). The backend logic is thoroughly covered; the frontend surface is not.
 2. **Match the surrounding braced-`if` style in `caseService.ts`** — one-line inconsistency, see [Issue 3](#issue-3--style-inconsistency-in-caseservicets).
 3. **Tighten the PR title on merge** — currently truncated to `… added filte…`. See [Issue 4](#issue-4--pr-title-is-truncated-commit-body-carries-the-tail).
 
-[↑ Back to top](#pr-review-cms-244--fix-fixed-the-case-search-to-incorporate-new-columns-and-added-filters-to-search-sla-states)
+[↑ Back to top](#pr-review-cms-244--fix-add-sla-state-filter-and-expand-case-search-normalization)
 
 ---
-
-## GitHub Review Comment
-
-`````markdown
-**Approve with minor cleanup requested**
-
-The SLA-state filter, SLA-state search branch, and the surrounding search refactor (`"Case"`-prefix short-circuit, priority partial match, separator-normalising `searchEnumMatch`) are correct, well-commented, and backed by solid backend tests. I concur with the trade-off you and CodeRabbit already settled on for the in-memory SLA candidate scan — a persisted `sla_state` column would just move the problem to staleness, and raw SQL would relocate rather than eliminate the per-row `NOW()` evaluation. Not blocking on that.
-
+---
 ---
 
-### Non-blocking (please address in this PR if possible)
+## Follow-up Review (2026-07-13)
 
-**1. Frontend behavioural tests for the new SLA dropdown**
+**Reviewed commit:** `8f88adc8b8da6c64da3bba345b6ceedb3045fad1` — *"fix: fixed the style issues and added test cases for SLA search"* (2026-07-13 15:54 UTC)
+**Reviewed against:** Initial review from 2026-07-13 (3 non-blocking items on commit `b4f66cec`)
+**Size of follow-up:** +72 / -1 lines across 2 files
+**CI on new HEAD:** All checks green (including all `validate-pr-title` runs); PR title has been updated to `fix: add SLA-state filter and expand case search normalization`, matching the exact suggestion from Item 3.
 
-The backend tests are thorough, but on the frontend only fixtures and placeholder assertions were updated. I'd suggest adding three small tests in `CaseFilters.test.tsx`:
+The author addressed every non-blocking item from the initial review with a single follow-up commit. No new logic was introduced — this is a pure cleanup/test-hardening push.
+
+### Resolution Status
+
+#### Item 1 — Frontend behavioural tests for SLA dropdown, clear-filters, saved-filter round-trip
+
+**Status: RESOLVED**
+
+The follow-up adds three new tests in `frontend/src/features/cases/components/__tests__/CaseFilters.test.tsx`, one per gap flagged in the initial review:
+
+**1a) SLA dropdown renders all five options and fires `onSlaStateFilterChange`** — [CaseFilters.test.tsx:173-193](repos/case-management-system/frontend/src/features/cases/components/__tests__/CaseFilters.test.tsx#L173):
 
 ```typescript
-it('renders SLA state options and calls onSlaStateFilterChange', async () => {
+it('should render SLA state filter options and call onSlaStateFilterChange when changed', async () => {
+  const user = userEvent.setup();
   const onSlaStateFilterChange = vi.fn();
-  render(<CaseFilters {...defaultProps} onSlaStateFilterChange={onSlaStateFilterChange} />);
-  const select = screen.getByLabelText(/SLA State/i);
-  await userEvent.selectOptions(select, 'AT_RISK');
+  render(
+    <CaseFilters
+      {...defaultProps}
+      onSlaStateFilterChange={onSlaStateFilterChange}
+    />,
+  );
+  await user.click(screen.getByText('Filters'));
+  expect(screen.getByRole('option', { name: 'All SLA States' })).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: 'On Track' })).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: 'At Risk' })).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: 'Due Soon' })).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: 'Breached' })).toBeInTheDocument();
+
+  const slaStateSelect = screen.getByDisplayValue('All SLA States');
+  await user.selectOptions(slaStateSelect, 'AT_RISK');
   expect(onSlaStateFilterChange).toHaveBeenCalledWith('AT_RISK');
 });
+```
 
-it('clears SLA state when the clear-filters button is clicked', async () => {
+Covers both the rendering surface (all five options present with the expected human-readable labels) and the change-callback wiring. This is stronger than the sketch I provided in the review comment — it asserts each option label rather than just one.
+
+**1b) Clear button clears SLA state** — [CaseFilters.test.tsx:196-208](repos/case-management-system/frontend/src/features/cases/components/__tests__/CaseFilters.test.tsx#L196):
+
+```typescript
+it('should clear slaStateFilter when Clear button is clicked', async () => {
+  const user = userEvent.setup();
   const onSlaStateFilterChange = vi.fn();
   render(
     <CaseFilters
@@ -582,16 +596,59 @@ it('clears SLA state when the clear-filters button is clicked', async () => {
       onSlaStateFilterChange={onSlaStateFilterChange}
     />,
   );
-  await userEvent.click(screen.getByRole('button', { name: /clear/i }));
+  await user.click(screen.getByText('Clear'));
   expect(onSlaStateFilterChange).toHaveBeenCalledWith('');
 });
 ```
 
-Plus one that applies a saved filter whose payload contains `slaState: 'AT_RISK'` and asserts `onSlaStateFilterChange` is called with `'AT_RISK'`. The saved-filter parse path (`parsed.slaState ?? ''`) is otherwise untested.
+Directly asserts the `handleClearFilters` path clears SLA — the behaviour I was concerned about after the clear-handler refactor.
 
-**2. Style consistency in `frontend/src/features/cases/services/caseService.ts`**
+**1c) Saved-filter round-trip carries `slaState`** — [CaseFilters.test.tsx:458-488](repos/case-management-system/frontend/src/features/cases/components/__tests__/CaseFilters.test.tsx#L458):
 
-The surrounding block uses braced `if` blocks; the new line drops braces:
+```typescript
+it('should apply slaState from a saved filter when selected', async () => {
+  mockGetFilters.mockResolvedValue([
+    {
+      filter_Id: 1,
+      user_filters: JSON.stringify({
+        sortBy: 'oldest',
+        status: 'STATUS_20_IN_PROGRESS',
+        priority: 'MEDIUM',
+        sarStrStatus: '',
+        slaState: 'AT_RISK',
+      }),
+    },
+  ]);
+  const user = userEvent.setup();
+  const onSlaStateFilterChange = vi.fn();
+  render(
+    <CaseFilters
+      {...defaultProps}
+      onSlaStateFilterChange={onSlaStateFilterChange}
+    />,
+  );
+  await user.click(screen.getByText('Filters'));
+  await waitFor(() => {
+    expect(screen.getByText('OLDEST - STATUS_20_IN_PROGRESS - MEDIUM - AT_RISK'))
+      .toBeInTheDocument();
+  });
+  const savedFilterSelect = screen.getByDisplayValue('Select a saved filter');
+  await user.selectOptions(savedFilterSelect, '1');
+  expect(onSlaStateFilterChange).toHaveBeenCalledWith('AT_RISK');
+});
+```
+
+This test asserts *both* the label composition path (`OLDEST - STATUS_20_IN_PROGRESS - MEDIUM - AT_RISK`, i.e. the new `.filter(Boolean).join(' - ')` picks up `slaState`) *and* the `parsed.slaState ?? ''` parse path that was previously entirely untested. Solid coverage of the round-trip.
+
+All three tests use the same idiomatic patterns as the surrounding suite (`userEvent.setup()`, `screen.getByRole`, `mockGetFilters.mockResolvedValue`), so they should be maintainable alongside the rest of the file.
+
+---
+
+#### Item 2 — Style consistency in `caseService.ts` (braced `if`)
+
+**Status: RESOLVED**
+
+[caseService.ts:597-602](repos/case-management-system/frontend/src/features/cases/services/caseService.ts#L597):
 
 ```diff
 - if (query?.slaState) params.append('slaState', query.slaState);
@@ -600,17 +657,75 @@ The surrounding block uses braced `if` blocks; the new line drops braces:
 + }
 ```
 
-**3. Tighten the PR title before merge**
-
-The current title is truncated by GitHub metadata (`… added filte…`) because it exceeds the Conventional Commits header limit. The failing `validate-pr-title` check on run [29253624633](https://github.com/tazama-lf/case-management-system/actions/runs/29253624633/job/86827909500) is an unrelated `Set up job` infra failure (the sibling runs 29253618800 / 29253624741 / 29253722492 / 29253869979 all passed on the same title), but the truncation is still worth fixing — something like `fix: add SLA-state filter and expand case search normalization` would fit.
+Matches the surrounding `sarStrStatus` block. Note that the pre-existing single-line `if (query?.search)` / `if (query?.page)` / `if (query?.limit)` blocks *below* this line remain unbraced — the author addressed the specific new line I flagged without expanding scope to the pre-existing style variance, which is the correct scoping call.
 
 ---
 
-### Notes / already handled
+#### Item 3 — Tighten PR title before merge
 
-- The `handleClearFilters` extraction in `CaseFilters.tsx` is a genuine improvement — the previous inline `onClick` called `handleSavedFilterSelect('Select a filter')`, which set the saved-filter dropdown to a non-empty stale value. The new handler resets `selectedSavedFilterId` to `''` cleanly.
-- The `"Case"` / `"CASE-"` prefix branch correctly guards against `caseIdSearch !== ''` — necessary because `Number('')` is `0`, not `NaN`, so without it a bare `"Case"` would search for `case_id: 0`.
-- `computeCaseSlaState` can return `null`; the search branch (`candidateState !== null && matchingSlaStates.includes(candidateState)`) handles that. The explicit-filter branch relies on `SlaState` enum values never being `null`, which is correct because a `slaState` query param that made it through `@IsEnum(SlaState)` cannot be `null`.
+**Status: RESOLVED**
+
+The PR title was updated from `fix: fixed the case search to incorporate new columns and added filte…` (truncated at 100 chars) to `fix: add SLA-state filter and expand case search normalization` — exactly the suggestion from the review comment. All `validate-pr-title` workflow runs on the new HEAD (`8f88adc8`) pass, including the three that ran after the title edit (runs 29264274685, 29264337609, 29264354920).
+
+The commit message headline itself (on commit `8f88adc8`) is a separate `fix: fixed the style issues and added test cases for SLA search`, which is fine — the PR title is what governs the merge commit and the conventional-commits check.
+
+---
+
+### New Issues Found in Updated Commits
+
+None. The follow-up commit is entirely additive (three new tests) plus a two-line style fix. No new logic, no behavioural regressions surface risk.
+
+I re-read the three added tests end-to-end and confirmed:
+- Test 1a asserts that all four state options plus the empty option render; the option labels match the JSX in [CaseFilters.tsx](repos/case-management-system/frontend/src/features/cases/components/CaseFilters.tsx). No brittle text.
+- Test 1b relies on the same `Clear` button that clears every other filter — no risk of drift with the new `handleClearFilters` refactor.
+- Test 1c's mock payload includes an empty `sarStrStatus`, which correctly exercises the `.filter(Boolean)` branch (the label omits it), while the non-empty `slaState: 'AT_RISK'` is preserved. This is exactly the shape of a payload written by the current UI's save-filter flow.
+
+### Resolution Summary
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | Frontend behavioural tests for the SLA dropdown, clear-filters, and saved-filter round-trip | ✅ Resolved (3 tests added in `8f88adc8`) |
+| 2 | Style consistency in `caseService.ts` (braced `if`) | ✅ Resolved (`8f88adc8`) |
+| 3 | Tighten PR title | ✅ Resolved (title updated to the suggested text) |
+
+Prior CodeRabbit finding on the SLA candidate scan performance remains `➖ Declined by author as intentional` — no change on that front, no change expected.
+
+---
+
+### Final Verdict
+
+**Verdict: Approved**
+
+Every non-blocking item from the initial review has been addressed in `8f88adc8`. The frontend test coverage gap that was the most substantive of the three is now closed with three focused tests that cover the dropdown-change, clear-button, and saved-filter parse paths — including the previously untested `parsed.slaState ?? ''` branch. The style nit and PR title are both fixed. All CI checks are green on the new HEAD. The only remaining concern from the initial review (the SLA-candidate scan cost) is an accepted trade-off with a coherent rationale from the author, corroborated by CodeRabbit in the same thread.
+
+Ready to merge.
+
+#### Blocking
+
+None.
+
+#### Non-blocking
+
+None outstanding.
+
+[↑ Back to top](#pr-review-cms-244--fix-add-sla-state-filter-and-expand-case-search-normalization)
+
+---
+
+### GitHub Review Comment
+
+`````markdown
+**Approved**
+
+Thanks for turning this around so quickly. All three non-blocking items from the earlier review are addressed in `8f88adc8`:
+
+1. **Frontend tests for the SLA dropdown, clear-filters, and saved-filter round-trip** — the three new tests in `CaseFilters.test.tsx` cover exactly the gaps I flagged, including the previously untested `parsed.slaState ?? ''` parse path (the saved-filter test asserts both the composed label `OLDEST - STATUS_20_IN_PROGRESS - MEDIUM - AT_RISK` and the `onSlaStateFilterChange('AT_RISK')` callback). Nicely scoped.
+2. **Braced `if` in `caseService.ts`** — fixed, and I appreciate that you didn't expand scope to the pre-existing single-line `if`s further down the block. That was the right call.
+3. **PR title** — updated to `fix: add SLA-state filter and expand case search normalization`. `validate-pr-title` is green across the board.
+
+No new issues in the follow-up commit — it's purely additive tests plus a two-line style fix. The SLA-candidate-scan performance thread with CodeRabbit remains the one accepted trade-off, and I still concur that it isn't a merge blocker given the `NOW()`-relative computation.
+
+Ready to merge from my side.
 `````
 
-[↑ Back to top](#pr-review-cms-244--fix-fixed-the-case-search-to-incorporate-new-columns-and-added-filters-to-search-sla-states)
+[↑ Back to top](#pr-review-cms-244--fix-add-sla-state-filter-and-expand-case-search-normalization)
