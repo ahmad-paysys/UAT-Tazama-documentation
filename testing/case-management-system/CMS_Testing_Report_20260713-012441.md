@@ -130,12 +130,13 @@ The following acceptance criteria define what must be true for the Product Owner
 
 **B1. Priority values**
 - Every Priority drop-down, badge, filter, and export shows only **Low**, **Medium**, **High**.
-- The legacy values `NEW`, `URGENT`, `CRITICAL`, and `BREACH` do not appear anywhere as Priority values. (`BREACHED` still exists in the codebase as an **SLA State** value — a separate concept — which is expected; see B4.)
+- The legacy values `NEW`, `URGENT`, `CRITICAL`, and `BREACH` do not appear anywhere as Priority **enum** values. (`BREACHED` still exists in the codebase as an **SLA State** value — a separate concept — which is expected; see B4.)
+- **Cosmetic follow-up:** the dashboard tile description helper (`frontend/src/features/dashboard/services/dashboardService.ts:85-99`) still renders legacy adjectives — "Breached cases…" for HIGH and "Critical/Urgent cases…" for MEDIUM — in user-visible tile copy. This is descriptive text, not an enum value, but the vocabulary is inconsistent with the Low/Medium/High rename and should be cleaned up.
 - Low / Medium / High badges are visually distinct from each other. Specific colour choices are to be observed by the tester in the UAT environment (not enforced by code-level constants checked in this report).
 
 **B2. Priority stability**
-- A case whose priority has been set (whether by triage or by a supervisor) does **not** have that value changed by any background process, over any elapsed time.
-- A supervisor-set priority persists across at least two hourly SLA-cron cycles.
+- Priority is writable only by (a) triage at initial case creation and (b) the supervisor endpoint `PATCH /cases/:caseId/priority` guarded by `@RequireSupervisorRole()`. Investigators are explicitly **excluded by design** — the codebase has a `RequireInvestigatorOrSupervisorRole` decorator available, and it was deliberately not applied here (`backend/src/modules/alert-priority/case-priority.service.ts:25` — inline comment documents the supervisor-only intent).
+- The SLA escalation cron performs **no** writes to the `case.priority` column — its only mutation is inserting into `SlaEscalationRecord` (`backend/src/modules/alert-priority/alert-priority.service.ts:77-169`). A case's priority therefore does not drift over any elapsed time, regardless of how many cron cycles run.
 - New cases still receive a priority automatically at triage, derived from the risk score.
 
 **B3. SLA deadline**
@@ -149,12 +150,14 @@ The following acceptance criteria define what must be true for the Product Owner
 **B4. SLA State badge**
 - The case list and case detail views display an **SLA State** badge **independently** of the Priority badge.
 - Values and colours: **On Track** (green), **At Risk** (yellow), **Due Soon** (amber), **Breached** (red).
-- A case without a deadline shows no SLA badge and no error.
+- A case without a deadline shows a neutral grey **"N/A"** SLA badge (rendered by `frontend/src/shared/components/ui/SlaStateBadge.tsx:11-13,24`), not a red or amber one, and no error.
 
 **B5. Priority-change permissions and audit**
-- A non-supervisor attempting to change priority receives a **403**.
-- Every priority change is captured by the audit interceptor, producing an audit-store record with actor, timestamp, old value, new value, and reason.
-- **Runtime check (not code-guaranteed):** Whether the priority-change record surfaces in the **case history / task log tab** in the UI is a separate wiring concern — the domain event emitted on priority change has no listener writing into `caseHistory`. The tester should confirm at runtime whether these audit records appear in the case-history view, and flag as a follow-up if they do not.
+- The supervisor priority-change endpoint (`PATCH /cases/:caseId/priority`) is implemented and guarded by `@RequireSupervisorRole()` (`backend/src/modules/case/case.controller.ts:649-670`). The endpoint persists via Prisma and re-anchors `sla_due_at` correctly.
+- A non-supervisor call is rejected by `TazamaAuthGuard` with **HTTP 401** (`UnauthorizedException` thrown at `backend/src/guards/tazama-auth.guard.ts:50` via `evaluateClaimResult` at lines 163-170). The guard file imports only `UnauthorizedException` — no `ForbiddenException` is thrown anywhere on this path.
+- Every successful priority change is captured by the `@Audit()` interceptor, producing an audit-store record with actor, timestamp, and outcome.
+- **Critical gap — no frontend affordance:** the CMS frontend has **no UI control** that calls this endpoint. There is no `changePriority` client method on `caseService.ts`, no `ChangePriorityModal`, and no supervisor row-action or menu item on the case list / case detail views (verified by grep across `frontend/src` for `changePriority` / `"Change Priority"` / `PATCH /cases/*/priority` — zero hits). A supervisor **cannot change a case's priority through the product UI today**; the endpoint is reachable only via direct API call (curl / Postman with a `CMS_SUPERVISOR` JWT). Adding the UI surface is a required follow-up before B5 can be exercised as a user-facing capability.
+- **Additional gap — orphaned domain event:** `CasePriorityService.changePriority` emits `case.priority.changed`, but a codebase-wide search for `@OnEvent('case.priority.changed')` returns **zero listeners**. Consequently nothing writes to `caseHistory`, and the case-history / task-log tab does not surface priority changes even if the endpoint is invoked directly. Flowable is bypassed entirely — the only BPMN reference to priority is the initial-triage form field (`bpmn/cms.bpmn20.xml:59`); no service task, execution listener, or task listener consumes priority changes.
 
 **B6. Notifications**
 - Each `(case, SLA-state)` transition fires **at most one** notification, enforced by the unique constraint `(case_id, sla_state)` on the escalation-records ledger. No hourly re-notification on breached cases.
@@ -172,7 +175,7 @@ The following acceptance criteria define what must be true for the Product Owner
 
 **B8. Reports**
 - The Workload report's High Priority bucket contains cases with Priority = HIGH (a severity measure), **not** old cases.
-- Report totals reconcile: `totalCases = low + medium + high`.
+- Report totals should reconcile: `totalCases ≈ low + medium + high`. Note: `totalCases` is computed as an independent `prisma.case.count` (`backend/src/modules/report/report.service.ts:461`), not as the sum of the Low/Medium/High buckets, and the Prisma `priority` field is nullable (`backend/prisma/schema.prisma:84`) — so a null-priority case would break the identity. The tester should observe the identity holds in the UAT dataset.
 
 ### 3.3 Track C — BIAR Alert Enrichment
 
