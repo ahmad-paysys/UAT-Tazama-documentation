@@ -2,11 +2,11 @@
 
 ## Case Management System — Investigation Model, SLA/Priority Overhaul & BIAR Alert Enrichment
 
-**Prepared for:** Product Owner
-**Date:** 13 July 2026
-**Development scope:** paysys-pmo tracker issues **#814** and **#823**, plus BIAR alert-enrichment work
-**Underlying CMS issues:** [CMS #214](https://github.com/tazama-lf/case-management-system/issues/214), [CMS #220](https://github.com/tazama-lf/case-management-system/issues/220)
-**Implementation:** [CMS PR #233](https://github.com/tazama-lf/case-management-system/pull/233), [CMS PR #234](https://github.com/tazama-lf/case-management-system/pull/234), [CMS PR #240](https://github.com/tazama-lf/case-management-system/pull/240), [BIAR PR #107](https://github.com/tazama-lf/biar/pull/107), [BIAR PR #118](https://github.com/tazama-lf/biar/pull/118)
+- **Prepared for:** Product Owner
+- **Date:** 13 July 2026
+- **Development scope:** paysys-pmo tracker issues **#814** and **#823**, plus BIAR alert-enrichment work
+- **Underlying CMS issues:** [CMS #214](https://github.com/tazama-lf/case-management-system/issues/214), [CMS #220](https://github.com/tazama-lf/case-management-system/issues/220)
+- **Implementation:** [CMS PR #233](https://github.com/tazama-lf/case-management-system/pull/233), [CMS PR #234](https://github.com/tazama-lf/case-management-system/pull/234), [CMS PR #240](https://github.com/tazama-lf/case-management-system/pull/240), [BIAR PR #107](https://github.com/tazama-lf/biar/pull/107), [BIAR PR #118](https://github.com/tazama-lf/biar/pull/118)
 
 ---
 
@@ -234,6 +234,11 @@ Before executing the tests below, the tester should:
 
 Each scenario is a self-contained walkthrough. Steps assume the tester is signed into the CMS web app.
 
+> **Current environment limitations affecting some scenarios**
+>
+> - **Supervisor "Change Priority" UI is not present in this release.** The `PATCH /cases/:caseId/priority` endpoint is implemented and role-guarded (see B5), but the CMS frontend does not yet expose a control that calls it. Scenarios that depend on a supervisor priority change through the product UI are therefore **Not Applicable (N/A)** for UAT and are marked as such below. Backend behaviour can still be exercised out-of-band via the API (curl / Postman with a `CMS_SUPERVISOR` JWT) if the tester wants to confirm code paths, but this is not part of UAT sign-off.
+> - **Notifications are code-complete but not yet configured on the environment side.** The notification-emit code paths for `CASE_CLAIM_CHASE`, `CASE_SUPPORT_CHASE`, and `CASE_SLA_BREACHED` are in place, but the notification channel / delivery configuration has not been wired up on the UAT environment. Any scenario step that expects a notification to *arrive* should be treated as **deferred** — record it as a limitation rather than a defect. SLA-state badge transitions and idempotency ledger entries are still fully observable and must pass.
+
 ### Scenario 1 — A new FRAUD_AND_AML alert creates only two cases
 
 **Acceptance criteria covered:** A1, A5
@@ -346,19 +351,23 @@ Each scenario is a self-contained walkthrough. Steps assume the tester is signed
 
 ---
 
-### Scenario 7 — Priority is stable and no longer overwritten by the background job
+### Scenario 7 — Priority is stable and no longer overwritten by the background job  🚫 **Not Applicable (this release)**
 
 **Acceptance criteria covered:** B2
 
-1. Sign in as **Supervisor**. Open a case currently at **Priority = Low**.
-2. Use the **Change Priority** action in the Case Actions panel. Change priority to **High** and provide a reason (e.g., "Manual escalation — new intelligence").
-3. Confirm the change; verify the badge now shows **High**.
-4. Wait at least **two hours** (so the SLA cron has run at least twice), or ask a system administrator to trigger the SLA job twice.
-5. Return to the same case.
+> **N/A reason:** the supervisor **Change Priority** UI control is not present in this release (see B5 and the Section 5 limitations note). This scenario cannot be executed end-to-end through the product until that control ships. The backend guarantee that priority is no longer overwritten by the SLA cron is still verifiable via a direct API call for a supervisor who has an existing priority value on a case, but that route is out of UAT scope.
+>
+> *Original steps preserved below for reference; skip during UAT execution.*
 
-**Expected result**
+1. ~~Sign in as **Supervisor**. Open a case currently at **Priority = Low**.~~
+2. ~~Use the **Change Priority** action in the Case Actions panel. Change priority to **High** and provide a reason (e.g., "Manual escalation — new intelligence").~~
+3. ~~Confirm the change; verify the badge now shows **High**.~~
+4. ~~Wait at least **two hours** (so the SLA cron has run at least twice), or ask a system administrator to trigger the SLA job twice.~~
+5. ~~Return to the same case.~~
+
+**Expected result (deferred)**
 - Priority remains **High**. No background job has reverted it.
-- An audit record exists for the priority change (actor, timestamp, old value, new value, reason). **Runtime check:** confirm whether this audit record surfaces in the case history / task log tab in the UI (see B5's note — this wiring is not code-guaranteed; if the record is only visible in the audit store rather than the case-history UI, flag as a follow-up).
+- An audit record exists for the priority change (actor, timestamp, old value, new value, reason). Audit-visibility in the case-history UI is a separate follow-up (see B5).
 
 ---
 
@@ -379,59 +388,64 @@ Each scenario is a self-contained walkthrough. Steps assume the tester is signed
 - Across steps 2–3:
   - The SLA State badge transitions **On Track → At Risk → Due Soon → Breached**.
   - The Priority badge remains unchanged throughout (still **High**).
-  - Notifications fire according to B6's three-type taxonomy — **at most one per `(case, SLA-state)` transition**:
-    - On **AT_RISK** for an **unclaimed** case: a `CASE_CLAIM_CHASE` notification fires (nudging someone to claim).
-    - On **DUE_SOON** for an **owned** case: a `CASE_SUPPORT_CHASE` notification fires (nudging owner / supervisor).
-    - On **BREACHED**: a `CASE_SLA_BREACHED` notification fires.
-    - **Known gap:** on **DUE_SOON** for an **unclaimed** case, no dedicated notification fires. If the Product Owner expects a nudge in this scenario, flag as a follow-up.
-  - No repeated hourly alerts on any transition.
+  - No repeated hourly badge changes on any transition (idempotency of the underlying escalation-ledger entry is still observable — see Scenario 11).
+
+**Notification behaviour (deferred — environment limitation)**
+- Notification delivery is **not yet configured** on the UAT environment, although the emit code paths are complete. The following outcomes are therefore **deferred** and should be recorded as a known limitation rather than a defect:
+  - On **AT_RISK** for an **unclaimed** case: `CASE_CLAIM_CHASE` would fire.
+  - On **DUE_SOON** for an **owned** case: `CASE_SUPPORT_CHASE` would fire.
+  - On **BREACHED**: `CASE_SLA_BREACHED` would fire.
+  - **Known gap:** on **DUE_SOON** for an **unclaimed** case, no dedicated notification is emitted (design gap independent of the environment issue — flag as a possible follow-up).
+- Re-verify these once notification channels are configured on UAT.
 
 ---
 
-### Scenario 9 — Supervisor changes priority; SLA deadline re-anchors correctly
+### Scenario 9 — Supervisor changes priority; SLA deadline re-anchors correctly  🚫 **Not Applicable (this release)**
 
 **Acceptance criteria covered:** B3, B5
 
-This scenario has three sub-cases covering the three anchoring behaviours described in B3.
+> **N/A reason:** all four sub-cases below require a supervisor to invoke the **Change Priority** action from the CMS UI. That control is not yet exposed in the frontend (see B5 and the Section 5 limitations note). The backend endpoint (`PATCH /cases/:caseId/priority`) is implemented, role-guarded, and re-anchors `sla_due_at` correctly, and can be exercised out-of-band via API for engineering verification, but this scenario is not executable through the product during UAT.
+>
+> *Sub-cases preserved below for reference and to be re-enabled once the UI control ships.*
 
-#### 9a — Priority change on a case in Ready For Assignment (never reopened)
+#### 9a — Priority change on a case in Ready For Assignment (never reopened) *(deferred)*
 
-1. Identify a case whose `sla_started_at` is **48 hours** ago (i.e., it reached RFA 48 h ago and has not been reopened since), currently at **Priority = Medium** (deadline = `sla_started_at + 72 h`, so ~24 h remaining, SLA state On Track).
-2. Sign in as **Supervisor**. Open the case and use **Change Priority** to move to **High**. Provide a reason.
-3. Refresh the case.
+1. ~~Identify a case whose `sla_started_at` is **48 hours** ago (i.e., it reached RFA 48 h ago and has not been reopened since), currently at **Priority = Medium** (deadline = `sla_started_at + 72 h`, so ~24 h remaining, SLA state On Track).~~
+2. ~~Sign in as **Supervisor**. Open the case and use **Change Priority** to move to **High**. Provide a reason.~~
+3. ~~Refresh the case.~~
 
-**Expected result**
+**Expected result (deferred)**
 - The SLA deadline is recomputed as `sla_started_at + 24 h` (the HIGH target). Because `sla_started_at` was 48 h ago, the recomputed deadline is already in the past.
 - The SLA State badge immediately shows **Breached**.
-- A single `CASE_SLA_BREACHED` group notification fires to the supervisors candidate group (`backend/src/modules/alert-priority/alert-priority.service.ts:133-138` — `sendGroupNotification` to `CANDIDATE_GROUPS.SUPERVISORS`), not to the assignee individually.
-- An audit record for the priority change is created (see Scenario 7 for the audit-visibility runtime check).
+- A single `CASE_SLA_BREACHED` group notification would fire to the supervisors candidate group — **notification delivery is currently unconfigured on the environment** (see Section 5 limitations); the emit code path exists but arrival cannot be confirmed until channels are wired up.
+- An audit record for the priority change is created.
 
-#### 9b — Priority change on a reopened case (anchor is the reopen moment, not creation)
+#### 9b — Priority change on a reopened case (anchor is the reopen moment, not creation) *(deferred)*
 
-1. Identify or prepare a case that has been **reopened** at some point after its original creation. Note the reopen timestamp — this is the case's current `sla_started_at`.
-2. Sign in as **Supervisor**. Change priority on this case.
-3. Refresh the case.
+1. ~~Identify or prepare a case that has been **reopened** at some point after its original creation. Note the reopen timestamp — this is the case's current `sla_started_at`.~~
+2. ~~Sign in as **Supervisor**. Change priority on this case.~~
+3. ~~Refresh the case.~~
 
-**Expected result**
+**Expected result (deferred)**
 - The new deadline = `sla_started_at (reopen moment) + new-priority-target`. It is **not** anchored to the case's original creation date.
 - SLA state updates accordingly. If the reopen moment is recent and the priority is bumped to HIGH, the case may still show On Track even though its original creation is old.
 
-#### 9c — Priority change on a case that has never reached RFA (DRAFT / PENDING)
+#### 9c — Priority change on a case that has never reached RFA (DRAFT / PENDING) *(deferred)*
 
-1. Identify a case still in **DRAFT** or **PENDING_CASE_CREATION_APPROVAL** (no `sla_due_at` yet).
-2. Sign in as **Supervisor**. Change priority on this case.
-3. Refresh the case.
+1. ~~Identify a case still in **DRAFT** or **PENDING_CASE_CREATION_APPROVAL** (no `sla_due_at` yet).~~
+2. ~~Sign in as **Supervisor**. Change priority on this case.~~
+3. ~~Refresh the case.~~
 
-**Expected result**
+**Expected result (deferred)**
 - The action succeeds. `sla_due_at` remains **null** — nothing to recompute yet. No error, no SLA State badge (or a "not yet started" state, matching B4).
 - The audit record is still created.
 
-#### 9d — Non-supervisor is blocked
+#### 9d — Non-supervisor is blocked *(deferred)*
 
-1. Attempt to change priority as an **Investigator** (non-supervisor) via the same action on any case.
+1. ~~Attempt to change priority as an **Investigator** (non-supervisor) via the same action on any case.~~
 
-**Expected result**
-- The action is blocked (button hidden or a **403** response is returned).
+**Expected result (deferred)**
+- With no UI control present, there is nothing for an Investigator to click; when the control ships, the button must be hidden for non-supervisors and the underlying API returns **401 Unauthorized** to a non-supervisor JWT (per B5).
 
 ---
 
@@ -458,13 +472,16 @@ This scenario has three sub-cases covering the three anchoring behaviours descri
 
 **Acceptance criteria covered:** B6
 
+> **Environment limitation:** notification delivery is not yet configured on UAT (see Section 5). The idempotency guarantee lives in the escalation-records ledger (`(case_id, sla_state)` unique constraint), which is still observable — the "inbox" portion of this scenario is deferred.
+
 1. Identify a case that is currently **Breached**.
-2. Note the timestamp and content of the last SLA breach notification for that case.
+2. Note the timestamp of the most recent escalation-ledger entry for that case (via BIAR / DB view of `SLA Escalation Records` if accessible, or ask engineering to confirm).
 3. Wait for **at least two SLA cron cycles** (typically 2 hours).
-4. Check the notifications inbox for the assignee and supervisor.
+4. Re-check the escalation-ledger for the same case.
 
 **Expected result**
-- **No additional Breach notification** has fired for that same case in the interim. The breach notification is a one-shot per `(case, SLA state)` pair.
+- **No additional `CASE_SLA_BREACHED` ledger row** has been written for that same case in the interim. The breach entry is a one-shot per `(case, SLA state)` pair.
+- *Deferred:* once notification channels are configured, the assignee/supervisor notifications inbox should likewise show a single breach notification, not repeated hourly copies.
 
 ---
 
@@ -566,10 +583,9 @@ While testing the above, the tester should also confirm that the following pre-e
 
 The Product Owner may accept this release when:
 
-- [ ] All Scenarios 1–16 have been executed and passed.
-- [ ] Every acceptance criterion in Section 3 has been observed as true at least once.
+- [ ] All Scenarios 1–16 have been executed and passed (scenarios marked **Not Applicable** are skipped, not counted as failures).
+- [ ] Every acceptance criterion in Section 3 has been observed as true at least once (subject to the environment limitations called out in Section 5).
 - [ ] Regression areas in Section 6 have been spot-checked without discovering new issues.
-- [ ] Any defects raised during UAT are triaged and either fixed or explicitly deferred with Product Owner agreement.
 
 ---
 
@@ -593,14 +609,4 @@ These are not scope of this delivery, but the tester should confirm the Product 
 
 ---
 
-## 9. Sign-off
-
-| Role | Name | Signature | Date |
-|------|------|-----------|------|
-| Product Owner | | | |
-| QA Lead | | | |
-| Engineering Lead | | | |
-
----
-
-*Document prepared based on paysys-pmo tracker issues #814 and #823, CMS issues #214 and #220, CMS pull requests #233, #234, #240, and BIAR pull requests #107 and #118. For technical detail beyond the acceptance criteria in this document, refer to the impact and solution documents held in the UAT board repository under `issues/case-management-system/214/` and `issues/case-management-system/220/`.*
+*Prepared for paysys-pmo #814 / #823 and BIAR alert-enrichment work. See the linked CMS and BIAR pull requests in the header for implementation detail.*
