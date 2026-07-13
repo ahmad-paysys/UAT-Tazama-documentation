@@ -13,19 +13,19 @@
 The Case Management Trend Dashboard's *"Workload & Investigator Productivity"* panel shows no investigator names. The Jupyter notebook joins case rows against a Hudi gold table (`gold/cms_usernames`) to resolve `case_owner_user_id` UUIDs to display names — but that gold table is empty because NiFi never ingests it.
 
 The upstream plumbing is otherwise complete on `dev`:
-- CMS created a `cms_usernames` Postgres table (migration `20260616124311_username`) that is upserted on every successful login from the Keycloak inner-token `name` claim ([backend/src/modules/auth/auth.service.ts:267–301](../../../repos/case-management-system/backend/src/modules/auth/auth.service.ts#L267-L301)).
+- CMS has a `cms_usernames` Postgres table (migration `20260616124311_username`) that is upserted on every successful login from the inner-token `name` claim ([backend/src/modules/auth/auth.service.ts:267–301](../../../repos/case-management-system/backend/src/modules/auth/auth.service.ts#L267-L301)). This is IAM-agnostic — it reads generic OIDC-shape claims (`sub`, `name`, `tenant_id`) via `extractInnerToken`, so any IAM producing that token shape works.
 - A `CmsUsernamesETL` pass-through ETL is registered in `_ETL_REGISTRY["cms_usernames"]` in the biar automation orchestrator ([automation-orchestrator/lakehouse_automation_pipeline.py:52–69](../../../repos/biar/automation-orchestrator/lakehouse_automation_pipeline.py#L52-L69)).
 - The notebook already reads from `f"{WAREHOUSE_ROOT}/gold/cms_usernames"` and left-joins by `user_id` ([JupyterHub/notebooks/Case_Management_Trend_Dashboard.ipynb](../../../repos/biar/JupyterHub/notebooks/Case_Management_Trend_Dashboard.ipynb) cell 1 & cell 14).
 
 What is missing is a single `QueryDatabaseTableRecord` NiFi processor in `biar/nifi/tazama.xml` pointing at `tazama_cms.cms_usernames`. A patch has been prepared in Full-Stack-Docker-Tazama PR [#236](https://github.com/tazama-lf/Full-Stack-Docker-Tazama/pull/236) (mirrored as biar PR [#89](https://github.com/tazama-lf/biar/pull/89)) but neither is merged. This is the root cause originally documented in biar issue [#112](https://github.com/tazama-lf/biar/issues/112), which Sandy asked to be checked in the 2026-07-07 comment.
 
-Track A (the ship-blocker for #225) is: merge the NiFi processor patch. Track B (the long-term correctness work) is: eliminate the login-driven staleness and per-service identity-mirroring pattern by moving to an event-driven identity sync from Keycloak (or a shared identity service).
+The fix is Track A: merge the two open NiFi processor PRs. The login-driven staleness gap (users who never log into CMS are absent from the DLH; Keycloak name changes lag until the user's next login) is a **known limitation** documented at the bottom of this issue — no in-CMS fix is proposed because CMS must remain IAM-agnostic (plug-and-play IAM contract).
 
 ---
 
 ## How It Works Today — Confirmed in Code
 
-### 1. CMS captures the investigator name on every login (already on `dev`)
+### 1. CMS captures the user name on every login (already on `dev`; IAM-agnostic)
 
 [backend/src/modules/auth/auth.service.ts:60–68](../../../repos/case-management-system/backend/src/modules/auth/auth.service.ts#L60-L68) calls `storeUserName(token)` after each successful `login()`. The upsert body:
 
@@ -86,7 +86,7 @@ CREATE TABLE "cms_usernames" (
 CREATE UNIQUE INDEX "cms_usernames_user_id_key" ON "cms_usernames"("user_id");
 ```
 
-**Confirmed:** the CMS side of the fix from the June 12 & June 16 design comments is present on `dev`.
+`extractInnerToken` reads standard OIDC-shape claims (`sub`, `name`, `tenant_id`) — this code has no IAM-specific coupling and is compatible with the plug-and-play IAM contract.
 
 ### 2. The biar automation orchestrator has an ETL for `cms_usernames` (already on `dev`)
 
@@ -129,7 +129,7 @@ class CmsUsernamesETL(BaseETL):
         return self.gold_path
 ```
 
-**Confirmed:** the ETL is wired, correct, and would happily write incoming batches to `gold/cms_usernames`. It receives nothing.
+The ETL is wired, correct, and would happily write incoming batches to `gold/cms_usernames`. It receives nothing.
 
 ### 3. The notebook already knows how to render investigator names
 
@@ -138,11 +138,9 @@ Data load in cell 1 of [JupyterHub/notebooks/Case_Management_Trend_Dashboard.ipy
 ```python
 cms_usernames_path = f"{WAREHOUSE_ROOT}/gold/cms_usernames"
 cms_usernames = load_tenant_hudi(cms_usernames_path)
-# ...
-print(f"✓ CMS Usernames loaded: {cms_usernames.count()} records")
 ```
 
-Investigator lookup in cell 14 of the same notebook:
+Investigator lookup in cell 14:
 
 ```python
 if cms_usernames is not None:
@@ -160,7 +158,7 @@ if cms_usernames is not None:
     ).drop("user_id")
 ```
 
-The left-join means: if there is no matching `user_id` in `gold/cms_usernames`, the case row still comes through with `investigator_name = NULL`, and the presenter loop (same cell 14) falls back to printing the raw UUID:
+The left-join means: if there is no matching `user_id` in `gold/cms_usernames`, the case row still comes through with `investigator_name = NULL`, and the presenter loop falls back to printing the raw UUID:
 
 ```python
 if pd.notna(investigator_name) and str(investigator_name).strip():
@@ -169,7 +167,7 @@ else:
     print(f"  {int(idx+1)}. Name not found in cms_usernames — showing ID: {investigator_id}")
 ```
 
-**Confirmed:** the notebook is correct and defensive. It silently degrades to UUIDs when `gold/cms_usernames` is empty — matching the symptom Sandy reported on 2026-05-21.
+The notebook is correct and defensive. It silently degrades to UUIDs when `gold/cms_usernames` is empty — matching the symptom Sandy reported on 2026-05-21.
 
 ### 4. NiFi has no processor for `cms_usernames`
 
@@ -189,8 +187,6 @@ evaluation, network_map, rule, tasks, transaction, transaction_data, typology
 
 Every other `tazama_cms` table (`alerts`, `cases`, `tasks`, `comments`) has a `QueryDatabaseTableRecord` processor pointed at it. `cms_usernames` does not.
 
-**Confirmed:** this is the single missing link. NiFi never emits a `cms_usernames` batch to the automation orchestrator API, so the ETL never runs, so `gold/cms_usernames` stays empty, so the notebook prints UUIDs.
-
 ### 5. A fix has been prepared but not merged
 
 - [Full-Stack-Docker-Tazama PR #236](https://github.com/tazama-lf/Full-Stack-Docker-Tazama/pull/236) — `feat(biar/nifi): update NiFi template for cms_usernames.` — **OPEN, not merged.**
@@ -203,7 +199,7 @@ Diff excerpt from PR #236:
 <value>cms_usernames</value>
 ```
 
-added inside a new `QueryDatabaseTableRecord` block, alongside supporting `RemoteProcessGroup` `<key>table</key><value>cms_usernames</value>` entries — the same shape used by the existing `alerts`, `cases`, `tasks`, `comments` processors.
+added inside a new `QueryDatabaseTableRecord` block, alongside supporting `RemoteProcessGroup` `<key>table</key><value>cms_usernames</value>` entries — the same shape used by the existing `alerts`, `cases`, `tasks`, and `comments` processors.
 
 ---
 
@@ -217,7 +213,7 @@ Every downstream symptom follows from that:
 - **The presenter falls back to raw UUIDs** → users see "Name not found in cms_usernames — showing ID: {UUID}" instead of names.
 - **All `Case_Management_Trend_Dashboard.ipynb` "Workload & Investigator Productivity" charts and top-N tables show UUIDs** → the visible symptom Sandy reported.
 
-The CMS auth-service upsert, the Prisma migration, and the `CmsUsernamesETL` were all completed in June 2026 as part of the June 12 design ("Approach: Keycloak → CMS DB → NiFi → DLH"). The NiFi step was skipped or lost — the June 18 comment claiming "The NiFi pipeline is ready and data is now being successfully ingested into Ozone" was ahead of the actual template update, which is still open as a PR.
+The CMS auth-service upsert, the Prisma migration, and the `CmsUsernamesETL` were all completed in June 2026. The NiFi step was skipped or lost — the June 18 comment claiming "The NiFi pipeline is ready and data is now being successfully ingested into Ozone" was ahead of the actual template update, which is still open as a PR.
 
 ---
 
@@ -230,24 +226,13 @@ The CMS auth-service upsert, the Prisma migration, and the `CmsUsernamesETL` wer
 | `biar/nifi/tazama.xml` (in Full-Stack-Docker-Tazama) | Add a `QueryDatabaseTableRecord` processor + supporting connections for `tazama_cms.cms_usernames` | New XML blocks; see PR #236 diff |
 | `nifi/tazama.xml` (in biar repo) | Same patch, mirror copy | See biar PR #89 diff |
 
-Track A is a pure NiFi template edit. No source code changes on `dev` are required.
-
-### Files that must change (Track B — event-driven identity sync)
-
-| File | What changes | Line numbers |
-|---|---|---|
-| `backend/src/modules/auth/auth.service.ts` | Remove the login-time `storeUserName` upsert path; add a Keycloak event-listener consumer (or a scheduled batch sync) | L60–68, L267–301 |
-| `backend/prisma/schema.prisma` | Optionally add `disabled_at`, `last_synced_at`, `source` columns to `cms_usernames` to track sync source | L546–555 |
-| `backend/prisma/migrations/{new-timestamp}_cms_usernames_sync_fields/migration.sql` | New migration adding the columns above | New file |
-| `backend/src/modules/{new}/keycloak-sync.service.ts` | New service consuming Keycloak user events (create/update/delete) into `cms_usernames` | New file |
-| `biar/nifi/tazama.xml` | Adjust ingest max-value column set if `updated_at` semantics change (e.g. add `disabled_at`) | Existing processor block |
-| `biar/automation-orchestrator/Table_ETLs/cms_usernames.py` | Optionally switch Hudi record key from `id` to `user_id` (see minor design note in biar #112) | L54–62 |
+Track A is a pure NiFi template edit. No source code changes are required in any repo.
 
 ### Files indirectly affected (no code change, but behavior depends on Track A landing)
 
 | File | Behavior that changes when Track A lands | Line numbers |
 |---|---|---|
-| `biar/JupyterHub/notebooks/Case_Management_Trend_Dashboard.ipynb` | Cell 14's investigator-name join starts returning names; the "Name not found" fallback stops firing for active users | Cell 1, cell 14 |
+| `biar/JupyterHub/notebooks/Case_Management_Trend_Dashboard.ipynb` | Cell 14's investigator-name join starts returning names; the "Name not found" fallback stops firing for logged-in users | Cell 1, cell 14 |
 | `biar/automation-orchestrator/Table_ETLs/cms_usernames.py` | Starts receiving batches; today it is unreachable | L33–65 |
 | Any future dashboard that reads `gold/cms_usernames` | Same — starts having data to read | N/A |
 
@@ -258,7 +243,7 @@ Track A is a pure NiFi template edit. No source code changes on `dev` are requir
 | Consequence if left unfixed | Downstream effect |
 |---|---|
 | `gold/cms_usernames` remains empty | Every consumer that joins on `user_id` sees NULL names |
-| Case Management Trend Dashboard shows UUIDs | Supervisors cannot attribute case actions to human investigators without cross-referencing Keycloak manually |
+| Case Management Trend Dashboard shows UUIDs | Supervisors cannot attribute case actions to human investigators without cross-referencing IAM manually |
 | Any future dashboard (Executive Overview, Fraud Trend, TMS Performance) that plans to resolve investigator names will hit the same wall | Silent degradation across BIAR reports |
 | The `CmsUsernamesETL` code and Prisma table sit unused | Dead-code perception; if anyone "cleans up" the ETL not realising why it exists, the eventual fix regresses |
 | Every CMS login continues to upsert a row into `cms_usernames` that nothing reads | Table grows but stays orphan; low but real DB churn |
@@ -281,31 +266,33 @@ Track A is a pure NiFi template edit. No source code changes on `dev` are requir
 - Files: 2 XML templates
 - Schema migration required: **No** (migration already applied on `dev`)
 - Frontend changes required: **No**
+- Backend code changes required: **No**
 - Estimated total: **~2 hours** end-to-end, most of it review + deploy
 
-### Track B — Event-driven identity sync (durable fix)
+### No Track B is proposed
 
-| Step | File | Effort |
-|---|---|---|
-| B1. Design: Keycloak event-listener SPI or Kafka consumer topology | Design doc | 1 day |
-| B2. Add new columns (`last_synced_at`, `disabled_at`, `source`) migration | New Prisma migration | 0.5 day |
-| B3. Implement `KeycloakSyncService` (event consumer) | New service under `backend/src/modules/identity-sync/` | 2 days |
-| B4. Remove login-time upsert (or keep as fallback) | `auth.service.ts` L60–68, L267–301 | 0.5 day |
-| B5. Backfill script for existing/dormant users | New script | 0.5 day |
-| B6. NiFi max-value column review (may need `updated_at, disabled_at`) | `biar/nifi/tazama.xml` | 0.25 day |
-| B7. Hudi record key evaluation (`id` → `user_id`) — see biar #112 note | `Table_ETLs/cms_usernames.py` | 0.25 day |
-| B8. Tests (unit + integration) | Multiple | 1 day |
-
-- Files: ~6 backend + 1 NiFi + 1 ETL + 1 migration
-- Schema migration required: **Yes** (additive columns; safe under concurrent writes)
-- Frontend changes required: **No**
-- Estimated total: **~6 developer-days**
+An event-driven identity sync (e.g. a Keycloak SPI event listener writing into `cms_usernames`) would eliminate the login-driven staleness described in the Known Limitations section below. It is not proposed here because CMS must remain IAM-agnostic — the CMS repository is required to be a plug-and-play IAM consumer with no IAM-vendor-specific code. Any solution to the staleness gap must live **outside** the CMS repo (in the deployment/ops layer, or in NiFi tapping a standardized IAM export), not inside it. Since no such external component exists today and the immediate #225 report is fully resolved by Track A, deferring the staleness fix is the right call.
 
 ### Recommended sequencing
 
 1. **Ship Track A immediately.** It is the specific fix for #225 as reported. Both PRs are already open and reviewed.
-2. **Schedule Track B for post-deadline.** It is the correctness/architecture improvement flagged in [UmairKhan-Paysys' user-story comment](https://github.com/tazama-lf/case-management-system/issues/225#issuecomment-4843752888) ("Architectural deviation… Recommend treating this as a tactical/interim solution pending a centralized identity-sync pattern"). Do not block #225 on it.
-3. **Track B should coordinate with #214/#220 review cycle** only insofar as the migration file numbering — no code overlap.
+2. **Document the known limitations** (below) so operators and reporting stakeholders know to expect stale-name / missing-name cases for users who never log in.
+
+---
+
+## Known Limitations — Login-Driven Staleness
+
+Track A fixes the reported symptom for the common case (users who have logged into CMS at least once). It leaves three residual gaps, all rooted in the fact that `cms_usernames` is populated only at CMS-login time:
+
+| Limitation | Effect on the dashboard |
+|---|---|
+| User exists in IAM but has never logged into CMS | Their `user_id` never appears in `cms_usernames`, so the dashboard falls back to UUID for cases they own |
+| User's display name is changed in IAM but they don't subsequently log in | Their `cms_usernames` row keeps the old name; the dashboard shows the stale name |
+| User is disabled in IAM | `cms_usernames` has no mechanism to mark them disabled — they still appear in reports |
+
+**Why not fix in CMS:** the CMS repo is a plug-and-play IAM consumer. Any code that reaches into the IAM (SPI event listeners, admin-API polling, disabled-user detection) would introduce vendor-specific coupling. That work belongs in the deployment/ops layer or in NiFi tapping a standardized IAM export — not in CMS.
+
+**Operational workaround:** ask supervisors to have each active investigator log into CMS at least once after deployment. This backfills the common case.
 
 ---
 
@@ -318,14 +305,6 @@ Track A is a pure NiFi template edit. No source code changes on `dev` are requir
 - [ ] After redeploying NiFi in UAT and performing at least one CMS login as a known user, a `SELECT COUNT(*) FROM tazama_cms.cms_usernames` returns ≥ 1, and the corresponding Hudi table at `gold/cms_usernames` contains ≥ 1 row.
 - [ ] `Case_Management_Trend_Dashboard.ipynb` re-run against UAT displays the investigator's display name (not UUID) in the "TOP 5 INVESTIGATORS BY WORKLOAD" section for at least one investigator.
 - [ ] The "Name not found in cms_usernames — showing ID: …" fallback line does not appear for any investigator who has logged into CMS at least once since deployment.
-
-### Track B
-
-- [ ] `KeycloakSyncService` (new) receives Keycloak `USER_CREATE`, `USER_UPDATE`, `USER_DELETE` (or equivalent) events and upserts `cms_usernames` without requiring the user to log in.
-- [ ] A user whose display name is changed in Keycloak but who never logs into CMS afterwards is reflected in `gold/cms_usernames` within one sync interval.
-- [ ] `cms_usernames.last_synced_at` is updated on every sync; `disabled_at` is set when a user is disabled in Keycloak.
-- [ ] Backfill script populates `cms_usernames` for all pre-existing Keycloak users.
-- [ ] Login-time upsert in `auth.service.ts` is removed (or explicitly retained as a fallback and documented).
-- [ ] Hudi record-key change (if adopted) verified: no duplicate `user_id` rows in `gold/cms_usernames` after a full reload.
+- [ ] Known-limitation cases (never-logged-in / renamed-but-not-logged-in users) are documented in a UAT release note so stakeholders know to expect them.
 
 ---
