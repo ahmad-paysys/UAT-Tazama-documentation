@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Impact Study — Issue #217: Update to the Reports - Case Ageing Report page</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #24292e;
+    --h1: #0d1b3e;
+    --h2: #1a3a6b;
+    --h3: #2563a8;
+    --border: #d0d7de;
+    --border-soft: #e1e4e8;
+    --code-bg: #f6f8fa;
+    --table-head-bg: #0d1b3e;
+    --table-head-fg: #ffffff;
+    --table-head-border: #1a3a6b;
+    --row-even: #f3f5f8;
+    --row-odd: #ffffff;
+    --link: #1a3a6b;
+    --link-hover: #2563a8;
+    --bar-bg: #0d1b3e;
+    --bar-fg: #ffffff;
+    --bar-btn-bg: rgba(255,255,255,0.12);
+    --bar-btn-bg-hover: rgba(255,255,255,0.25);
+    --bar-btn-border: rgba(255,255,255,0.25);
+    --bar-btn-active: #2563a8;
+    --details-bg: #fafbfc;
+    --details-border: #d0d7de;
+    --summary-bg: #f3f5f8;
+    --summary-hover: #e9edf2;
+    --badge-green-bg: #d4edda;  --badge-green-fg: #155724;  --badge-green-bd: #b8dfc4;
+    --badge-amber-bg: #fff3cd;  --badge-amber-fg: #856404;  --badge-amber-bd: #f0d88a;
+    --badge-red-bg:   #f8d7da;  --badge-red-fg:   #721c24;  --badge-red-bd:   #f1aeb5;
+    --badge-blue-bg:  #d1ecf1;  --badge-blue-fg:  #0c5460;  --badge-blue-bd:  #a8d9e2;
+  }
+
+  [data-theme="dark"] {
+    --bg: #0d1117;
+    --fg: #c9d1d9;
+    --h1: #79c0ff;
+    --h2: #58a6ff;
+    --h3: #79c0ff;
+    --border: #30363d;
+    --border-soft: #21262d;
+    --code-bg: #161b22;
+    --table-head-bg: #1f6feb;
+    --table-head-fg: #ffffff;
+    --table-head-border: #388bfd;
+    --row-even: #161b22;
+    --row-odd: #0d1117;
+    --link: #58a6ff;
+    --link-hover: #79c0ff;
+    --bar-bg: #161b22;
+    --bar-fg: #c9d1d9;
+    --bar-btn-bg: rgba(255,255,255,0.06);
+    --bar-btn-bg-hover: rgba(255,255,255,0.14);
+    --bar-btn-border: rgba(255,255,255,0.18);
+    --bar-btn-active: #1f6feb;
+    --details-bg: #0d1117;
+    --details-border: #30363d;
+    --summary-bg: #161b22;
+    --summary-hover: #1f242c;
+    --badge-green-bg: #033a16; --badge-green-fg: #7ee787; --badge-green-bd: #196c2e;
+    --badge-amber-bg: #4d3800; --badge-amber-fg: #ffd33d; --badge-amber-bd: #8a6500;
+    --badge-red-bg:   #4c0014; --badge-red-fg:   #ff7b85; --badge-red-bd:   #8a0020;
+    --badge-blue-bg:  #032b40; --badge-blue-fg:  #79c0ff; --badge-blue-bd:  #1f6feb;
+  }
+
+  [data-theme="solar"] {
+    --bg: #fdf6e3;
+    --fg: #586e75;
+    --h1: #073642;
+    --h2: #268bd2;
+    --h3: #b58900;
+    --border: #eee8d5;
+    --border-soft: #eee8d5;
+    --code-bg: #eee8d5;
+    --table-head-bg: #073642;
+    --table-head-fg: #fdf6e3;
+    --table-head-border: #002b36;
+    --row-even: #f5efdc;
+    --row-odd: #fdf6e3;
+    --link: #268bd2;
+    --link-hover: #2aa198;
+    --bar-bg: #073642;
+    --bar-fg: #fdf6e3;
+    --bar-btn-bg: rgba(253,246,227,0.10);
+    --bar-btn-bg-hover: rgba(253,246,227,0.22);
+    --bar-btn-border: rgba(253,246,227,0.30);
+    --bar-btn-active: #b58900;
+    --details-bg: #fbf2d8;
+    --details-border: #eee8d5;
+    --summary-bg: #eee8d5;
+    --summary-hover: #e4dcc1;
+    --badge-green-bg: #dbe9b1; --badge-green-fg: #4d5d10; --badge-green-bd: #b5c97a;
+    --badge-amber-bg: #ffeec2; --badge-amber-fg: #7d5a00; --badge-amber-bd: #e6c970;
+    --badge-red-bg:   #fbd3cb; --badge-red-fg:   #8a1a08; --badge-red-bd:   #e89a8a;
+    --badge-blue-bg:  #cfe6f5; --badge-blue-fg:  #1c5e85; --badge-blue-bd:  #8ec0dc;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--fg);
+    background: var(--bg);
+    margin: 0;
+    padding: 4.5rem 1rem 2rem;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+
+  .page-wrapper { max-width: 960px; margin: 0 auto; }
+
+  .top-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    background: var(--bar-bg);
+    color: var(--bar-fg);
+    padding: 0.55rem 1rem;
+    z-index: 1000;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+  }
+  .top-bar .group { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+  .top-bar .label {
+    font-size: 0.75em;
+    opacity: 0.7;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-right: 0.25rem;
+  }
+  .top-bar button {
+    background: var(--bar-btn-bg);
+    color: var(--bar-fg);
+    border: 1px solid var(--bar-btn-border);
+    border-radius: 5px;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.82em;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s ease;
+  }
+  .top-bar button:hover { background: var(--bar-btn-bg-hover); }
+  .top-bar button.active {
+    background: var(--bar-btn-active);
+    border-color: var(--bar-btn-active);
+  }
+
+  h1 { color: var(--h1); font-size: 2rem; margin-top: 0; margin-bottom: 0.25rem; }
+  h2 { color: var(--h2); font-size: 1.4rem; margin: 0; padding: 0; border: none; }
+  h3 { color: var(--h3); font-size: 1.1rem; margin: 0; padding: 0; }
+
+  .static-section h2 {
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 0.3rem;
+    margin-top: 2.2rem;
+  }
+  .static-section h3 { margin-top: 1.8rem; }
+
+  p { margin: 0.6rem 0; }
+  ul, ol { margin: 0.5rem 0; padding-left: 1.6rem; }
+  li { margin: 0.25rem 0; }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 1.8rem 0; }
+
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.875em;
+    background: var(--code-bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    padding: 0.15em 0.4em;
+  }
+
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    padding: 1rem 1.2rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+  }
+  pre code { background: none; border: none; padding: 0; font-size: 0.85em; line-height: 1.5; }
+
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9em; }
+  thead tr { background: var(--table-head-bg); color: var(--table-head-fg); }
+  thead th {
+    padding: 0.6rem 0.85rem;
+    text-align: left;
+    font-weight: 600;
+    border: 1px solid var(--table-head-border);
+  }
+  tbody tr:nth-child(even) { background: var(--row-even); }
+  tbody tr:nth-child(odd)  { background: var(--row-odd); }
+  tbody td { padding: 0.5rem 0.85rem; border: 1px solid var(--border); vertical-align: top; }
+
+  .badge {
+    display: inline-block;
+    padding: 0.15em 0.6em;
+    border-radius: 999px;
+    font-size: 0.78em;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .badge-green { background: var(--badge-green-bg); color: var(--badge-green-fg); border: 1px solid var(--badge-green-bd); }
+  .badge-amber { background: var(--badge-amber-bg); color: var(--badge-amber-fg); border: 1px solid var(--badge-amber-bd); }
+  .badge-red   { background: var(--badge-red-bg);   color: var(--badge-red-fg);   border: 1px solid var(--badge-red-bd); }
+  .badge-blue  { background: var(--badge-blue-bg);  color: var(--badge-blue-fg);  border: 1px solid var(--badge-blue-bd); }
+
+  strong { font-weight: 600; }
+
+  div.toc {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.1rem 1.4rem;
+    margin: 1.2rem 0 1.8rem;
+  }
+  div.toc p.toc-title {
+    font-weight: 700;
+    font-size: 0.95em;
+    margin: 0 0 0.5rem;
+    color: var(--h1);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  div.toc ol { margin: 0; padding-left: 1.3rem; }
+  div.toc li { margin: 0.2rem 0; font-size: 0.9em; }
+  div.toc ul { margin: 0.15rem 0; padding-left: 1.2rem; list-style: disc; }
+  div.toc a { color: var(--link); text-decoration: none; }
+  div.toc a:hover { text-decoration: underline; color: var(--link-hover); }
+
+  details.section {
+    margin: 1rem 0;
+    border: 1px solid var(--details-border);
+    border-radius: 6px;
+    background: var(--details-bg);
+    overflow: hidden;
+  }
+  details.section > summary {
+    cursor: pointer;
+    padding: 0.7rem 1rem;
+    background: var(--summary-bg);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    user-select: none;
+    transition: background 0.15s ease;
+  }
+  details.section > summary:hover { background: var(--summary-hover); }
+  details.section > summary::-webkit-details-marker { display: none; }
+  details.section > summary::before {
+    content: "▶";
+    font-size: 0.7em;
+    color: var(--h2);
+    transition: transform 0.2s ease;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  details.section[open] > summary::before { transform: rotate(90deg); }
+  details.section .section-body { padding: 0.4rem 1.2rem 1rem; }
+
+  details.subsection {
+    margin: 0.6rem 0;
+    border: 1px solid var(--details-border);
+    border-radius: 5px;
+    background: var(--bg);
+  }
+  details.subsection > summary {
+    cursor: pointer;
+    padding: 0.5rem 0.85rem;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    user-select: none;
+    background: transparent;
+    transition: background 0.15s ease;
+  }
+  details.subsection > summary:hover { background: var(--summary-hover); }
+  details.subsection > summary::-webkit-details-marker { display: none; }
+  details.subsection > summary::before {
+    content: "▶";
+    font-size: 0.65em;
+    color: var(--h3);
+    transition: transform 0.2s ease;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  details.subsection[open] > summary::before { transform: rotate(90deg); }
+  details.subsection .subsection-body { padding: 0.2rem 1rem 0.8rem; }
+
+  html { scroll-behavior: smooth; scroll-padding-top: 70px; }
+
+  .diagram-wrap {
+    position: relative;
+    margin: 1.4rem -1rem 0.6rem;
+    border-top: 1px solid var(--details-border);
+    border-bottom: 1px solid var(--details-border);
+    background: var(--details-bg);
+    padding: 1.4rem 1.2rem;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    cursor: grab;
+  }
+  .diagram-wrap:active { cursor: grabbing; }
+  .diagram-wrap .mermaid { display: block; }
+  .diagram-wrap .mermaid svg { display: block; max-width: none !important; height: auto !important; min-height: 200px; }
+
+  .callout {
+    border-left: 4px solid var(--h3);
+    background: var(--code-bg);
+    border-radius: 0 6px 6px 0;
+    padding: 0.7rem 1rem;
+    margin: 1rem 0;
+  }
+  .callout.amber { border-color: #b08000; }
+  .callout.green { border-color: #155724; }
+  .callout.red   { border-color: #721c24; }
+</style>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  function getMermaidTheme() {
+    const t = document.documentElement.getAttribute('data-theme');
+    if (t === 'dark') return 'dark';
+    return 'base';
+  }
+  function initMermaid() {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: getMermaidTheme(),
+      themeVariables: (function() {
+        const t = document.documentElement.getAttribute('data-theme');
+        if (t === 'dark') return {};
+        if (t === 'solar') return { primaryColor: '#eee8d5', primaryTextColor: '#586e75', primaryBorderColor: '#93a1a1', lineColor: '#586e75', background: '#fdf6e3', mainBkg: '#fdf6e3', nodeBorder: '#93a1a1', clusterBkg: '#f5efdc', titleColor: '#073642', edgeLabelBackground: '#fdf6e3' };
+        return { primaryColor: '#f3f5f8', primaryTextColor: '#24292e', primaryBorderColor: '#8a95a3', lineColor: '#6b7a8d', background: '#ffffff', mainBkg: '#f3f5f8', nodeBorder: '#8a95a3', clusterBkg: '#fafbfc', titleColor: '#0d1b3e', edgeLabelBackground: '#ffffff' };
+      })(),
+      flowchart: { curve: 'basis', htmlLabels: true, rankSpacing: 120, nodeSpacing: 80 }
+    });
+    document.querySelectorAll('.mermaid').forEach(el => { el.removeAttribute('data-processed'); });
+    mermaid.run({ nodes: document.querySelectorAll('.mermaid') });
+  }
+  document.addEventListener('DOMContentLoaded', initMermaid);
+  window.__reinitMermaid = initMermaid;
+</script>
+</head>
+
+<div class="top-bar" role="toolbar" aria-label="Document controls">
+  <div class="group">
+    <span class="label">Sections</span>
+    <button type="button" id="expand-all">Expand all</button>
+    <button type="button" id="collapse-all">Collapse all</button>
+  </div>
+  <div class="group">
+    <span class="label">Theme</span>
+    <button type="button" class="theme-btn" data-theme="light">Light</button>
+    <button type="button" class="theme-btn" data-theme="dark">Dark</button>
+    <button type="button" class="theme-btn" data-theme="solar">Solar</button>
+  </div>
+  <div class="group">
+    <button type="button" id="top-btn" title="Back to top">↑ Top</button>
+  </div>
+</div>
+
+<div class="page-wrapper">
+<div class="static-section">
+
+<h1>Impact Study — Issue #217: Update to the Reports - Case Ageing Report page</h1>
+
+<p>
+  <strong>Issue:</strong> <a href="https://github.com/tazama-lf/case-management-system/issues/217">#217 — Update to the Reports - Case Ageing Report page</a><br>
+  <strong>Study Date:</strong> 2026-07-13<br>
+  <strong>Author:</strong> Ahmad Khalid<br>
+  <strong>Repository:</strong> tazama-lf/case-management-system
+</p>
+
+<hr>
+
+<h2 id="summary">Summary</h2>
+
+<p>Issue #217 is @Justus-at-Tazama's per-widget analysis of the Case Ageing Report, cataloguing ten cross-cutting quirks. Two of them — the <code>FRAUD_AND_AML</code> container-as-Case (quirk 7) and the <code>STATUS_84_COMPLETED</code> divergence (quirk 4) — are <span class="badge badge-green">already resolved on dev</span> inside <code>getCaseAgeing</code>: <code>ReportsService.withNonContainerCaseFilter</code> is applied to all three query builders, and the per-type resolution loop skips <code>FRAUD_AND_AML</code>. Those quirks are descoped from this issue and continue under <a href="https://github.com/tazama-lf/case-management-system/issues/214">issue #214</a>.</p>
+
+<p>Of the remaining eight quirks, the two with the largest blast radius are <strong>quirk 6</strong> (investigator OR clause conflates "my cases" with the shared claimable pool, inflating every widget's personal metrics) and <strong>quirk 9</strong> (<code>STATUS_99_ABANDONED</code> cases in ageing scope contribute pure noise to every widget). Both are dataset-level defects that flow into all seven widgets fed by the shared query. Presentation and per-widget scope defects are deferred to Track B.</p>
+
+<p><strong>Track A</strong> — surgical, backend-only: extract a shared <code>applyAgeingInvestigatorScope</code> helper, replace three copy-pasted OR clauses with helper calls, add <code>STATUS_99_ABANDONED</code> exclusion at the query level. <strong>Track B</strong> — full nine-widget rework: split into open-snapshot and closed-in-window datasets, single shared age-band helper with Hamilton rounding, monthly-median trend with IQR band, single grouped case-type aggregation, <code>null</code>-able averages, ISO-8601 wire dates, code-prefixed title-case status labels, horizontal 100% stacked by-status bar seeded from the canonical open-status set.</p>
+
+<div class="diagram-wrap">
+<div class="mermaid">
+flowchart LR
+  REQ[GET /api/v1/reports/case-ageing<br/>dateRange param — <b>ignored</b>] --> CTRL[report.controller.ts<br/>@Get('case-ageing')]
+  CTRL --> SVC[report.service.ts<br/>getCaseAgeing]
+  SVC --> Q1[Shared findMany<br/>no status filter<br/>no created_at bound]
+  SVC --> Q2[Per-type findMany × N<br/>CLOSED_STATUSES only<br/>no date bound]
+  SVC --> Q3[Recent-closed findMany<br/>CLOSED_STATUSES<br/>fixed 6-month window]
+  Q1 -.->|"4-arm OR<br/>copy 1"| SCOPE1[owned + task-assigned<br/>+ unassigned + STATUS_02]
+  Q2 -.->|"4-arm OR<br/>copy 2"| SCOPE2[owned + task-assigned<br/>+ unassigned + STATUS_02]
+  Q3 -.->|"4-arm OR<br/>copy 3"| SCOPE3[owned + task-assigned<br/>+ unassigned + STATUS_02]
+  Q1 --> W1[7 widgets:<br/>Avg Age, over-15/30,<br/>by-status, distribution,<br/>Avg Resolution, table]
+  Q2 --> W2[Case Type Resolution bar]
+  Q3 --> W3[Resolution Trend line]
+
+  style SCOPE1 fill:#f8d7da,stroke:#721c24
+  style SCOPE2 fill:#f8d7da,stroke:#721c24
+  style SCOPE3 fill:#f8d7da,stroke:#721c24
+  style Q1 fill:#fff3cd,stroke:#856404
+</div>
+</div>
+
+<hr>
+
+<div class="toc">
+<p class="toc-title">Contents</p>
+<ol>
+  <li><a href="#confirmed">Confirmed root cause</a></li>
+  <li><a href="#track-a">Track A — Investigator scope + abandoned exclusion</a></li>
+  <li><a href="#track-b">Track B — Full nine-widget rework</a></li>
+  <li><a href="#risks">Side effects and risks</a></li>
+  <li><a href="#cross-issue">Cross-issue dependencies</a></li>
+  <li><a href="#effort">Effort estimate</a></li>
+  <li><a href="#acceptance">Acceptance criteria</a></li>
+  <li><a href="#sequencing">Recommended sequencing</a></li>
+</ol>
+</div>
+
+</div><!-- /static-section -->
+
+<details class="section" open>
+<summary><h2 id="confirmed">1. Confirmed root cause</h2></summary>
+<div class="section-body">
+
+<p>Every claim below was verified against <code>origin/dev</code> of <code>tazama-lf/case-management-system</code> at the time of study.</p>
+
+<table>
+  <thead>
+    <tr><th>Claim</th><th>File</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Inline four-arm investigator OR clause in <code>getCaseAgeing</code></td>
+      <td><code>backend/src/modules/report/report.service.ts</code> L944–962, L1063–1082, L1131–1153</td>
+      <td><span class="badge badge-red">copy-pasted × 3</span></td>
+    </tr>
+    <tr>
+      <td>Main <code>findMany</code> applies no <code>status</code> filter — abandoned cases in scope</td>
+      <td><code>report.service.ts</code> L967–978</td>
+      <td><span class="badge badge-red">pollutes 7 widgets</span></td>
+    </tr>
+    <tr>
+      <td><code>CLOSED_STATUSES</code> excludes <code>STATUS_99_ABANDONED</code></td>
+      <td><code>report.service.ts</code> L24–30</td>
+      <td><span class="badge badge-blue">by design — abandoned never leaves the ageing scope by way of "resolved"</span></td>
+    </tr>
+    <tr>
+      <td>An <code>applyInvestigatorScope</code> helper exists but semantics differ from ageing needs</td>
+      <td><code>report.service.ts</code> L101–149</td>
+      <td><span class="badge badge-blue">not used by getCaseAgeing</span></td>
+    </tr>
+    <tr>
+      <td>Container filter applied to all three query builders</td>
+      <td><code>report.service.ts</code> L938, L1058, L1126</td>
+      <td><span class="badge badge-green">quirks 4 &amp; 7 resolved on dev</span></td>
+    </tr>
+    <tr>
+      <td>Per-type loop skips <code>CaseType.FRAUD_AND_AML</code></td>
+      <td><code>report.service.ts</code> L1046</td>
+      <td><span class="badge badge-green">resolved on dev</span></td>
+    </tr>
+    <tr>
+      <td>Bucket boundary inconsistency at 30 days</td>
+      <td><code>report.service.ts</code> L998–999, L1014–1017</td>
+      <td><span class="badge badge-amber">deferred to Track B</span></td>
+    </tr>
+    <tr>
+      <td>Empty averages collapse to <code>0</code></td>
+      <td><code>report.service.ts</code> L986, L990–996</td>
+      <td><span class="badge badge-amber">deferred to Track B</span></td>
+    </tr>
+    <tr>
+      <td><code>resolutionTrend</code> is per-close-day, not monthly</td>
+      <td><code>report.service.ts</code> L1112–1172</td>
+      <td><span class="badge badge-amber">deferred to Track B</span></td>
+    </tr>
+    <tr>
+      <td>ALL-CAPS status labels + unstable axis</td>
+      <td><code>report.service.ts</code> L1011–1019, L1211–1213</td>
+      <td><span class="badge badge-amber">deferred to Track B</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>The four-arm OR clause in each copy is identical:</p>
+<pre><code>OR: [
+  { case_owner_user_id: filters.requestingUserId },      // owned by me
+  { tasks: { some: { assigned_user_id: filters.requestingUserId } } },  // task assigned to me
+  { case_owner_user_id: null },                          // any unassigned case  ← polluter
+  { status: 'STATUS_02_READY_FOR_ASSIGNMENT' },          // any ready-for-assignment  ← polluter
+]</code></pre>
+
+</div>
+</details>
+
+<details class="section" open>
+<summary><h2 id="track-a">2. Track A — Investigator scope + abandoned exclusion</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open>
+<summary><h3>What changes</h3></summary>
+<div class="subsection-body">
+<p>One backend file: <code>backend/src/modules/report/report.service.ts</code>. Introduce <code>applyAgeingInvestigatorScope</code> (kept local to the service, ~15 lines), replace the three inline OR clauses inside <code>getCaseAgeing</code> (~-45 lines / +3 helper calls), and add <code>status: { not: CaseStatus.STATUS_99_ABANDONED }</code> to the shared base filters. Net delta ~60 lines.</p>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>Impact</h3></summary>
+<div class="subsection-body">
+<table>
+  <thead><tr><th>Dimension</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td>Files changed</td><td>1 (backend)</td></tr>
+    <tr><td>Schema migration required</td><td><span class="badge badge-green">No</span></td></tr>
+    <tr><td>Frontend changes required</td><td><span class="badge badge-green">No</span></td></tr>
+    <tr><td>Downtime required</td><td><span class="badge badge-green">No</span></td></tr>
+    <tr><td>Risk of regression</td><td><span class="badge badge-green">Low</span> — the helper is a strict subset of today's OR clause; supervisor path unchanged apart from the abandoned exclusion</td></tr>
+    <tr><td>Reversibility</td><td>Trivial (revert one commit)</td></tr>
+  </tbody>
+</table>
+</div>
+</details>
+
+<details class="subsection" open>
+<summary><h3>What Track A fixes immediately</h3></summary>
+<div class="subsection-body">
+<ul>
+  <li>Investigator's Avg Case Age no longer averages tenant-wide unassigned + ready-for-assignment cases into their personal mean (quirk 6).</li>
+  <li>Investigator's <code>&gt; 15</code> / <code>&gt; 30</code> cards, distribution pie, by-status bars, and details table are no longer inflated by cases nobody owns.</li>
+  <li>The three copy-pasted OR clauses inside <code>getCaseAgeing</code> are consolidated into a single helper — future scope refinements land in one place.</li>
+  <li>Abandoned cases stop showing up as ageing rows in every widget fed by the shared query and in the per-type resolution bar.</li>
+</ul>
+</div>
+</details>
+
+<details class="subsection">
+<summary><h3>What Track A does not fix</h3></summary>
+<div class="subsection-body">
+<ul>
+  <li><code>dateRange</code> still ignored (quirk 1).</li>
+  <li>Bucket boundary inconsistency at 30 days (quirk 2).</li>
+  <li>Over-15 / over-30 cards still overlap (quirk 3).</li>
+  <li><code>resolutionTrend</code> is still a per-close-day scatter, not a monthly trend (quirk 5).</li>
+  <li><code>avgCaseAge</code> / <code>avgResolutionTime</code> still collapse to <code>0</code> for empty populations (quirk 10).</li>
+  <li>ALL-CAPS status labels, unstable status axis, per-type serial queries, table duplicated owner columns, <code>en-US</code> server-formatted dates all untouched.</li>
+  <li>Widgets still count open + closed cases together (no lifecycle-scoped datasets).</li>
+  <li><code>STATUS_03_RETURNED</code> treatment divergence with the Case Status Report (quirk 8) is untouched.</li>
+</ul>
+<p><em>Track A is safe to ship in isolation.</em></p>
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section">
+<summary><h2 id="track-b">3. Track B — Full nine-widget rework</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open>
+<summary><h3>What changes</h3></summary>
+<div class="subsection-body">
+<p>Split <code>getCaseAgeing</code> into two lifecycle-scoped datasets — an <strong>open-snapshot</strong> (3.1 / 3.3 / 3.4 / 3.5 / 3.6 / 3.9) and a <strong>closed-in-window</strong> (3.2 / 3.7 / 3.8) — with <code>dateRange</code> bound to the closed dataset only. Introduce a single shared age-band helper with Hamilton rounding, monthly-median trend with IQR, single grouped case-type aggregation, <code>null</code>-able averages, ISO-8601 dates, code-prefixed title-case status labels, horizontal 100% stacked bar, seeded open-status set, dropped duplicated <code>investigator</code> projection.</p>
+</div>
+</details>
+
+<details class="subsection">
+<summary><h3>Schema impact</h3></summary>
+<div class="subsection-body">
+<p>None. All Track B changes are query-shape and presentation only.</p>
+<p>The issue's section 7 mentions a possible dedicated <code>closed_at</code> column to future-proof against in-place writes to closed rows; the same section states that under last-close-wins, <code>updated_at</code> is functionally a <code>closed_at</code> today and no schema change is required for correctness. Deferred.</p>
+</div>
+</details>
+
+<details class="subsection">
+<summary><h3>Backend code impact</h3></summary>
+<div class="subsection-body">
+<table>
+  <thead><tr><th>File</th><th>Change kind</th><th>Effort</th></tr></thead>
+  <tbody>
+    <tr><td><code>report.service.ts</code> — <code>getCaseAgeing</code></td><td>Split into two dataset builders; shared band helper; monthly <code>groupBy</code> for trend; grouped <code>case_type</code> aggregation; <code>null</code> empty averages; stop server-formatting <code>status</code>/<code>createdDate</code>; drop duplicated <code>investigator</code></td><td>1.5 days</td></tr>
+    <tr><td><code>report.controller.ts</code> — <code>getCaseAgeing</code></td><td>Wire <code>dateRange</code> through to closed-in-window dataset only; swagger schema for nullable averages</td><td>1 hour</td></tr>
+    <tr><td><code>__tests__/report.service.spec.ts</code></td><td>New fixtures per dataset; band-helper unit tests; monthly-trend unit tests</td><td>4 hours</td></tr>
+  </tbody>
+</table>
+</div>
+</details>
+
+<details class="subsection">
+<summary><h3>Frontend code impact</h3></summary>
+<div class="subsection-body">
+<table>
+  <thead><tr><th>File</th><th>Change kind</th><th>Effort</th></tr></thead>
+  <tbody>
+    <tr><td><code>types/reports.types.ts</code></td><td><code>number | null</code> averages; new trend shape; ISO 8601 dates; drop <code>userId</code></td><td>30 min</td></tr>
+    <tr><td><code>pages/CaseAgeingReport.tsx</code></td><td>Consume new shapes</td><td>30 min</td></tr>
+    <tr><td><code>CaseAgeingStatsCards.tsx</code></td><td>Render <code>null</code> as <code>N/A</code>; label live-backlog vs closed-throughput</td><td>1 hour</td></tr>
+    <tr><td><code>CaseAgeingBarChart.tsx</code></td><td>Horizontal layout; 100% stacked; seeded open-status set; code-prefixed title-case</td><td>3 hours</td></tr>
+    <tr><td><code>CaseAgeingPieChart.tsx</code></td><td>Shared band definition; Hamilton largest-remainder rounding</td><td>1 hour</td></tr>
+    <tr><td><code>ResolutionTimeTrendChart.tsx</code></td><td>Continuous temporal axis; median + IQR band via <code>ComposedChart</code></td><td>4 hours</td></tr>
+    <tr><td><code>CaseTypeResolutionChart.tsx</code></td><td>Consume grouped result; add companion "Resolution Time by Outcome" bar</td><td>3 hours</td></tr>
+    <tr><td><code>CaseAgeingTable.tsx</code></td><td>Drop raw User ID column; ISO date on wire; code-prefixed status</td><td>1 hour</td></tr>
+  </tbody>
+</table>
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section">
+<summary><h2 id="risks">4. Side effects and risks</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open>
+<summary><h3>Risks of Track A alone</h3></summary>
+<div class="subsection-body">
+<table>
+  <thead><tr><th>Risk</th><th>Likelihood</th><th>Mitigation</th></tr></thead>
+  <tbody>
+    <tr><td>Investigator loses visibility of cases they were incidentally seeing via the claimable arms</td><td><span class="badge badge-amber">Medium</span></td><td>This is the intended behaviour — claimable work belongs on the separate case queue / dashboard. Coordinate the rollout note with product.</td></tr>
+    <tr><td>Abandoned cases previously visible to an investigator disappear from the details table</td><td><span class="badge badge-green">Low</span></td><td>Abandoned drafts are terminal, draft-only, never investigated — surfacing on an ageing report was noise. Surface on an exception report if ops need visibility.</td></tr>
+    <tr><td>Supervisor / admin numbers shift because abandoned cases drop out</td><td><span class="badge badge-red">High (intended)</span></td><td>Communicate in release notes. Numbers move slightly lower as dead drafts stop skewing them upwards.</td></tr>
+    <tr><td>Extracted helper diverges from OR clauses in other reports that legitimately keep claimable arms</td><td><span class="badge badge-green">Low</span></td><td>Helper is scoped local to the ageing report and named <code>applyAgeingInvestigatorScope</code>; other reports keep their existing clauses.</td></tr>
+  </tbody>
+</table>
+</div>
+</details>
+
+<details class="subsection">
+<summary><h3>Risks of Track B</h3></summary>
+<div class="subsection-body">
+<table>
+  <thead><tr><th>Risk</th><th>Likelihood</th><th>Mitigation</th></tr></thead>
+  <tbody>
+    <tr><td>Payload-shape refactor breaks the frontend if merged half-way</td><td><span class="badge badge-red">High</span></td><td>Track B lands as a single coordinated PR — do not split.</td></tr>
+    <tr><td><code>null</code>-able averages break any consumer that assumes <code>number</code></td><td><span class="badge badge-amber">Medium</span></td><td>Wire-type change + card update land in the same PR; grep before merge.</td></tr>
+    <tr><td>Monthly-median changes the semantics even if the shape is preserved</td><td><span class="badge badge-amber">Medium</span></td><td>Rename the field (<code>month</code> → <code>bucketStart</code>, <code>avgDays</code> → <code>median</code>) so any stale consumer breaks loudly.</td></tr>
+    <tr><td>Hamilton rounding means pie percentages no longer match what today's per-band round would produce</td><td><span class="badge badge-green">Low (intended)</span></td><td>The point of Hamilton is that percentages sum to 100; document in release notes.</td></tr>
+  </tbody>
+</table>
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section">
+<summary><h2 id="cross-issue">5. Cross-issue dependencies</h2></summary>
+<div class="section-body">
+
+<table>
+  <thead><tr><th>Issue</th><th>Overlap with #217</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><a href="https://github.com/tazama-lf/case-management-system/issues/214">#214 — Container / <code>STATUS_84</code></a></td>
+      <td><span class="badge badge-green">Already applied</span> inside <code>getCaseAgeing</code> on dev, so #217 no longer conflicts with #214 in this file. #214 continues on the container model itself (BPMN, triage, case-creation). No file overlap with either track of #217.</td>
+    </tr>
+    <tr>
+      <td><a href="https://github.com/tazama-lf/case-management-system/issues/220">#220 — SLA / Priority divorce</a></td>
+      <td><span class="badge badge-blue">No conflict</span>. The ageing report exposes <code>priority</code> verbatim in <code>caseDetails</code>; Track A does not change that; Track B keeps the field and inherits whatever #220 settles as the priority contract.</td>
+    </tr>
+    <tr>
+      <td><a href="https://github.com/tazama-lf/case-management-system/issues/225">#225 — BIAR investigator names</a></td>
+      <td><span class="badge badge-blue">No conflict</span>. External (BIAR / Superset); no source-file overlap with either track here.</td>
+    </tr>
+  </tbody>
+</table>
+
+</div>
+</details>
+
+<details class="section">
+<summary><h2 id="effort">6. Effort estimate</h2></summary>
+<div class="section-body">
+
+<table>
+  <thead><tr><th>Track</th><th>Files</th><th>Effort</th></tr></thead>
+  <tbody>
+    <tr><td>Track A</td><td>1 backend + tests</td><td>~2.5 hours</td></tr>
+    <tr><td>Track B</td><td>2 backend + 7 frontend + tests</td><td>~6–8 days</td></tr>
+    <tr><td><strong>Total</strong></td><td></td><td>~7–9 days</td></tr>
+  </tbody>
+</table>
+
+</div>
+</details>
+
+<details class="section">
+<summary><h2 id="acceptance">7. Acceptance criteria</h2></summary>
+<div class="section-body">
+
+<details class="subsection" open>
+<summary><h3>Track A</h3></summary>
+<div class="subsection-body">
+<ul>
+  <li>[ ] <code>getCaseAgeing</code> contains no inline four-arm OR clause; a single <code>applyAgeingInvestigatorScope</code> helper handles investigator scope.</li>
+  <li>[ ] The helper keeps only <code>case_owner_user_id = me</code> and <code>tasks.some.assigned_user_id = me</code>.</li>
+  <li>[ ] All three query builders inside <code>getCaseAgeing</code> — shared <code>findMany</code>, per-type resolution, recent-closed trend — go through the helper.</li>
+  <li>[ ] The shared <code>findMany</code> filters out <code>STATUS_99_ABANDONED</code> at the query level.</li>
+  <li>[ ] An investigator no longer sees unassigned or ready-for-assignment cases in any ageing widget.</li>
+  <li>[ ] An investigator no longer sees abandoned cases in any ageing widget.</li>
+  <li>[ ] Supervisor / admin output is unchanged except for the abandoned exclusion.</li>
+  <li>[ ] Existing unit tests for <code>getCaseAgeing</code> pass with updated fixtures.</li>
+</ul>
+</div>
+</details>
+
+<details class="subsection">
+<summary><h3>Track B</h3></summary>
+<div class="subsection-body">
+<ul>
+  <li>[ ] <code>getCaseAgeing</code> exposes an open-snapshot dataset and a closed-in-window dataset; <code>dateRange</code> is bound to the latter only.</li>
+  <li>[ ] Single shared age-band helper drives the four buckets used by 3.3 / 3.4 / 3.5 / 3.6.</li>
+  <li>[ ] <code>casesOver15Days</code> and <code>casesOver30Days</code> use the same boundary convention and are either non-overlapping (<code>16-30</code> / <code>30+</code>) or clearly cumulative.</li>
+  <li>[ ] <code>avgCaseAge</code> and <code>avgResolutionTime</code> return <code>null</code> for empty populations; both cards render <code>N/A</code>.</li>
+  <li>[ ] <code>resolutionTrend</code> returns one row per calendar month with <code>{ bucketStart, median, p25, p75, n }</code>; the chart uses a continuous temporal axis with an IQR band.</li>
+  <li>[ ] <code>caseTypeResolution</code> is produced by a single grouped aggregation and bound to the same close-anchored window as the trend and Avg Resolution Time.</li>
+  <li>[ ] <code>caseDetails.createdDate</code> is ISO 8601 on the wire; client formats for display; raw "User ID" column dropped; status is code-prefixed title-case.</li>
+  <li>[ ] The by-status bar renders every in-scope open status even when its count is zero.</li>
+  <li>[ ] The pie's four percentages sum to exactly 100 (Hamilton rounding).</li>
+</ul>
+</div>
+</details>
+
+</div>
+</details>
+
+<details class="section" open>
+<summary><h2 id="sequencing">8. Recommended sequencing</h2></summary>
+<div class="section-body">
+
+<ol>
+  <li><strong>Track A first, standalone PR.</strong> ~2.5 hours end-to-end. Merge before Track B begins so Track B does not have to reason about the old four-arm OR clause or the old abandoned-in-scope behaviour.</li>
+  <li><strong>Track B as a single coordinated PR</strong> (backend + frontend together — payload shape changes are cross-cutting and cannot be usefully split). Sequence its internal steps roughly B1 → B14 as listed in <code>issue-217.md</code>.</li>
+  <li><strong>Container / <code>STATUS_84</code> retirement</strong> (quirks 4 / 7) tracked separately on issue #214. No file overlap with either track of #217 remains.</li>
+  <li><strong><code>STATUS_03_RETURNED</code> reconciliation</strong> (quirk 8) is deferred until the Case Status Report is settled; document the divergence in Track B's PR description but do not attempt to fix it inside #217.</li>
+</ol>
+
+<div class="callout green"><strong>Rollout note.</strong> Track A shifts investigator numbers lower (they stop double-counting the shared claimable pool) and shifts supervisor numbers slightly lower (abandoned drafts stop counting). Both are intended and should be called out in the UAT release note.</div>
+
+</div>
+</details>
+
+</div><!-- /page-wrapper -->
+
+<script>
+(function() {
+  var saved = localStorage.getItem('theme') || 'light';
+  document.documentElement.setAttribute('data-theme', saved);
+
+  document.querySelectorAll('.theme-btn').forEach(function(btn) {
+    if (btn.getAttribute('data-theme') === saved) btn.classList.add('active');
+    btn.addEventListener('click', function() {
+      var t = btn.getAttribute('data-theme');
+      document.documentElement.setAttribute('data-theme', t);
+      localStorage.setItem('theme', t);
+      document.querySelectorAll('.theme-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      if (window.__reinitMermaid) window.__reinitMermaid();
+    });
+  });
+
+  document.getElementById('expand-all').addEventListener('click', function() {
+    document.querySelectorAll('details').forEach(function(d) { d.open = true; });
+  });
+  document.getElementById('collapse-all').addEventListener('click', function() {
+    document.querySelectorAll('details').forEach(function(d) { d.open = false; });
+  });
+  document.getElementById('top-btn').addEventListener('click', function() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  document.querySelectorAll('.diagram-wrap').forEach(function(wrap) {
+    var isDown = false, startX, scrollLeft;
+    wrap.addEventListener('mousedown', function(e) {
+      isDown = true; startX = e.pageX - wrap.offsetLeft; scrollLeft = wrap.scrollLeft;
+    });
+    wrap.addEventListener('mouseleave', function() { isDown = false; });
+    wrap.addEventListener('mouseup', function() { isDown = false; });
+    wrap.addEventListener('mousemove', function(e) {
+      if (!isDown) return;
+      e.preventDefault();
+      wrap.scrollLeft = scrollLeft - (e.pageX - wrap.offsetLeft - startX);
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
