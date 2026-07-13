@@ -266,16 +266,12 @@ Each scenario is a self-contained walkthrough. Steps assume the tester is signed
 3. Sign in (in a second browser session) as **Investigator B**. Open the sibling AML case.
 4. On the AML case, change the assignee to Investigator B.
 5. On the FRAUD case tab, refresh the page.
-
-**Expected result**
-- The FRAUD case's owner / assignee is unchanged by any action taken on the AML case.
-- The AML case's owner / assignee is unchanged by any action taken on the FRAUD case.
-
 6. As Investigator A, close the FRAUD case (see Scenario 3).
 7. Refresh the AML case as Investigator B.
 
 **Expected result**
-- The AML case's status is unchanged. It remains open and independently closable.
+- After step 5: the FRAUD case's owner / assignee is unchanged by any action taken on the AML case, and the AML case's owner / assignee is unchanged by any action taken on the FRAUD case.
+- After step 7: the AML case's status is unchanged. It remains open and independently closable.
 
 ---
 
@@ -286,17 +282,14 @@ Each scenario is a self-contained walkthrough. Steps assume the tester is signed
 1. Sign in as **Investigator A**. Open any FRAUD or AML case ready to be closed.
 2. Click **Close Case** in the Case Actions panel.
 3. Inspect the **Final Outcome** drop-down.
-
-**Expected result**
-- Exactly three options appear: **Closed Confirmed**, **Closed Refuted**, **Closed Inconclusive**.
-- **"Completed"** is **not** an option.
-- No **"Sub-Cases Closure Status"** table is rendered inside the modal.
-- No supervisor-only "Close Case (AFTER report)" secondary button appears.
-
 4. Select an outcome, provide required notes, and confirm.
 
 **Expected result**
-- The case closes to the chosen status. No sibling case is affected. No supervisor approval is required.
+- At step 3, exactly three options appear in the drop-down: **Closed Confirmed**, **Closed Refuted**, **Closed Inconclusive**.
+- **"Completed"** is **not** an option.
+- No **"Sub-Cases Closure Status"** table is rendered inside the modal.
+- No supervisor-only "Close Case (AFTER report)" secondary button appears.
+- After step 4, the case closes to the chosen status. No sibling case is affected. No supervisor approval is required.
 
 ---
 
@@ -307,23 +300,18 @@ Each scenario is a self-contained walkthrough. Steps assume the tester is signed
 1. Sign in as any user with report access.
 2. Navigate to **Cases** and open the **Filters** panel.
 3. Inspect the **Status** filter drop-down.
-
-**Expected result**
-- No **"Completed"** (STATUS_84) option appears in the drop-down.
-
 4. Inspect the **Case Type** filter. If `FRAUD_AND_AML` is still present as a legacy filter value, select it and apply the filter.
-
-**Expected result**
-- Zero rows returned in this release (manual triage does not persist a FRAUD_AND_AML case, and the AI-triage path is not enabled). If any rows are returned, they are pre-release historical container cases — record them as a data cleanup item for the Product Owner rather than a functional defect.
-
 5. Navigate to **Reports → Case Status** (or equivalent).
 6. Observe Total Cases against (Open Cases + Closed Cases). Observe Closed Cases against the sum of Closed Confirmed + Closed Refuted + Closed Inconclusive (+ system auto-closures 71/72).
 
 **Expected result**
-- **Guaranteed:** No orphan "Completed" bucket exists in any status breakdown.
-- **Guaranteed:** The **Case Type breakdown** chart shows only FRAUD and AML segments — no `FRAUD_AND_AML` segment.
-- **Guaranteed:** The **Investigator Workload** chart contains no unowned "container" entries.
-- **Observable (not code-enforced):** the tester should confirm that `Total = Open + Closed` and `Closed = 81 + 82 + 83 + 71 + 72` balance in the UAT dataset. Note any discrepancy for the Product Owner.
+- At step 3, no **"Completed"** (STATUS_84) option appears in the drop-down.
+- At step 4, zero rows are returned in this release (manual triage does not persist a FRAUD_AND_AML case, and the AI-triage path is not enabled). If any rows are returned, they are pre-release historical container cases — record them as a data cleanup item for the Product Owner rather than a functional defect.
+- At step 6:
+  - **Guaranteed:** No orphan "Completed" bucket exists in any status breakdown.
+  - **Guaranteed:** The **Case Type breakdown** chart shows only FRAUD and AML segments — no `FRAUD_AND_AML` segment.
+  - **Guaranteed:** The **Investigator Workload** chart contains no unowned "container" entries.
+  - **Observable (not code-enforced):** the tester should confirm that `Total = Open + Closed` and `Closed = 81 + 82 + 83 + 71 + 72` balance in the UAT dataset. Note any discrepancy for the Product Owner.
 
 ---
 
@@ -345,25 +333,16 @@ Each scenario is a self-contained walkthrough. Steps assume the tester is signed
 **Acceptance criteria covered:** B1, B7
 
 1. Navigate to **Cases → Filters**. Open the Priority drop-down.
-
-**Expected result**
-- Exactly three options: **Low**, **Medium**, **High**. No `NEW`, `URGENT`, `CRITICAL`, or `BREACH` value appears.
-
 2. Filter by **High**. Inspect the returned rows.
-
-**Expected result**
-- The rows include recent HIGH-severity cases as well as older HIGH-severity cases. Age is not the filter criterion.
-
 3. Repeat for **Low** and **Medium**.
 4. Navigate to **Alerts Dashboard**. Open its priority filter.
-
-**Expected result**
-- Only Low / Medium / High are listed there too. Alert cards display the new colours (Low blue/green, Medium amber, High red/orange).
-
 5. Open any case that existed before this release (a historically migrated case).
 
 **Expected result**
-- Its priority is displayed as **Low**, **Medium**, or **High** — the migration converted NEW → LOW, URGENT → MEDIUM, CRITICAL → HIGH, BREACH → HIGH.
+- At step 1: exactly three options — **Low**, **Medium**, **High**. No `NEW`, `URGENT`, `CRITICAL`, or `BREACH` value appears.
+- At step 2: the rows include recent HIGH-severity cases as well as older HIGH-severity cases. Age is not the filter criterion.
+- At step 4: only Low / Medium / High are listed there too. Alert cards display the new colours (Low blue/green, Medium amber, High red/orange).
+- At step 5: the priority is displayed as **Low**, **Medium**, or **High** — the migration converted NEW → LOW, URGENT → MEDIUM, CRITICAL → HIGH, BREACH → HIGH.
 
 ---
 
@@ -390,23 +369,22 @@ Each scenario is a self-contained walkthrough. Steps assume the tester is signed
 **Setup**: Ensure there is a HIGH-priority case whose deadline is within the next 2 hours (or use test controls to shorten the deadline).
 
 1. Open the case's **View Case** modal.
-
-**Expected result**
-- A distinct **SLA State** badge is visible in the Case Details tab, separate from the Priority badge.
-- The badge reads **On Track** (green), **At Risk** (yellow), **Due Soon** (amber), or **Breached** (red) depending on the remaining time.
-
 2. Leave the case unresolved and let time pass (or use an accelerated test clock, if available in UAT).
 3. Refresh the case at intervals corresponding to 1/3, 2/3, and past the deadline.
 
 **Expected result**
-- The SLA State badge transitions **On Track → At Risk → Due Soon → Breached**.
-- The Priority badge remains unchanged throughout (still **High**).
-- Notifications fire according to B6's three-type taxonomy — **at most one per `(case, SLA-state)` transition**:
-  - On **AT_RISK** for an **unclaimed** case: a `CASE_CLAIM_CHASE` notification fires (nudging someone to claim).
-  - On **DUE_SOON** for an **owned** case: a `CASE_SUPPORT_CHASE` notification fires (nudging owner / supervisor).
-  - On **BREACHED**: a `CASE_SLA_BREACHED` notification fires.
-  - **Known gap:** on **DUE_SOON** for an **unclaimed** case, no dedicated notification fires. If the Product Owner expects a nudge in this scenario, flag as a follow-up.
-- No repeated hourly alerts on any transition.
+- At step 1:
+  - A distinct **SLA State** badge is visible in the Case Details tab, separate from the Priority badge.
+  - The badge reads **On Track** (green), **At Risk** (yellow), **Due Soon** (amber), or **Breached** (red) depending on the remaining time.
+- Across steps 2–3:
+  - The SLA State badge transitions **On Track → At Risk → Due Soon → Breached**.
+  - The Priority badge remains unchanged throughout (still **High**).
+  - Notifications fire according to B6's three-type taxonomy — **at most one per `(case, SLA-state)` transition**:
+    - On **AT_RISK** for an **unclaimed** case: a `CASE_CLAIM_CHASE` notification fires (nudging someone to claim).
+    - On **DUE_SOON** for an **owned** case: a `CASE_SUPPORT_CHASE` notification fires (nudging owner / supervisor).
+    - On **BREACHED**: a `CASE_SLA_BREACHED` notification fires.
+    - **Known gap:** on **DUE_SOON** for an **unclaimed** case, no dedicated notification fires. If the Product Owner expects a nudge in this scenario, flag as a follow-up.
+  - No repeated hourly alerts on any transition.
 
 ---
 
@@ -467,11 +445,12 @@ This scenario has three sub-cases covering the three anchoring behaviours descri
 3. Open the **Workload Report** (or the priority-breakdown chart).
    - Note the count of the **High Priority** bucket.
    - Drill into the bucket.
+4. Verify the priority buckets show the new values (Low / Medium / High) — no legacy NEW / URGENT / CRITICAL / BREACH values in any legend or bar label.
 
 **Expected result**
 - **Guaranteed by code:** Every case in the High bucket has Priority = **High** (severity). The bucket is not populated by cases that are simply old.
 - **Guaranteed by code:** Priority-bucket totals reconcile: `low + medium + high = totalCases` (all derived from the same underlying query).
-4. Verify the priority buckets show the new values (Low / Medium / High) — no legacy NEW / URGENT / CRITICAL / BREACH values in any legend or bar label.
+- At step 4: only Low / Medium / High values appear across legends and bar labels; no legacy NEW / URGENT / CRITICAL / BREACH values are shown.
 
 ---
 
@@ -510,15 +489,11 @@ If the tester has access to the BIAR dashboard:
 2. Locate an alert produced by a rule that is known to have sub-rules.
 3. Open the alert detail view (or the alert visualisation panel).
 4. Inspect each firing rule listed on the alert.
-
-**Expected result (CMS UI)**
-- Each firing rule shows a **sub-rule reference** ("Sub-ref: ...") where the alert payload includes one.
-- Band and exit-condition reason are **not expected to appear in the CMS view** in this release (see C2, C3) — they are emitted to the BIAR lakehouse only.
-
 5. Open a second alert whose rules do **not** have sub-rules.
 
-**Expected result**
-- The alert renders cleanly with the sub-rule reference simply absent. No error, no misleading empty placeholder.
+**Expected result (CMS UI)**
+- At step 4: each firing rule shows a **sub-rule reference** ("Sub-ref: ...") where the alert payload includes one. Band and exit-condition reason are **not expected to appear in the CMS view** in this release (see C2, C3) — they are emitted to the BIAR lakehouse only.
+- At step 5: the alert renders cleanly with the sub-rule reference simply absent. No error, no misleading empty placeholder.
 
 **Cross-check (BIAR side, for C2 and C3)**
 - If the tester has BIAR access: query `alerts_nav_rules` for the alert ID and confirm that `matched_band_reason`, `band_reasons_json`, and `matched_exit_condition_reason` columns are populated as expected for the rules on that alert.
@@ -534,15 +509,12 @@ If the tester has access to the BIAR dashboard:
 3. Save the note.
 4. Wait for the next lakehouse refresh cycle (or ask a system administrator to run the Tasks ETL).
 5. In the BIAR dashboard (or a Jupyter notebook against the `gold/tasks` table), locate the task by ID and inspect the `investigationNotes` column.
-
-**Expected result**
-- The note text is present, complete, and matches what was entered in the CMS.
-
 6. Return to the CMS, edit the same note, and save.
 7. After the next refresh, re-check the lakehouse.
 
 **Expected result**
-- The updated content is reflected. No duplication.
+- After step 5: the note text is present, complete, and matches what was entered in the CMS.
+- After step 7: the updated content is reflected. No duplication.
 
 ---
 
@@ -569,14 +541,11 @@ If the tester has access to the BIAR dashboard:
 If the tester has access to BIAR dashboards / notebooks:
 
 1. Open any pre-existing dashboard that reads `gold/tasks.status`.
-
-**Expected result**
-- The dashboard continues to render task statuses in **upper-case normalised form** as it did before.
-
 2. Open a notebook or dashboard that reads `gold/tasks.status_raw`.
 
 **Expected result**
-- The raw source value is populated and available for consumers that need it.
+- At step 1: the dashboard continues to render task statuses in **upper-case normalised form** as it did before.
+- At step 2: the raw source value is populated and available for consumers that need it.
 
 ---
 
