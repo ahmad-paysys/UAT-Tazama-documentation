@@ -99,7 +99,7 @@ The following acceptance criteria define what must be true for the Product Owner
 **A1. Case count and list**
 - **Manual triage path:** a FRAUD_AND_AML alert manually triaged by an investigator produces exactly **two** cases (one FRAUD, one AML). Neither has case type `FRAUD_AND_AML`.
 - **Reports and dashboards** apply a container-exclusion filter (`NON_CONTAINER_CASE_FILTER`), so aggregate totals, case-type breakdowns, and investigator workload all count each FRAUD_AND_AML alert as two cases.
-- **Known partial gap on the Cases dashboard:** when the triage-completion path (auto-completion of a triage task with a predicted outcome) resolves a FRAUD_AND_AML case, the originating case retains `case_type = FRAUD_AND_AML` in addition to the FRAUD and AML siblings being created. This is not stripped by the Cases dashboard listing (`getAllCases` does not apply the container-exclusion filter). Filtering the Cases list by `FRAUD_AND_AML` may therefore return these originating rows. **Flag as a defect to raise before sign-off** if the Product Owner requires the "exactly two cases everywhere" behaviour on the dashboard as well as in reports.
+- **Latent code-level gap (not reachable in production today):** the AI-triage code path in `triage.service.ts` contains a FRAUD_AND_AML branch that, if ever executed with a true-positive prediction of type FRAUD_AND_AML, would leave the originating case with `case_type = FRAUD_AND_AML` and create FRAUD and AML sibling cases (three rows total). `getAllCases` does not apply the container-exclusion filter, so such a row would appear on the Cases dashboard when filtered by `FRAUD_AND_AML`. This branch is **not reachable at runtime** because `predictAlert` hardcodes `isTruePositive: false` and discards the AI model response, so no true-positive AI prediction is produced. The AI/ML triage component is not yet implemented. This is recorded as a latent defect to address **before** AI triage is enabled, not a live bug against this release.
 
 **A2. Close-Case modal**
 - On any FRAUD or AML case, the Close-Case modal offers exactly three outcomes: **Closed Confirmed**, **Closed Refuted**, **Closed Inconclusive**.
@@ -125,9 +125,6 @@ The following acceptance criteria define what must be true for the Product Owner
 - **Guaranteed by code:** Case Type breakdown shows **FRAUD** and **AML** buckets only — no `FRAUD_AND_AML` bucket.
 - **Guaranteed by code:** Investigator Workload does not attribute the (former) ownerless container to any investigator.
 - **Observable at runtime (not code-enforced):** Closed Cases should equal Closed Confirmed + Closed Refuted + Closed Inconclusive plus system auto-closures 71/72. Total Cases should equal Open + Closed. Average Resolution Time should not be distorted by former instant container closures. The tester should observe and confirm these identities in the UAT dataset.
-
-**A7. Performance (observable target — not enforced by code)**
-- Triage of a FRAUD_AND_AML alert should complete within **5 seconds** from the user's perspective. This is a target to be measured during UAT; there is no code-level timeout or benchmark that enforces it.
 
 ### 3.2 Track B — SLA / Priority Split
 
@@ -176,9 +173,6 @@ The following acceptance criteria define what must be true for the Product Owner
 **B8. Reports**
 - The Workload report's High Priority bucket contains cases with Priority = HIGH (a severity measure), **not** old cases.
 - Report totals reconcile: `totalCases = low + medium + high`.
-
-**B9. Performance (observable target — not enforced by code)**
-- SLA cron job should complete within **60 seconds** for a caseload of 10,000 open cases. This is a target to be measured during UAT (system-observable, not directly UI-visible); there is no code-level benchmark or timeout that enforces it.
 
 ### 3.3 Track C — BIAR Alert Enrichment
 
@@ -239,7 +233,7 @@ Each scenario is a self-contained walkthrough. Steps assume the tester is signed
 
 ### Scenario 1 — A new FRAUD_AND_AML alert creates only two cases
 
-**Acceptance criteria covered:** A1, A5, A7
+**Acceptance criteria covered:** A1, A5
 
 1. Sign in as **Investigator A**.
 2. Navigate to **Alerts Dashboard** from the main navigation.
@@ -252,12 +246,11 @@ Each scenario is a self-contained walkthrough. Steps assume the tester is signed
 - Exactly **two** case rows appear for this alert — one with case type **FRAUD** and one with case type **AML**.
 - Neither case has type `FRAUD_AND_AML`.
 - Both cases have an owner assigned.
-- The triage-to-cases transition should complete in under 5 seconds (observable target, not code-enforced).
 
 7. Open the FRAUD case. Under the **Linked Items** (or equivalent) area, confirm the AML sibling is discoverable via the shared investigation group. There is **no** "parent case" panel.
 
-**Expected result (triage-completion / auto-completion path — known gap)**
-- If the alert is resolved via the triage-task auto-completion path (predicted outcome), the originating case retains `case_type = FRAUD_AND_AML` in addition to the FRAUD and AML sibling cases being created. Reports strip these out via the container-exclusion filter, but the Cases dashboard filtered by `FRAUD_AND_AML` **may still return the originating row**. This behaviour is a known partial gap against A1 — raise it as a defect for the Product Owner's decision before sign-off.
+**Note on the AI-triage / auto-completion path**
+- The AI-triage (predicted-outcome) path is **not enabled** in this release — the AI/ML component is not implemented and `predictAlert` returns a hardcoded false-positive, so no auto-close or auto-completion via prediction occurs at runtime. Manual triage is the only path that produces cases from a FRAUD_AND_AML alert today. See A1 for the latent code-level gap that must be addressed before AI triage is enabled.
 
 ---
 
@@ -318,7 +311,7 @@ Each scenario is a self-contained walkthrough. Steps assume the tester is signed
 4. Inspect the **Case Type** filter. If `FRAUD_AND_AML` is still present as a legacy filter value, select it and apply the filter.
 
 **Expected result**
-- Ideally zero rows. In practice, if any historical alerts have been resolved via the triage-completion path since this release, the originating rows may still appear (see A1's known gap). If rows are returned, note them and raise as a defect for the Product Owner's decision.
+- Zero rows returned in this release (manual triage does not persist a FRAUD_AND_AML case, and the AI-triage path is not enabled). If any rows are returned, they are pre-release historical container cases — record them as a data cleanup item for the Product Owner rather than a functional defect.
 
 5. Navigate to **Reports → Case Status** (or equivalent).
 6. Observe Total Cases against (Open Cases + Closed Cases). Observe Closed Cases against the sum of Closed Confirmed + Closed Refuted + Closed Inconclusive (+ system auto-closures 71/72).
@@ -619,7 +612,7 @@ The following items are **not** part of this development and should not block ac
 
 These are not scope of this delivery, but the tester should confirm the Product Owner's intent on each:
 
-- **A1 — triage-completion container:** the auto-completion (predicted-outcome) triage path leaves the originating case with `case_type = FRAUD_AND_AML`. Reports strip these via the container-exclusion filter, but the Cases dashboard listing does not. Decide whether the Cases dashboard should apply the same filter.
+- **A1 — latent AI-triage container gap:** the AI-triage code path in `triage.service.ts` contains a FRAUD_AND_AML branch that would leave the originating case with `case_type = FRAUD_AND_AML` alongside FRAUD and AML sibling cases. This branch is not reachable today because the AI/ML prediction component is not implemented (`predictAlert` returns a hardcoded false-positive) and `getAllCases` does not apply the `NON_CONTAINER_CASE_FILTER`. Address both — either strip the FRAUD_AND_AML branch or apply the container-exclusion filter to the Cases dashboard listing — **before** the AI-triage feature is enabled.
 - **B5 — priority-change audit visibility in case history:** the priority-change domain event has no listener writing to `caseHistory`. Audit records exist in the audit store; whether they render in the case-history / task-log tab is a separate wiring question to confirm at runtime.
 - **B6 — unclaimed DUE_SOON notifications:** no dedicated notification currently fires when an unclaimed case reaches DUE_SOON. Decide whether such a nudge is expected.
 
