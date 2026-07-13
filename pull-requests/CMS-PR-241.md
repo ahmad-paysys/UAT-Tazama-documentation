@@ -1,47 +1,48 @@
-# PR Review: CMS #241 — Paysys/Add Rule properties inside Typology in Visualization
+# PR Review: CMS #241 — feat: Paysys/Add Rule properties inside Typology in Visualization
+
+## Table of Contents
+
+- [Initial Review (2026-07-13)](#initial-review-2026-07-13)
+  - [Overview](#overview)
+  - [What Changed (Detailed)](#what-changed-detailed)
+  - [Code Quality Analysis](#code-quality-analysis)
+  - [Security Assessment](#security-assessment)
+  - [Test Coverage](#test-coverage)
+  - [CodeRabbit Activity — Pass 1](#coderabbit-activity--pass-1)
+  - [Summary and Verdict (initial)](#summary-and-verdict-initial)
+- [Follow-up Review (2026-07-13)](#follow-up-review-2026-07-13)
+  - [Resolution Status — Prior Items](#resolution-status--prior-items)
+  - [New Issues Found in Updated Commits](#new-issues-found-in-updated-commits)
+  - [CodeRabbit Activity — Passes 2 & 3](#coderabbit-activity--passes-2--3)
+  - [Test Coverage (updated)](#test-coverage-updated)
+  - [Updated Verdict](#updated-verdict)
+  - [GitHub Review Comment](#github-review-comment)
+
+---
+---
+---
+
+## Initial Review (2026-07-13)
 
 **Repo:** tazama-lf/case-management-system
 **Branch:** `paysys/addRulesPropsInTypology` → `dev`
 **Author:** MAdeel95 (Muhammad Adeel)
-**Date Reviewed:** 2026-07-13
-**Label:** _none_
-**Size:** +37 / -281 lines across 6 files
-**Commits:** 8 (latest `05ab1c3`)
-**State:** OPEN (mergeStateStatus: BLOCKED, mergeable: MERGEABLE)
+**Reviewed commit:** `05ab1c3282a5f8a4158ada40121a69d70dc0faab`
+**Label:** _none at the time — `enhancement` added later_
+**Size (initial):** +37 / -281 lines across 6 files
+**State:** OPEN
 **Existing approvals:** none
 
-## Table of Contents
+### Overview
 
-- [Overview](#overview)
-- [What Changed (Detailed)](#what-changed-detailed)
-  - [1. `backend/src/modules/gold-lakehouse/alerts-lakehouse.service.ts` — surface new rule metadata](#1-alerts-lakehouse-service)
-  - [2. `backend/src/modules/gold-lakehouse/types/raw-rule-row.types.ts` — extend raw row type](#2-raw-rule-row-types)
-  - [3. `backend/src/modules/alert/alert.service.ts` — drop payload logging](#3-alert-service)
-  - [4. `frontend/.../alertnavigator/types/index.ts` — extend `RuleDetailDto`](#4-frontend-types)
-  - [5. `frontend/.../alertnavigator/AlertNavigatorTab.tsx` — render new fields, remove loading branch](#5-alertnavigatortab)
-  - [6. `backend/package-lock.json` — resolved/integrity fields stripped](#6-lockfile)
-- [Code Quality Analysis](#code-quality-analysis)
-  - [Strengths](#strengths)
-  - [Issues and Observations](#issues-and-observations)
-- [Security Assessment](#security-assessment)
-- [Test Coverage](#test-coverage)
-- [CodeRabbit Activity](#coderabbit-activity)
-- [Summary and Verdict](#summary-and-verdict)
-- [GitHub Review Comment](#github-review-comment)
-
----
-
-## Overview
-
-The PR enriches the Alert Navigator visualization so each triggered rule inside a typology can display its description and matched-band reason. This is a straight-through change: the lakehouse SQL aggregation gathers three new columns (`rule_desc`, `matched_band_reason`, `matched_rule_reason`), the backend mapping forwards them, the frontend `RuleDetailDto` accepts them, and `AlertNavigatorTab.tsx` renders the two most useful (`ruleDesc`, `matched_band_reason`) inside the per-rule details block. It also removes a verbose `loggerService.log` line in `AlertService.getTransactionHistory` that stringified full transaction payloads, and — as a side change — deletes the loading-state early-return branch from `AlertNavigatorTab`.
+The PR enriches the Alert Navigator visualization so each triggered rule inside a typology can display its description and matched-band reason. This is a straight-through change: the lakehouse SQL aggregation gathers new columns (`rule_desc`, `matched_band_reason`), the backend mapping forwards them, the frontend `RuleDetailDto` accepts them, and `AlertNavigatorTab.tsx` renders them inside the per-rule details block. It also removes a verbose `loggerService.log` line in `AlertService.getTransactionHistory` that stringified full transaction payloads.
 
 Targets `dev` — correct for this repo's flow.
 
-CI status: three failing checks —
-- `conventional-commits / validate-pr-title` (PR title `Paysys/Add Rule properties inside Typology in Visualization` doesn't match the required Conventional Commits format, e.g. `feat: …`)
-- `node-ci / check style` (lint failure — several diff hunks introduce trailing whitespace and stray blank lines)
+CI status at time of initial review: three failing checks —
+- `conventional-commits / validate-pr-title` (PR title `Paysys/Add Rule properties inside Typology in Visualization` didn't match Conventional Commits format)
+- `node-ci / check style` (lint failures from trailing whitespace and stray blank lines)
 - `node-ci / check tests`
-These must be green before merge.
 
 | File | Nature of Change |
 |------|------------------|
@@ -52,487 +53,507 @@ These must be green before merge.
 | `frontend/.../alertnavigator/AlertNavigatorTab.tsx` | Renders `ruleDesc` and `matched_band_reason` under each rule; removes the `if (loading) …` render branch. |
 | `backend/package-lock.json` | 133 `resolved` URLs and matching `integrity` SHAs deleted across dev sub-trees. |
 
-[↑ Back to top](#pr-review-cms-241--paysysadd-rule-properties-inside-typology-in-visualization)
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
 
 ---
 
-## What Changed (Detailed)
+### What Changed (Detailed)
 
-### 1. `backend/src/modules/gold-lakehouse/alerts-lakehouse.service.ts` — surface new rule metadata <a id="1-alerts-lakehouse-service"></a>
+Full initial-round diff analysis was captured in the previous version of this review. The salient points, kept for follow-up traceability:
 
-Two hunks. First, the SQL aggregation adds three new JSON fields per rule row:
+1. **`alerts-lakehouse.service.ts`** — SQL added `rule_desc`, `matched_band_reason`, `matched_rule_reason`; mapping extracted into `const mappedRules`; introduced trailing whitespace and camelCase / snake_case mix.
+2. **`raw-rule-row.types.ts`** — added three used fields and one unused (`band_reasons_with_sub_rule_refs_json`); trailing whitespace on the new line.
+3. **`alert.service.ts`** — dropped `loggerService.log(... JSON.stringify(transactionData) ...)`. Legitimate PII-scrubbing.
+4. **`types/index.ts`** — `RuleDetailDto` gained 8 optional fields (only 3 emitted, only 2 rendered). `ruleDesc?: string` did not include `null`.
+5. **`AlertNavigatorTab.tsx`** — added guarded render blocks for `ruleDesc` and `matched_band_reason`; **removed the `if (loading)` early-return** while leaving the `loading` state wired up. Stray blank lines introduced.
+6. **`backend/package-lock.json`** — 133 `resolved`/`integrity` pairs removed (dev sub-trees).
 
-```diff
-                         'rule_independent_variable', anr.rule_independent_variable,
-                         'rule_sub_ref',              anr.rule_sub_ref,
-                         'rule_processing_time_ms',   anr.rule_processing_time_ms,
--                        'rule_tenant_id',            anr.rule_tenant_id
-+                        'rule_tenant_id',            anr.rule_tenant_id,
-+                        'rule_desc',                 anr.rule_desc,
-+                        'matched_band_reason', anr.matched_band_reason,
-+                        'matched_rule_reason', anr.matched_rule_reason
-                     )
-                 ) AS rules
-             FROM alert_navigator_rules anr
-```
-
-Second, the mapping over `triggeredRulesData` now forwards these three fields to the frontend payload:
-
-```diff
--          const rulesString = JSON.stringify(
--            triggeredRulesData.map((r) => ({
-+          const mappedRules = triggeredRulesData.map((r) => ({
-               ruleId: r.rule_id,
-               ruleWeight: r.rule_weight,
-               subRef: r.rule_sub_ref,
-               independentVariable: r.rule_independent_variable,
--            })),
--          );
-+              ruleDesc: r.rule_desc,
-+              matched_band_reason: r.matched_band_reason,
-+              matched_rule_reason: r.matched_rule_reason,
-+            }));
-+          const rulesString = JSON.stringify(mappedRules);
-```
-
-Notes:
-- Inline formatting: two of the three new SQL fields lost their column-alignment (spaces collapsed), and the mapped-object block has trailing whitespace and a stray blank line — this is what is failing `check style`.
-- The intermediate `mappedRules` variable is introduced without a reason (the previous inline form was equally readable). Not a blocker, but pure churn.
-- Naming mismatch: `ruleId`/`ruleWeight`/`subRef`/`independentVariable`/`ruleDesc` are camelCase; `matched_band_reason`/`matched_rule_reason` are snake_case. This mismatch is echoed through the frontend DTO. See Issue 3.
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
 
 ---
 
-### 2. `backend/src/modules/gold-lakehouse/types/raw-rule-row.types.ts` — extend raw row type <a id="2-raw-rule-row-types"></a>
+### Code Quality Analysis
 
-```diff
-   rule_sub_ref: string | null;
-+  band_reasons_with_sub_rule_refs_json: string[] | null;
-   rule_processing_time_ms: number | null;
-   rule_tenant_id: string | null;
-+  rule_desc: string | null;
-+  matched_rule_reason: string | null;
-+  matched_band_reason: string | null;
-```
+#### Strengths
 
-- The three fields consumed by `mappedRules` are correctly typed `string | null`.
-- `band_reasons_with_sub_rule_refs_json: string[] | null` is added to the type but is not selected in the SQL `json_build_object` above, so at runtime it will always be `undefined` — never populated. Adding it to the type is misleading. Either drop it here or select it in the query. See Issue 4.
-- The last line has trailing whitespace after `null;`.
+- Backend/frontend contract updated together in one PR.
+- `loggerService.log(... transactionData ...)` removal is a genuine privacy improvement.
+- Render-side guards use `!= null` (both `null` and `undefined`).
 
----
+#### Issues and Observations
 
-### 3. `backend/src/modules/alert/alert.service.ts` — drop payload logging <a id="3-alert-service"></a>
+Nine issues were identified in the initial round. Their statuses are tracked in the [Follow-up section](#resolution-status--prior-items):
 
-```diff
-     if (!transactionData.data) {
-       throw new InternalServerErrorException(`Transaction history data not found for AlertId ${alertId}`);
-     }
--    this.loggerService.log(`Fetched transaction data for Alert ID ${alertId}: ${JSON.stringify(transactionData)}`, AlertService.name);
-     return { transactionData };
-   }
-```
+1. **Major** — "No data available" flashes during fetch (loading branch removed).
+2. **Minor** — `RuleDetailDto.ruleDesc` type doesn't include `null`.
+3. **Minor** — Wire-format naming mixes camelCase and snake_case.
+4. **Minor** — `band_reasons_with_sub_rule_refs_json` added to `RawRuleRow` but never selected.
+5. **Minor** — 5 unused optional fields on `RuleDetailDto`.
+6. **Minor** — Trailing whitespace / stray blank lines fail `check style`.
+7. **Major** — 133 `resolved`/`integrity` entries stripped from `backend/package-lock.json`.
+8. **Minor** — PR title fails Conventional Commits.
+9. **Major** — `node-ci / check tests` failing.
 
-Legitimate cleanup — dumping full transaction payloads into logs is a real PII/secret-leak risk (PANs, MSISDNs, amounts, counterparties). Removing it is a small security win. Unrelated to the Typology-visualization headline change, but low-risk enough to bundle.
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
 
 ---
 
-### 4. `frontend/.../alertnavigator/types/index.ts` — extend `RuleDetailDto` <a id="4-frontend-types"></a>
-
-```diff
-   independentVariable?: string;
-   data?: unknown;
-+  ruleDesc?: string;
-+  band_reasons_with_sub_rule_refs_json?: string[];
-+  matched_band_reason?: string | null;
-+  exit_condition_reasons_json?: string[];
-+  matched_exit_condition_reason?: string | null;
-+  matched_rule_reason?: string | null;
-+  band_count?: number | null;
-+  exit_condition_count?: number | null;
- }
-```
-
-Only three of these eight properties are actually emitted by the backend (`ruleDesc`, `matched_band_reason`, `matched_rule_reason`) and only two are consumed in the render (`ruleDesc`, `matched_band_reason`). The other five are pure type-surface bloat — they don't exist on the wire today and will read as `undefined`. See Issue 5.
-
-Also, `ruleDesc?: string` doesn't include `null`, but the backend maps `ruleDesc: r.rule_desc` where `r.rule_desc: string | null`. CodeRabbit flagged this correctly — see Issue 2.
-
----
-
-### 5. `frontend/.../alertnavigator/AlertNavigatorTab.tsx` — render new fields, remove loading branch <a id="5-alertnavigatortab"></a>
-
-Three material changes.
-
-**(a) Loading branch removed:**
-
-```diff
--  if (loading) {
--    return (
--      <div className="flex items-center justify-center py-12">
--        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600"></div>
--        <span className="ml-3 text-gray-600">Loading...</span>
--      </div>
--    );
--  }
-```
-
-But the `loading` state is still declared at line 28, initialised to `true`, set to `true` before each fetch (line 45), and back to `false` in `finally` (line 63). Because it is no longer read, the render path on first mount / refetch is:
-
-```
-data === null, error === null, alertId truthy → falls through to `if (!data)` → "No data available"
-```
-
-That's a UX regression: users see "No data available" during the fetch instead of a spinner. This is exactly what CodeRabbit flagged as Major. See Issue 1.
-
-**(b) Rule detail rendering — two new lines:**
-
-```diff
-                               {rule.independentVariable}
-                                 </div>
-                               )}
-+                              {rule.ruleDesc != null && (
-+                                <div className="text-xs text-gray-500 mt-0.5">
-+                                  Rule Description: {' '}
-+                                  {rule.ruleDesc}
-+                                </div>
-+                              )}
-+                              {rule.matched_band_reason != null && (
-+                                <div className="text-xs text-gray-500 mt-0.5">
-+                                  Band Reason: {' '}
-+                                  {rule.matched_band_reason}
-+                                </div>
-+                              )}
-```
-
-Straightforward and correctly guarded with `!= null` (handles both `null` and `undefined`). This is the actual headline feature.
-
-**(c) Stray whitespace-only additions:**
-
-```diff
-         setData(result);
-+
- 
-         // Keep all typologies collapsed initially
-```
-
-and
-
-```diff
-                         typology.rules.map((rule, idx: number) => (
-                           <div key={idx} className="flex items-start gap-2">
-+
-                             <div className="flex-shrink-0 mt-1">
-```
-
-Both are pure whitespace-noise diff hunks — they contribute nothing and are among the causes of `check style` failing. See Issue 6.
-
----
-
-### 6. `backend/package-lock.json` — resolved/integrity fields stripped <a id="6-lockfile"></a>
-
-The diff removes 266 lines from `backend/package-lock.json`. Spot-checking the removals shows the pattern is identical everywhere:
-
-```diff
-     "node_modules/@angular-devkit/schematics-cli/node_modules/@angular-devkit/core": {
-       "version": "19.2.24",
--      "resolved": "https://registry.npmjs.org/@angular-devkit/core/-/core-19.2.24.tgz",
--      "integrity": "sha512-Kd49warf6U/EyWe5BszF/eebN3zQ3bk7tgfEljAw8q/rX95UUtriJubWvp6pgzHfzBA4jwq8f+QiNZB8eBEXPA==",
-       "dev": true,
-```
-
-Count of `"resolved":` entries: `origin/dev` = 214, this PR = 81 — 133 packages have had their tarball URL and SHA-512 integrity hash removed. Every one of these is a dev sub-tree.
-
-This is not the shape of a normal `npm install`. `npm i` populates `resolved`/`integrity` on any package it touches; it doesn't strip them. Possible causes: an `npm i --no-save --package-lock-only` variant, an editor auto-format that dropped fields, or a merge/rebase that lost data.
-
-Consequences of merging as-is:
-- `npm ci` on the affected trees no longer has a tarball URL to fetch from nor a hash to verify against — installs must fall back to resolving through the registry, and integrity verification is skipped for those entries.
-- The GitHub `Dependency Review` action currently passes, but it operates on top-level `package.json` diffs; it does not re-verify integrity on transitive dev entries.
-- This is functionally a downgrade of supply-chain guarantees for CI/CD. See Issue 7.
-
-[↑ Back to top](#pr-review-cms-241--paysysadd-rule-properties-inside-typology-in-visualization)
-
----
-
-## Code Quality Analysis
-
-### Strengths
-
-- Backend/frontend contract updated together in one PR — no risk of the frontend rendering fields the backend doesn't send.
-- Removal of `loggerService.log(... JSON.stringify(transactionData) ...)` is a genuine privacy improvement.
-- Render-side guards use `!= null`, which correctly covers both `null` and `undefined`.
-- Change is genuinely small in surface area (2 files of real logic, 2 of type surface).
-
-### Issues and Observations
-
-#### Issue 1 — Loading UX regression: "No data available" flashes during fetch
-
-**Severity: Major (Bug / UX regression)**
-
-The `if (loading) return <spinner/>` branch was removed from `AlertNavigatorTab.tsx` (lines 86-94 of the old file), but the `loading` state and its `setLoading(true/false)` calls remain. Now the render path is:
-
-```
-initial mount → loading=true, data=null → falls through to `if (!data)` (line 118) →
-renders "No data available"
-```
-
-The user sees "No data available" for the entire duration of the initial fetch and every refetch. Corroborated by CodeRabbit ("Outside diff range comments (1)").
-
-Fix — either restore the spinner branch (preferred, one line hoist above `if (!data)`):
-
-```tsx
-if (loading) {
-  return (
-    <div className="flex items-center justify-center py-12">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600"></div>
-      <span className="ml-3 text-gray-600">Loading...</span>
-    </div>
-  );
-}
-```
-
-Or, if the loading UI is intentionally being removed (please state why), also remove `const [loading, setLoading] = useState(true)` and the three `setLoading(...)` calls so dead state doesn't linger.
-
-#### Issue 2 — `RuleDetailDto.ruleDesc` type doesn't match backend contract
-
-**Severity: Minor (Data Integrity)**
-
-Backend `RawRuleRow.rule_desc: string | null` is passed straight through as `ruleDesc: r.rule_desc`, but the frontend type declares `ruleDesc?: string` (line 7 of `types/index.ts`). When the backend emits `null` — which it demonstrably will, given the `| null` on the raw row — the frontend type is violated. The sibling fields `matched_band_reason` / `matched_rule_reason` correctly use `string | null`.
-
-Corroborated by CodeRabbit's inline comment on lines 7-14.
-
-Fix:
-
-```diff
--  ruleDesc?: string;
-+  ruleDesc?: string | null;
-```
-
-#### Issue 3 — Inconsistent camelCase / snake_case in the wire payload
-
-**Severity: Minor (Code Quality / Maintainability)**
-
-The mapped rule object mixes conventions: `ruleId`, `ruleWeight`, `subRef`, `independentVariable`, `ruleDesc` are camelCase; `matched_band_reason`, `matched_rule_reason` are snake_case. Since this is the shape of the JSON that crosses the wire, it will lock in the inconsistency for every consumer. If snake_case is not the deliberate convention on this project (the surrounding TS is camelCase-only), rename before merge — it's cheap now and expensive later.
-
-```diff
--              matched_band_reason: r.matched_band_reason,
--              matched_rule_reason: r.matched_rule_reason,
-+              matchedBandReason: r.matched_band_reason,
-+              matchedRuleReason: r.matched_rule_reason,
-```
-
-…and mirror in `RuleDetailDto` and the render.
-
-#### Issue 4 — `band_reasons_with_sub_rule_refs_json` added to type but never selected
-
-**Severity: Minor (Code Quality)**
-
-`RawRuleRow.band_reasons_with_sub_rule_refs_json: string[] | null` is declared in `raw-rule-row.types.ts` but the SQL `json_build_object` doesn't include it, so `r.band_reasons_with_sub_rule_refs_json` is always `undefined` at runtime. Either drop from the type or add to the query.
-
-#### Issue 5 — Five type-surface additions with no runtime data
-
-**Severity: Minor (Code Quality)**
-
-`RuleDetailDto` gains 8 optional fields, but the backend only emits 3 (`ruleDesc`, `matched_band_reason`, `matched_rule_reason`), and the render only consumes 2 (`ruleDesc`, `matched_band_reason`). The other 5 — `band_reasons_with_sub_rule_refs_json`, `exit_condition_reasons_json`, `matched_exit_condition_reason`, `band_count`, `exit_condition_count` — will always be `undefined`. They read like copy-paste from an aspirational schema.
-
-Either wire them through (SQL + mapper + render) or drop them. Speculative type surface rots.
-
-#### Issue 6 — Trailing whitespace and stray blank lines cause `check style` failure
-
-**Severity: Minor (Code Quality)**
-
-Lint is failing because the PR introduces:
-- trailing whitespace after `null;` in `raw-rule-row.types.ts` line for `matched_band_reason`
-- trailing whitespace on `ruleDesc: r.rule_desc,`, `matched_band_reason: …,`, `matched_rule_reason: …,` in `alerts-lakehouse.service.ts`
-- a stray blank line inside the `mappedRules` object literal
-- a stray blank line after `setData(result);` in `AlertNavigatorTab.tsx`
-- a stray blank line before the `<div className="flex-shrink-0 mt-1">` block
-
-Running the project's lint auto-fix (`npm run lint -- --fix`) will clear these. `check style` will pass on the next push.
-
-#### Issue 7 — 133 `resolved`/`integrity` entries stripped from `backend/package-lock.json`
-
-**Severity: Major (Supply-chain / Data Integrity)**
-
-`origin/dev` has 214 `"resolved":` entries; this PR has 81. The 133 removed entries lose both the tarball URL and the SHA-512 integrity hash. `npm ci` will no longer verify these packages against a pinned hash — it must re-resolve through the registry, and integrity is skipped.
-
-This is unlikely to be intentional and is not related to the Typology visualization change. Regenerate the lockfile cleanly (`rm -f backend/package-lock.json && npm i --package-lock-only` from a clean state at the repo's declared Node/npm version), commit the result, and confirm the `resolved` count matches `origin/dev` (± any deliberate dep changes — of which this PR has none).
-
-If the field-stripping is a project convention I'm not aware of, please confirm and I'll withdraw this item.
-
-#### Issue 8 — PR title doesn't match Conventional Commits
-
-**Severity: Minor (Code Quality — CI blocker)**
-
-`conventional-commits / validate-pr-title` is failing. Repo memory: under `solutions/` the project uses `feat: `/`fix: ` prefixes. Rename to e.g. `feat: add rule description and matched-band reason to Alert Navigator visualization`. This unblocks the check.
-
-#### Issue 9 — `check tests` is failing
-
-**Severity: Major (Test Coverage — CI blocker)**
-
-`node-ci / check tests` failed on the current head. I did not run the suite locally; whichever test is red must be fixed (or the removed loading branch may have broken a component test that asserted the spinner rendered). Investigate and resolve before merge.
-
-[↑ Back to top](#pr-review-cms-241--paysysadd-rule-properties-inside-typology-in-visualization)
-
----
-
-## Security Assessment
+### Security Assessment
 
 | Concern | Assessment |
 |---------|-----------|
-| Sensitive data in logs | **Improved.** `AlertService.getTransactionHistory` no longer serializes full transaction payloads into the log stream. |
-| SQL injection / query construction | No change. Fields added to `json_build_object` are static column names against `alert_navigator_rules anr`; no user input flows into the SQL. |
-| XSS via new fields | `ruleDesc` and `matched_band_reason` are rendered as text children inside JSX — React auto-escapes. No `dangerouslySetInnerHTML`, no template concatenation. Safe. |
-| AuthZ / tenant scoping | Unchanged. `alertsLakehouse` continues to scope by `tenantId`; no new endpoints or claim changes. |
-| Supply-chain integrity | **Worsened.** 133 lockfile entries lost their `integrity` hash — see Issue 7. |
-| Input validation on the new fields | Backend passes `rule_desc`/`matched_*` through unmodified. If these columns can contain untrusted user-controlled content elsewhere in the pipeline, React escaping still protects the DOM, but this is worth confirming with the data-producer. |
+| Sensitive data in logs | **Improved.** Transaction payload no longer serialized to logs. |
+| SQL injection | No change — new fields are static column names on `alert_navigator_rules`. |
+| XSS via new fields | Rendered as JSX text children — React auto-escapes. Safe. |
+| AuthZ / tenant scoping | Unchanged. |
+| Supply-chain integrity | **Worsened** — see Issue 7. |
 
-Net: one clear win (log-scrubbing), one clear regression (lockfile integrity), no new injection surfaces.
-
-[↑ Back to top](#pr-review-cms-241--paysysadd-rule-properties-inside-typology-in-visualization)
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
 
 ---
 
-## Test Coverage
+### Test Coverage
 
-- **What is tested by this PR:** nothing new. No unit tests, no snapshot updates, no lakehouse-service test additions.
-- **What is not tested:** the SQL aggregation change (new fields in `json_build_object`), the `mappedRules` transformation, the two new render branches, and the loading-branch removal. There are no assertions that guard against the "No data available flashes during fetch" regression documented in Issue 1.
-- **CI status:** `node-ci / check tests` is **FAILING** on the current head — see Issue 9.
-- **PR checklist:** the PR description is empty. No boxes to check. No coverage screenshot.
+Initial round shipped no new tests. `node-ci / check tests` was red.
 
-Given that this PR both changes a rendered branch and removes an existing render branch, at minimum a component-level test that renders `<AlertNavigatorTab loading data={null}>` and asserts a spinner (or a graceful placeholder) — instead of "No data available" — is warranted.
-
-[↑ Back to top](#pr-review-cms-241--paysysadd-rule-properties-inside-typology-in-visualization)
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
 
 ---
 
-## CodeRabbit Activity
+### CodeRabbit Activity — Pass 1
 
-### Pass 1 — Initial review on `05ab1c3`
+**Commit reviewed:** `05ab1c32`
+**Findings:** 1 actionable Major, 1 inline Minor, 2 nitpicks
 
-**Commit reviewed:** `05ab1c3282a5f8a4158ada40121a69d70dc0faab`
-**Findings:** 1 actionable (Major), 1 inline (Minor), 2 nitpicks
+| Finding | Severity | Status at initial review |
+|---------|----------|--------------------------|
+| Loading branch removed → "No data available" flashes | Major | ❌ Not resolved (corroborated as Issue 1) |
+| `ruleDesc?: string` should be `string \| null` | Minor | ❌ Not resolved (Issue 2) |
+| camelCase / snake_case wire-format inconsistency | Trivial | ❌ Not resolved (Issue 3, raised to Minor) |
+| `loading` state is dead if branch stays removed | Trivial | ❌ Not resolved (Issue 1) |
 
-| Finding | Severity | Status |
-|---------|----------|--------|
-| Removed loading branch causes "No data available" flash — restore or remove `loading` state | Major | ❌ Not resolved — **corroborated as Issue 1** |
-| `ruleDesc?: string` should be `ruleDesc?: string \| null` to match backend contract | Minor | ❌ Not resolved — **corroborated as Issue 2** |
-| Naming inconsistency between `ruleId`/`ruleWeight`/`ruleDesc` (camelCase) and `matched_band_reason`/`matched_rule_reason` (snake_case) | Trivial (nit) | ❌ Not resolved — **corroborated as Issue 3** (raised to Minor because it's a wire-format decision) |
-| `loading` state is dead code if the loading branch stays removed | Trivial (nit) | ❌ Not resolved — **covered under Issue 1** |
-
-CodeRabbit missed: the lockfile integrity strip (Issue 7), the type-surface bloat (Issue 5), the phantom `band_reasons_with_sub_rule_refs_json` type field (Issue 4), the whitespace/lint issues driving `check style` failure (Issue 6), the failing `check tests` (Issue 9), and the Conventional Commits title failure (Issue 8).
-
-[↑ Back to top](#pr-review-cms-241--paysysadd-rule-properties-inside-typology-in-visualization)
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
 
 ---
 
-## Summary and Verdict
+### Summary and Verdict (initial)
 
-**Verdict: Changes Requested**
+**Verdict: Changes Requested** — Blocking items 1, 6, 7, 8, 9. Non-blocking: 2, 3, 4, 5.
 
-The headline feature — surfacing `ruleDesc` and `matched_band_reason` in each expanded rule — is small and correct, and the accompanying log-scrubbing in `AlertService.getTransactionHistory` is a nice side-improvement. But the PR is not ready to merge: it removes a loading UI branch while leaving the `loading` state wired up, which makes the component flash "No data available" during every fetch; it strips 133 `integrity`/`resolved` entries from `backend/package-lock.json`, weakening supply-chain guarantees for CI; the PR title fails Conventional Commits validation; and both `check style` and `check tests` are red on the current head.
-
-The type-level and naming issues (Issues 2-5) are individually minor but compound into a payload contract that is inconsistent (camelCase/snake_case mixed) and inflated with five unused optional fields — worth fixing while everything is being touched.
-
-### Blocking
-
-1. **"No data available" flashes during fetch (Issue 1)** — restore the `if (loading)` render branch, or remove the `loading` state entirely and choose an intentional loading UX.
-2. **Lockfile `resolved`/`integrity` fields stripped (Issue 7)** — regenerate `backend/package-lock.json` cleanly and restore the 133 missing entries so `npm ci` can verify integrity.
-3. **`node-ci / check tests` failing (Issue 9)** — investigate and fix; do not merge red.
-4. **`node-ci / check style` failing (Issue 6)** — run lint --fix on the touched files.
-5. **PR title fails Conventional Commits (Issue 8)** — rename to `feat: …` (or equivalent).
-
-### Non-blocking but recommended
-
-6. **`RuleDetailDto.ruleDesc` type widening (Issue 2)** — accept `string | null`.
-7. **Wire-format naming consistency (Issue 3)** — camelCase the two `matched_*` keys or accept the mixed form deliberately and document it.
-8. **Trim unused type fields (Issue 5) and phantom `band_reasons_with_sub_rule_refs_json` (Issue 4)** — either wire them through end-to-end or drop from the types.
-9. **Add a component test for the loading / no-data render paths** — the branch just changed and has no coverage.
-
-[↑ Back to top](#pr-review-cms-241--paysysadd-rule-properties-inside-typology-in-visualization)
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
 
 ---
-
-## GitHub Review Comment
-
-````markdown
-**Changes Requested**
-
-The headline change (surfacing `ruleDesc` and `matched_band_reason` under each rule) is small and correct, and dropping the transaction-payload `logger.log` is a nice side win. But the PR is not ready to merge: the loading UI was removed while the `loading` state stayed wired up, the lockfile has lost 133 integrity hashes, three CI checks are red, and there are several type/contract inconsistencies worth cleaning up while everything is being touched.
-
+---
 ---
 
-### Blocking
+## Follow-up Review (2026-07-13)
 
-**1. "No data available" flashes during fetch — `frontend/src/features/cases/components/view/visualizations/alertnavigator/AlertNavigatorTab.tsx`**
+**Reviewed commit:** `6af19f186d6aeaea2a33487afb271643cdc733ca` (verified against `gh pr view --json headRefOid`)
+**Reviewed against:** Changes Requested on `05ab1c32` by `ahmad-paysys` (2026-07-13 11:03 UTC)
+**Developer response:** No written response on the PR — resolution is via new commits only. Two new heads landed between rounds: `ac86c1c1` (test suites + edits, 2026-07-13 ~13:57 UTC) and `6af19f18` (formatting touch-up, 2026-07-13 ~14:58 UTC).
 
-The `if (loading) return <spinner/>` branch was removed, but `loading` is still initialised to `true`, set to `true` before each fetch (line 45), and cleared in `finally` (line 63). On initial mount and every refetch, `data` is `null` while `loading` is `true`, so the component falls through to `if (!data)` at line 118 and renders **"No data available"** instead of a loading indicator. This is a UX regression on the current happy path.
+**New size after follow-up commits:** +685 / -305 lines across 9 files (up from +37/-281 across 6; three new files are large test suites).
 
-Please either restore the spinner branch above the `!alertId` check:
+**New files touched since prior round:**
+
+| File | Nature of Change |
+|------|------------------|
+| `backend/test/alerts-lakehouse.service.spec.ts` | Adds a `rule_desc and matched_band_reason columns` describe block with 3 tests: present values pass through, null values pass through, and flow-processor rule doesn't leak into `mappedRules`. |
+| `frontend/.../__tests__/AlertNavigatorTab.test.tsx` | Rewritten: adds shared `baseAlertMetadata` / `buildTypology` / `buildResponse` fixtures, expand/collapse behaviour tests, rule-detail rendering tests (present/null/undefined/one-of-two/multi-rule cases), flow-processor banner tests, `alertMetadata` fallback tests, score-color threshold tests, and a statistics-summary test. 481 net-added lines. |
+| `frontend/.../__tests__/alertNavigatorService.test.ts` | Adds 7 tests: empty typologies, per-typology independent rule parsing, preservation of other response fields, URL construction, error propagation on network failure, error propagation on malformed rules JSON. |
+
+**CI status on `6af19f18`:**
+- ✅ `node-ci / check tests` — now GREEN
+- ✅ `conventional-commits / validate-pr-title` — GREEN (title is now `feat: Paysys/Add Rule properties inside Typology in Visualization`)
+- ✅ `node-ci / run build`, `dco-check`, `dependency-review`, `gpg-verify`, `njsscan`, `nodejsscan`, `CodeQL`, `Analyze (actions)`, `Analyze (javascript-typescript)`, `encoding-check`, `dockerfile-linter`
+- ❌ `node-ci / check style` — still **FAILING** on the current head
+
+### Resolution Status — Prior Items
+
+#### Item 1 — "No data available" flashes during fetch (was Major)
+
+**Status: RESOLVED**
+
+The `if (loading)` early-return was reinstated. `AlertNavigatorTab.tsx:86-93` (current file):
 
 ```tsx
-if (loading) {
-  return (
-    <div className="flex items-center justify-center py-12">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600"></div>
-      <span className="ml-3 text-gray-600">Loading...</span>
-    </div>
-  );
+   if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600"></div>
+        <span className="ml-3 text-gray-600">Loading...</span>
+      </div>
+    );
+  }
+```
+
+The spinner now precedes `!alertId`, `error`, and `!data`, so the initial-fetch flash of "No data available" is gone. Corroborated by the new frontend test suite:
+- `renders data on successful fetch` and every `rule detail rendering` test successfully awaits `Alert Navigator` after the fetch — a regression to "No data available" would fail these.
+- `shows "No data available" when the fetch resolves with no data` (line ~478 of the new test file) explicitly asserts the no-data path is only reached when the fetch resolves with `null`, not during loading.
+
+Note: the leading whitespace `   if (loading) {` (three-space indent, then no blank line between the previous function and this branch) is what CodeRabbit-pass-2 flagged as a style-check failure. See [New Issue F1](#new-issue-f1--check-style-still-failing).
+
+#### Item 2 — `RuleDetailDto.ruleDesc` type mismatch (was Minor)
+
+**Status: RESOLVED (via rename)**
+
+The follow-up went further than requested: instead of widening `ruleDesc?: string` to `string | null`, the author renamed the property to match the backend snake_case wire key. `frontend/.../alertnavigator/types/index.ts` now reads:
+
+```ts
+export interface RuleDetailDto {
+  ruleId?: string;
+  ruleWeight?: number;
+  subRef?: string;
+  independentVariable?: string;
+  data?: unknown;
+  rule_desc?: string | null;
+  matched_band_reason?: string | null;
+
+
 }
 ```
 
-…or, if the removal is deliberate, also remove `const [loading, setLoading] = useState(true)` and its three setters so the dead state doesn't linger.
+`string | null` is correctly modelled for both new fields.
 
-**2. `backend/package-lock.json` lost 133 `resolved`/`integrity` entries**
+#### Item 3 — Wire-format naming inconsistency (was Minor)
 
-Comparing against `origin/dev`, this PR drops the tarball URL and SHA-512 integrity hash from 133 packages (dev sub-trees). `origin/dev` has 214 `"resolved":` entries; this PR has 81. Example:
+**Status: NOT RESOLVED — inconsistency preserved (and CodeRabbit pass 3 flagged again as nitpick)**
 
-```diff
-     "node_modules/@angular-devkit/schematics-cli/node_modules/@angular-devkit/core": {
-       "version": "19.2.24",
--      "resolved": "https://registry.npmjs.org/@angular-devkit/core/-/core-19.2.24.tgz",
--      "integrity": "sha512-Kd49warf6U/EyWe5BszF/eebN3zQ3bk7tgfEljAw8q/rX95UUtriJubWvp6pgzHfzBA4jwq8f+QiNZB8eBEXPA==",
-       "dev": true,
+The follow-up chose the *opposite* direction from the review suggestion: rather than camelCasing `matched_band_reason` and `matched_rule_reason`, it dropped `ruleDesc` in favour of `rule_desc`, and dropped `matched_rule_reason` altogether. `mappedRules` in `alerts-lakehouse.service.ts:177-184` is now:
+
+```ts
+const mappedRules = triggeredRulesData.map((r) => ({
+    ruleId: r.rule_id,
+    ruleWeight: r.rule_weight,
+    subRef: r.rule_sub_ref,
+    independentVariable: r.rule_independent_variable,
+    rule_desc: r.rule_desc,
+    matched_band_reason: r.matched_band_reason
+  }));
 ```
 
-This weakens supply-chain guarantees — `npm ci` can no longer verify these packages by hash. Please regenerate the lockfile cleanly (`rm -f backend/package-lock.json && npm i --package-lock-only`) at the repo's declared Node/npm version and commit that.
+The mix is still there: `ruleId`/`ruleWeight`/`subRef`/`independentVariable` (camelCase) alongside `rule_desc`/`matched_band_reason` (snake_case). Frontend `RuleDetailDto` mirrors the mix. CodeRabbit's pass-2 nitpick ("Consider using camelCase for new mapped fields to match existing convention") makes the same point.
 
-**3. `node-ci / check tests` is failing** — please investigate the red job; the removed loading branch may have broken a component test that asserted on the spinner.
+This is now a deliberate authoring decision, but the mixed shape is locked into the wire contract on merge. Downgrading from "should fix" to "flag as an intentional inconsistency worth documenting" — no author response on the PR to confirm intent.
 
-**4. `node-ci / check style` is failing** — the diff introduces trailing whitespace and stray blank lines (e.g. after `setData(result);` in `AlertNavigatorTab.tsx`, on the new mapped-rule lines in `alerts-lakehouse.service.ts`, and at the end of `matched_band_reason: string | null;` in `raw-rule-row.types.ts`). `npm run lint -- --fix` should clear them.
+#### Item 4 — `band_reasons_with_sub_rule_refs_json` phantom field (was Minor)
 
-**5. PR title fails Conventional Commits** — rename to something like `feat: add rule description and matched-band reason to Alert Navigator visualization` to unblock `conventional-commits / validate-pr-title`.
+**Status: PARTIALLY RESOLVED**
+
+`RuleDetailDto` no longer carries the phantom field (see the fully-quoted DTO under Item 2). However `RawRuleRow` in `backend/src/modules/gold-lakehouse/types/raw-rule-row.types.ts:6` still declares it:
+
+```ts
+export interface RawRuleRow {
+  rule_id: string | null;
+  rule_weight: number | null;
+  rule_independent_variable: unknown;
+  rule_sub_ref: string | null;
+  band_reasons_with_sub_rule_refs_json: string[] | null;   // ← still declared, still not selected in SQL
+  rule_processing_time_ms: number | null;
+  rule_tenant_id: string | null;
+  rule_desc: string | null;
+  matched_band_reason: string | null;
+}
+```
+
+The SQL `json_build_object` in `alerts-lakehouse.service.ts` still does not select `band_reasons_with_sub_rule_refs_json`, so at runtime it's always `undefined`. Non-blocking — drop from the type or select in the query.
+
+#### Item 5 — Five unused optional fields on `RuleDetailDto` (was Minor)
+
+**Status: RESOLVED**
+
+The DTO now carries only the two fields the backend emits and the render consumes — no more `exit_condition_reasons_json`, `matched_exit_condition_reason`, `band_count`, `exit_condition_count`. Speculative type surface trimmed.
+
+#### Item 6 — Trailing whitespace / stray blank lines (was Minor — CI blocker)
+
+**Status: NOT RESOLVED**
+
+`node-ci / check style` is still red on the current head. Direct inspection of the diff shows the trailing-whitespace pattern is unchanged in several spots on `6af19f18`:
+
+`backend/src/modules/gold-lakehouse/alerts-lakehouse.service.ts:53` (SQL block) — a full trailing-whitespace line inside the `json_build_object`:
+
+```
+'matched_band_reason', anr.matched_band_reason
+                                     ␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠
+)
+```
+
+`backend/src/modules/gold-lakehouse/alerts-lakehouse.service.ts:182-183` (mapped-rule literal):
+
+```
+rule_desc: r.rule_desc,·········              ← trailing whitespace
+matched_band_reason: r.matched_band_reason············································    ← trailing whitespace
+```
+
+`backend/src/modules/gold-lakehouse/types/raw-rule-row.types.ts:10-11`:
+
+```
+rule_desc: string | null;··                   ← trailing whitespace
+matched_band_reason: string | null;·          ← trailing whitespace
+```
+
+`frontend/.../AlertNavigatorTab.tsx:54` and `:309` — stray whitespace-only lines inside `fetchData()` and inside the rule-map iteration.
+
+`frontend/.../AlertNavigatorTab.tsx:337` — trailing whitespace after `<div className="text-xs text-gray-500 mt-0.5">` on the Band Reason block.
+
+`frontend/.../alertnavigator/types/index.ts:7,9-10` — two trailing spaces after `rule_desc?: string | null;` and two stray empty lines before the closing `}`.
+
+CodeRabbit pass 2 (`ac86c1c1`) called this out precisely; pass 3 (`6af19f18`) noted it again on `raw-rule-row.types.ts:10`. Run `npm run lint -- --fix` (or `prettier --write`) on the five modified files. This is a hard CI blocker.
+
+#### Item 7 — 133 `resolved`/`integrity` entries stripped from `backend/package-lock.json` (was Major)
+
+**Status: NOT RESOLVED**
+
+Direct comparison from a synced local repo:
+
+```
+grep -c '"resolved":' backend/package-lock.json                → 81
+git show origin/dev:backend/package-lock.json | grep -c '"resolved":' → 214
+```
+
+The 133 packages that lost their tarball URL and SHA-512 hash on the initial push are still stripped on the current HEAD (`6af19f18`). Every one is a dev sub-tree. The initial-round diff blocks (`node_modules/@angular-devkit/schematics-cli/node_modules/@angular-devkit/core`, `@keyv/serialize`, `@nestjs/cli/node_modules/...`, `@xhmikosr/...`, `@tazama-lf/nats-relay-plugin/...`, etc.) all still show `-  "resolved": ...` and `-  "integrity": "sha512-..."` in `gh pr diff`.
+
+**Why it matters:** `npm ci` verifies packages by `integrity` when present. With these entries removed, `npm ci` in CI/CD must re-resolve through the registry and integrity verification is skipped for the affected packages. `Dependency Review` is currently green, but it only reads top-level `package.json` — it does not re-verify integrity on transitive dev entries.
+
+**Fix:** regenerate cleanly.
+
+```bash
+cd backend
+rm package-lock.json
+npm i --package-lock-only        # or a clean `npm install` if node_modules is empty
+```
+
+Confirm afterwards that `grep -c '"resolved":' package-lock.json` matches `origin/dev` (214) modulo any deliberate dependency changes — this PR makes no dep changes, so the count should match exactly.
+
+If the strip is a project convention I'm not aware of, please confirm on the PR and I'll withdraw this item.
+
+#### Item 8 — PR title fails Conventional Commits (was Minor)
+
+**Status: RESOLVED**
+
+Title is now `feat: Paysys/Add Rule properties inside Typology in Visualization`. `conventional-commits / validate-pr-title` is green.
+
+#### Item 9 — `node-ci / check tests` failing (was Major)
+
+**Status: RESOLVED**
+
+Green on `6af19f18`. The follow-up commits added substantial new test coverage:
+
+- **Backend** (`alerts-lakehouse.service.spec.ts`, +117 lines) — three new tests explicitly cover the new `rule_desc`/`matched_band_reason` pass-through, the null case, and the flow-processor exclusion.
+- **Frontend service** (`alertNavigatorService.test.ts`, +87 lines) — 7 tests covering empty typologies, multi-typology parsing, other-field preservation, URL construction, and error propagation (network + malformed JSON).
+- **Frontend component** (`AlertNavigatorTab.test.tsx`, +481 net) — expand/collapse behaviour, rule-detail rendering (present/null/undefined/one-of-two/multi-rule), flow-processor banner, alert-metadata fallbacks, score-color thresholds, statistics summary. Notably the initial-review call for a "`loading data={null}` render" test is materially covered: `renders data on successful fetch` (line ~76), `shows "No data available" when the fetch resolves with no data` (line ~478), and every `rule detail rendering` test would fail if the loading branch broke again.
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | "No data available" flashes during fetch | ✅ Resolved (loading branch restored in `6af19f18`) |
+| 2 | `RuleDetailDto.ruleDesc` type widening | ✅ Resolved (renamed to `rule_desc: string \| null`) |
+| 3 | Wire-format naming inconsistency | ➖ Preserved by author (no explicit reply; downgraded to observation) |
+| 4 | Phantom `band_reasons_with_sub_rule_refs_json` | ⚠️ Partial — removed from `RuleDetailDto`, still on `RawRuleRow` |
+| 5 | Five unused `RuleDetailDto` fields | ✅ Resolved |
+| 6 | `check style` failing (trailing whitespace) | ❌ Not resolved — still red on `6af19f18` |
+| 7 | `backend/package-lock.json` — 133 integrity entries stripped | ❌ Not resolved — count still 81 vs. 214 |
+| 8 | PR title fails Conventional Commits | ✅ Resolved |
+| 9 | `check tests` failing | ✅ Resolved (green + substantial new coverage added) |
+
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
+
+---
+
+### New Issues Found in Updated Commits
+
+#### New Issue F1 — `check style` still failing
+
+**Severity: Major (Code Quality — CI blocker)**
+
+Fully covered under [Item 6](#item-6--trailing-whitespace--stray-blank-lines-was-minor--ci-blocker). Same root cause as before — the trailing whitespace / stray blank lines simply weren't fixed. Elevated to Major here because CI has flagged it three times (initial review, CodeRabbit pass 2, CodeRabbit pass 3) and it remains red.
+
+#### New Issue F2 — Stylistically odd control-flow indentation
+
+**Severity: Minor (Code Quality)**
+
+`AlertNavigatorTab.tsx:86` — the restored `if (loading)` block is indented as `   if (loading) {` (three leading spaces) with no blank line separating it from the previous helper. It is functionally correct but visually broken. This is one of the specific lines Prettier will fix if run.
+
+#### New Issue F3 — Test uses `.closest('div').parentElement` DOM walk
+
+**Severity: Informational (Test Quality)**
+
+`AlertNavigatorTab.test.tsx:487-488` — the statistics-summary assertion is:
+
+```ts
+const typologiesCard = screen.getByText('Typologies Triggered').closest('div');
+expect(typologiesCard && within(typologiesCard.parentElement as HTMLElement).getByText('1')).toBeInTheDocument();
+```
+
+CodeRabbit's pass-3 nitpick correctly notes: the `typologiesCard && …` guard is dead (`getByText` throws rather than returning falsy), and walking through `parentElement` couples the test to the current markup. A cleaner form is:
+
+```ts
+const typologiesCard = screen
+  .getByText('Typologies Triggered')
+  .closest('div')?.parentElement as HTMLElement;
+expect(within(typologiesCard).getByText('1')).toBeInTheDocument();
+```
+
+Non-blocking, but worth applying while the test file is warm.
+
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
+
+---
+
+### CodeRabbit Activity — Passes 2 & 3
+
+**Reconciliation:** every CodeRabbit finding in the follow-up rounds is covered by an item above.
+
+#### Pass 2 — `ac86c1c1` (2026-07-13 14:00 UTC)
+
+**Findings:** 3 actionable (2 inline potential-issue + 1 test-restoration ask) + 1 nitpick
+
+| Finding | Severity | Status | Where covered |
+|---------|----------|--------|---------------|
+| Trailing whitespace / indent in `alerts-lakehouse.service.ts:182-184` | Critical | ❌ Not resolved on `6af19f18` | Item 6 / New Issue F1 |
+| Trailing whitespace on `raw-rule-row.types.ts:10` | Minor | ❌ Not resolved | Item 6 |
+| `AlertNavigatorTab.test.tsx` placeholder — restore test suite | Major | ✅ Resolved in `6af19f18` — CodeRabbit's own comment carries an `✅ Addressed in commit 6af19f1` marker | Test Coverage (updated) |
+| camelCase / snake_case in `mappedRules` (nitpick) | Trivial | ➖ Preserved by author | Item 3 |
+
+#### Pass 3 — `6af19f18` (2026-07-13 15:03 UTC)
+
+**Findings:** 0 actionable, 1 nitpick
+
+| Finding | Severity | Status | Where covered |
+|---------|----------|--------|---------------|
+| `AlertNavigatorTab.test.tsx:487-488` — simplify the `parentElement` walk in the statistics assertion | Trivial | ❌ Not addressed | New Issue F3 |
+
+Note: pass-3 review also confirmed pass-2's trailing-whitespace concern on `raw-rule-row.types.ts:10` remained unfixed (that comment is now attached to commit `6af19f18` on line 10). This is redundant evidence for Item 6.
+
+**Unresolved CodeRabbit comments (open at time of writing):**
+
+1. **Pass 2 inline** on `backend/src/modules/gold-lakehouse/alerts-lakehouse.service.ts:184` — trailing whitespace + indent (Critical) — https://github.com/tazama-lf/case-management-system/pull/241 (`cr-comment:v1:9dffa46eebc951e331fc35fa`).
+2. **Pass 2 inline** on `backend/src/modules/gold-lakehouse/types/raw-rule-row.types.ts:10` — trailing whitespace (Minor) — (`cr-comment:v1:1bf547272290dd91c637d8a7`). *CodeRabbit reposted this same location under commit `6af19f18` in pass 3, confirming still unresolved.*
+3. **Pass 2 inline** on `backend/src/modules/gold-lakehouse/alerts-lakehouse.service.ts:177-186` — camelCase / snake_case naming nitpick (Trivial) — (`cr-comment:v1:a9a109a2c113d5d50683c8f0`). Preserved by author; consider marking resolved with a rationale.
+4. **Pass 3 inline** on `frontend/.../__tests__/AlertNavigatorTab.test.tsx:487-488` — simplify the statistics DOM walk (Trivial) — (`cr-comment:v1:0a484796d55115fb60e97eae`).
+
+Comments marked ✅ by CodeRabbit itself and therefore not carried forward:
+
+- Pass 1 outside-diff on `AlertNavigatorTab.tsx:86-87` (loading branch) — resolved in `6af19f18`.
+- Pass 1 inline on `types/index.ts:7-14` (ruleDesc nullability) — resolved via rename in `ac86c1c1`.
+- Pass 2 inline on `AlertNavigatorTab.test.tsx:1` (placeholder-only test file) — resolved in `6af19f18`.
+
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
+
+---
+
+### Test Coverage (updated)
+
+**What is now tested:**
+
+- Backend lakehouse aggregation: three new tests cover `rule_desc` / `matched_band_reason` present, null, and flow-processor-not-leaked cases.
+- Frontend service: 7 tests cover empty response, multi-typology parsing independence, response-field preservation, URL shape, and error propagation for network + JSON errors.
+- Frontend component: expand/collapse behaviour (single, toggle, single-open-at-a-time), rule-detail rendering across value present / null / undefined / one-of-two / multi-rule variants, flow-processor banner presence and absence, alertMetadata fallbacks (PENDING, N/A, `||`-split transactionId, block-reason section), score-color thresholds (70 orange, 40 yellow), and statistics summary.
+
+**What is still not tested:**
+
+- The `getTransactionHistory` change (log removal) has no assertion, but it's a deletion, so this is defensible.
+- No test asserts the loading spinner *renders* during an in-flight fetch — the coverage is indirect (the successful-fetch tests would fail if a "No data available" flash returned). If the loading branch were removed again, several tests would break, so this is adequate in practice.
+
+**CI:** `node-ci / check tests` is green on `6af19f18`.
+
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
+
+---
+
+### Updated Verdict
+
+**Verdict: Changes Requested**
+
+Substantial progress: the loading-UX regression is fixed, the DTO/type-widening issue is resolved (by rename), speculative fields are trimmed, the PR title now passes Conventional Commits, `check tests` is green, and — importantly — the follow-up added a large and carefully-scoped test suite that would catch regressions of every fix. The camelCase/snake_case mix is now clearly an authoring decision.
+
+Two of the original blockers, however, are still un-addressed on the current head (`6af19f18`):
+
+1. **`node-ci / check style` is still red** — trailing whitespace and stray blank lines from the earlier round remain in `alerts-lakehouse.service.ts` (SQL block + mapped-rule literal), `raw-rule-row.types.ts` (both new fields), `AlertNavigatorTab.tsx` (twice), and `types/index.ts`. CodeRabbit pass 2 & pass 3 both flagged this. Run `npm run lint -- --fix` or `prettier --write` on the five modified source files.
+2. **`backend/package-lock.json` still has 133 `resolved`/`integrity` entries stripped** — count remains 81 (this PR) vs. 214 (`origin/dev`). Please regenerate the lockfile cleanly and commit the result. If this strip is intentional, please state so on the PR.
+
+There are also two open CodeRabbit nitpicks (naming consistency and the statistics-test DOM walk) that are safe to defer, and one partial-resolution item (`RawRuleRow.band_reasons_with_sub_rule_refs_json` — still declared, still not selected).
+
+### Blocking
+
+1. **`check style` failing (Item 6 / F1)** — trailing whitespace and stray blank lines in five modified files; unchanged since initial round. Run the project's lint-fix.
+2. **Lockfile integrity strip (Item 7)** — 133 packages missing `resolved`/`integrity`. Regenerate `backend/package-lock.json` cleanly.
+
+### Non-blocking but recommended
+
+3. **Drop or wire `RawRuleRow.band_reasons_with_sub_rule_refs_json` (Item 4)** — still declared, never selected.
+4. **Wire-format naming (Item 3)** — mixed camelCase/snake_case is now locked. If deliberate, worth a one-line comment in the DTO. Otherwise, unify.
+5. **Simplify `AlertNavigatorTab.test.tsx:487-488` (F3)** — remove the redundant `&&` guard and `parentElement` walk (CodeRabbit pass-3 nitpick).
+6. **Indent the restored `if (loading)` block (F2)** — the three-space leading indent will be fixed automatically by the lint-fix that clears Item 6.
+
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
+
+---
+
+### GitHub Review Comment
+
+````markdown
+**Changes Requested (follow-up)**
+
+Good progress since the last round — the loading UX is fixed, the DTO is trimmed and correctly nullable, the PR title now passes Conventional Commits, and `check tests` is green with a solid new test suite (backend + frontend service + component). Two of the original blockers, though, are still open on the current head (`6af19f18`), plus a couple of unresolved CodeRabbit nitpicks worth clearing before merge.
+
+---
+
+### Blocking
+
+**1. `node-ci / check style` is still failing — trailing whitespace / stray blank lines**
+
+The whitespace issues from the initial round were not cleaned up. Concretely, on `6af19f18`:
+
+- `backend/src/modules/gold-lakehouse/alerts-lakehouse.service.ts:53` — a whitespace-only line inside the `json_build_object` block, and trailing whitespace on lines 182 (`rule_desc: r.rule_desc,        `) and 183 (`matched_band_reason: r.matched_band_reason                              `).
+- `backend/src/modules/gold-lakehouse/types/raw-rule-row.types.ts:10-11` — trailing whitespace after `rule_desc: string | null;··` and `matched_band_reason: string | null;·`. CodeRabbit flagged this in pass 2 (line 10) and reposted in pass 3 — still not addressed.
+- `frontend/src/features/cases/components/view/visualizations/alertnavigator/AlertNavigatorTab.tsx:54, :86, :309, :337` — stray whitespace-only lines and trailing whitespace on the Band Reason `<div>`; the restored `if (loading)` block is also indented with three leading spaces (`   if (loading) {`) without a blank line above it.
+- `frontend/src/features/cases/components/view/visualizations/alertnavigator/types/index.ts:7-10` — trailing whitespace after `rule_desc?: string | null;` and two stray blank lines before the closing `}`.
+
+Running `npm run lint -- --fix` (or `npx prettier --write`) on those five files should clear the check.
+
+**2. `backend/package-lock.json` is still missing 133 `resolved`/`integrity` entries**
+
+Direct comparison: `origin/dev` has 214 `"resolved":` entries; this PR still has 81. The 133 dev-subtree packages that lost their tarball URL and SHA-512 hash on the initial push are still stripped on `6af19f18`. `npm ci` cannot integrity-check those packages any more, and `Dependency Review` doesn't cover transitive dev entries.
+
+Please regenerate the lockfile cleanly:
+
+```bash
+cd backend
+rm package-lock.json
+npm i --package-lock-only
+```
+
+…and commit the result. Afterwards `grep -c '"resolved":' backend/package-lock.json` should match `origin/dev`. If the strip is intentional in your workflow, please say so on the PR and I'll withdraw this item.
 
 ---
 
 ### Non-blocking (please address in this PR if possible)
 
-**6. `RuleDetailDto.ruleDesc` type mismatch — `frontend/.../alertnavigator/types/index.ts`**
+**3. Unresolved CodeRabbit nitpick — `AlertNavigatorTab.test.tsx:487-488`**
 
-The backend maps `ruleDesc: r.rule_desc` where `r.rule_desc: string | null`, but the frontend declares `ruleDesc?: string`. When the backend sends `null` the type is violated. The sibling `matched_*` fields already use `string | null`.
+CodeRabbit pass 3 pointed out that the statistics assertion is fragile:
 
-```diff
--  ruleDesc?: string;
-+  ruleDesc?: string | null;
+```ts
+const typologiesCard = screen.getByText('Typologies Triggered').closest('div');
+expect(typologiesCard && within(typologiesCard.parentElement as HTMLElement).getByText('1')).toBeInTheDocument();
 ```
 
-**7. Wire-format naming inconsistency — `backend/src/modules/gold-lakehouse/alerts-lakehouse.service.ts`**
+The `typologiesCard && …` guard is dead (`getByText` throws rather than returning falsy), and walking `parentElement` couples the test to markup structure. Suggested rewrite:
 
-`mappedRules` mixes camelCase (`ruleId`, `ruleWeight`, `subRef`, `independentVariable`, `ruleDesc`) with snake_case (`matched_band_reason`, `matched_rule_reason`). Since this shape crosses the wire, the inconsistency will lock in for every consumer. Consider:
-
-```diff
--              matched_band_reason: r.matched_band_reason,
--              matched_rule_reason: r.matched_rule_reason,
-+              matchedBandReason: r.matched_band_reason,
-+              matchedRuleReason: r.matched_rule_reason,
+```ts
+const typologiesCard = screen
+  .getByText('Typologies Triggered')
+  .closest('div')?.parentElement as HTMLElement;
+expect(within(typologiesCard).getByText('1')).toBeInTheDocument();
 ```
 
-…and mirror in `RuleDetailDto` and the render.
+**4. `RawRuleRow.band_reasons_with_sub_rule_refs_json` still declared but never selected**
 
-**8. Trim unused type surface**
+`backend/src/modules/gold-lakehouse/types/raw-rule-row.types.ts:6` declares `band_reasons_with_sub_rule_refs_json: string[] | null`, but the SQL `json_build_object` in `alerts-lakehouse.service.ts` doesn't select it, so it's always `undefined` at runtime. Either add it to the query or drop it from the type — same principle you already applied to the frontend DTO.
 
-`RuleDetailDto` grew by 8 optional fields, but only 3 are emitted by the backend (`ruleDesc`, `matched_band_reason`, `matched_rule_reason`) and only 2 are rendered. The other 5 (`band_reasons_with_sub_rule_refs_json`, `exit_condition_reasons_json`, `matched_exit_condition_reason`, `band_count`, `exit_condition_count`) will always be `undefined`. Similarly, `RawRuleRow.band_reasons_with_sub_rule_refs_json` is declared but never selected in the SQL `json_build_object`. Either wire these fields through end-to-end or drop from the types.
+**5. Wire-format naming inconsistency — CodeRabbit pass 2 nitpick**
 
-**9. No test coverage for the changed render branch**
-
-A small component test that renders `<AlertNavigatorTab loading data={null}>` and asserts on the loading indicator (or the intentional replacement) would guard against regressions like #1 in future.
+The `mappedRules` object mixes camelCase (`ruleId`, `ruleWeight`, `subRef`, `independentVariable`) with snake_case (`rule_desc`, `matched_band_reason`), which the frontend `RuleDetailDto` mirrors. This is fine if deliberate, but please either unify or leave a one-line comment on the DTO stating the mix is intentional (e.g. "keys mirror the underlying SQL column names for new fields"). Otherwise the shape locks in on merge.
 ````
 
-[↑ Back to top](#pr-review-cms-241--paysysadd-rule-properties-inside-typology-in-visualization)
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
