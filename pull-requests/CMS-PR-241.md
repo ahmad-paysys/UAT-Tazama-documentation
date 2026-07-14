@@ -16,6 +16,10 @@
   - [CodeRabbit Activity — Passes 2 & 3](#coderabbit-activity--passes-2--3)
   - [Test Coverage (updated)](#test-coverage-updated)
   - [Updated Verdict](#updated-verdict)
+- [Final Review (2026-07-14)](#final-review-2026-07-14)
+  - [Resolution Status — All Outstanding Items](#resolution-status--all-outstanding-items)
+  - [New Issues Found in Final Commit](#new-issues-found-in-final-commit)
+  - [Final Verdict](#final-verdict)
   - [GitHub Review Comment](#github-review-comment)
 
 ---
@@ -148,11 +152,11 @@ Initial round shipped no new tests. `node-ci / check tests` was red.
 
 ## Follow-up Review (2026-07-13)
 
-**Reviewed commit:** `6af19f186d6aeaea2a33487afb271643cdc733ca` (verified against `gh pr view --json headRefOid`)
+**Reviewed commit:** `6af19f186d6aeaea2a33487afb271643cdc733ca` (verified against `gh pr view --json headRefOid` at the time)
 **Reviewed against:** Changes Requested on `05ab1c32` by `ahmad-paysys` (2026-07-13 11:03 UTC)
 **Developer response:** No written response on the PR — resolution is via new commits only. Two new heads landed between rounds: `ac86c1c1` (test suites + edits, 2026-07-13 ~13:57 UTC) and `6af19f18` (formatting touch-up, 2026-07-13 ~14:58 UTC).
 
-**New size after follow-up commits:** +685 / -305 lines across 9 files (up from +37/-281 across 6; three new files are large test suites).
+**Size after follow-up commits:** +685 / -305 lines across 9 files (up from +37/-281 across 6; three new files are large test suites).
 
 **New files touched since prior round:**
 
@@ -163,187 +167,16 @@ Initial round shipped no new tests. `node-ci / check tests` was red.
 | `frontend/.../__tests__/alertNavigatorService.test.ts` | Adds 7 tests: empty typologies, per-typology independent rule parsing, preservation of other response fields, URL construction, error propagation on network failure, error propagation on malformed rules JSON. |
 
 **CI status on `6af19f18`:**
-- ✅ `node-ci / check tests` — now GREEN
-- ✅ `conventional-commits / validate-pr-title` — GREEN (title is now `feat: Paysys/Add Rule properties inside Typology in Visualization`)
+- ✅ `node-ci / check tests` — green
+- ✅ `conventional-commits / validate-pr-title` — green
 - ✅ `node-ci / run build`, `dco-check`, `dependency-review`, `gpg-verify`, `njsscan`, `nodejsscan`, `CodeQL`, `Analyze (actions)`, `Analyze (javascript-typescript)`, `encoding-check`, `dockerfile-linter`
-- ❌ `node-ci / check style` — still **FAILING** on the current head
+- ❌ `node-ci / check style` — still **FAILING**
 
 ### Resolution Status — Prior Items
 
-#### Item 1 — "No data available" flashes during fetch (was Major)
+Nine items from the initial round were tracked. Detailed evidence was captured in the previous version of this review file; the final Item 6 (whitespace) and Item 7 (lockfile) remained open going into the third commit. Follow-up summary at end of round:
 
-**Status: RESOLVED**
-
-The `if (loading)` early-return was reinstated. `AlertNavigatorTab.tsx:86-93` (current file):
-
-```tsx
-   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600"></div>
-        <span className="ml-3 text-gray-600">Loading...</span>
-      </div>
-    );
-  }
-```
-
-The spinner now precedes `!alertId`, `error`, and `!data`, so the initial-fetch flash of "No data available" is gone. Corroborated by the new frontend test suite:
-- `renders data on successful fetch` and every `rule detail rendering` test successfully awaits `Alert Navigator` after the fetch — a regression to "No data available" would fail these.
-- `shows "No data available" when the fetch resolves with no data` (line ~478 of the new test file) explicitly asserts the no-data path is only reached when the fetch resolves with `null`, not during loading.
-
-Note: the leading whitespace `   if (loading) {` (three-space indent, then no blank line between the previous function and this branch) is what CodeRabbit-pass-2 flagged as a style-check failure. See [New Issue F1](#new-issue-f1--check-style-still-failing).
-
-#### Item 2 — `RuleDetailDto.ruleDesc` type mismatch (was Minor)
-
-**Status: RESOLVED (via rename)**
-
-The follow-up went further than requested: instead of widening `ruleDesc?: string` to `string | null`, the author renamed the property to match the backend snake_case wire key. `frontend/.../alertnavigator/types/index.ts` now reads:
-
-```ts
-export interface RuleDetailDto {
-  ruleId?: string;
-  ruleWeight?: number;
-  subRef?: string;
-  independentVariable?: string;
-  data?: unknown;
-  rule_desc?: string | null;
-  matched_band_reason?: string | null;
-
-
-}
-```
-
-`string | null` is correctly modelled for both new fields.
-
-#### Item 3 — Wire-format naming inconsistency (was Minor)
-
-**Status: NOT RESOLVED — inconsistency preserved (and CodeRabbit pass 3 flagged again as nitpick)**
-
-The follow-up chose the *opposite* direction from the review suggestion: rather than camelCasing `matched_band_reason` and `matched_rule_reason`, it dropped `ruleDesc` in favour of `rule_desc`, and dropped `matched_rule_reason` altogether. `mappedRules` in `alerts-lakehouse.service.ts:177-184` is now:
-
-```ts
-const mappedRules = triggeredRulesData.map((r) => ({
-    ruleId: r.rule_id,
-    ruleWeight: r.rule_weight,
-    subRef: r.rule_sub_ref,
-    independentVariable: r.rule_independent_variable,
-    rule_desc: r.rule_desc,
-    matched_band_reason: r.matched_band_reason
-  }));
-```
-
-The mix is still there: `ruleId`/`ruleWeight`/`subRef`/`independentVariable` (camelCase) alongside `rule_desc`/`matched_band_reason` (snake_case). Frontend `RuleDetailDto` mirrors the mix. CodeRabbit's pass-2 nitpick ("Consider using camelCase for new mapped fields to match existing convention") makes the same point.
-
-This is now a deliberate authoring decision, but the mixed shape is locked into the wire contract on merge. Downgrading from "should fix" to "flag as an intentional inconsistency worth documenting" — no author response on the PR to confirm intent.
-
-#### Item 4 — `band_reasons_with_sub_rule_refs_json` phantom field (was Minor)
-
-**Status: PARTIALLY RESOLVED**
-
-`RuleDetailDto` no longer carries the phantom field (see the fully-quoted DTO under Item 2). However `RawRuleRow` in `backend/src/modules/gold-lakehouse/types/raw-rule-row.types.ts:6` still declares it:
-
-```ts
-export interface RawRuleRow {
-  rule_id: string | null;
-  rule_weight: number | null;
-  rule_independent_variable: unknown;
-  rule_sub_ref: string | null;
-  band_reasons_with_sub_rule_refs_json: string[] | null;   // ← still declared, still not selected in SQL
-  rule_processing_time_ms: number | null;
-  rule_tenant_id: string | null;
-  rule_desc: string | null;
-  matched_band_reason: string | null;
-}
-```
-
-The SQL `json_build_object` in `alerts-lakehouse.service.ts` still does not select `band_reasons_with_sub_rule_refs_json`, so at runtime it's always `undefined`. Non-blocking — drop from the type or select in the query.
-
-#### Item 5 — Five unused optional fields on `RuleDetailDto` (was Minor)
-
-**Status: RESOLVED**
-
-The DTO now carries only the two fields the backend emits and the render consumes — no more `exit_condition_reasons_json`, `matched_exit_condition_reason`, `band_count`, `exit_condition_count`. Speculative type surface trimmed.
-
-#### Item 6 — Trailing whitespace / stray blank lines (was Minor — CI blocker)
-
-**Status: NOT RESOLVED**
-
-`node-ci / check style` is still red on the current head. Direct inspection of the diff shows the trailing-whitespace pattern is unchanged in several spots on `6af19f18`:
-
-`backend/src/modules/gold-lakehouse/alerts-lakehouse.service.ts:53` (SQL block) — a full trailing-whitespace line inside the `json_build_object`:
-
-```
-'matched_band_reason', anr.matched_band_reason
-                                     ␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠
-)
-```
-
-`backend/src/modules/gold-lakehouse/alerts-lakehouse.service.ts:182-183` (mapped-rule literal):
-
-```
-rule_desc: r.rule_desc,·········              ← trailing whitespace
-matched_band_reason: r.matched_band_reason············································    ← trailing whitespace
-```
-
-`backend/src/modules/gold-lakehouse/types/raw-rule-row.types.ts:10-11`:
-
-```
-rule_desc: string | null;··                   ← trailing whitespace
-matched_band_reason: string | null;·          ← trailing whitespace
-```
-
-`frontend/.../AlertNavigatorTab.tsx:54` and `:309` — stray whitespace-only lines inside `fetchData()` and inside the rule-map iteration.
-
-`frontend/.../AlertNavigatorTab.tsx:337` — trailing whitespace after `<div className="text-xs text-gray-500 mt-0.5">` on the Band Reason block.
-
-`frontend/.../alertnavigator/types/index.ts:7,9-10` — two trailing spaces after `rule_desc?: string | null;` and two stray empty lines before the closing `}`.
-
-CodeRabbit pass 2 (`ac86c1c1`) called this out precisely; pass 3 (`6af19f18`) noted it again on `raw-rule-row.types.ts:10`. Run `npm run lint -- --fix` (or `prettier --write`) on the five modified files. This is a hard CI blocker.
-
-#### Item 7 — 133 `resolved`/`integrity` entries stripped from `backend/package-lock.json` (was Major)
-
-**Status: NOT RESOLVED**
-
-Direct comparison from a synced local repo:
-
-```
-grep -c '"resolved":' backend/package-lock.json                → 81
-git show origin/dev:backend/package-lock.json | grep -c '"resolved":' → 214
-```
-
-The 133 packages that lost their tarball URL and SHA-512 hash on the initial push are still stripped on the current HEAD (`6af19f18`). Every one is a dev sub-tree. The initial-round diff blocks (`node_modules/@angular-devkit/schematics-cli/node_modules/@angular-devkit/core`, `@keyv/serialize`, `@nestjs/cli/node_modules/...`, `@xhmikosr/...`, `@tazama-lf/nats-relay-plugin/...`, etc.) all still show `-  "resolved": ...` and `-  "integrity": "sha512-..."` in `gh pr diff`.
-
-**Why it matters:** `npm ci` verifies packages by `integrity` when present. With these entries removed, `npm ci` in CI/CD must re-resolve through the registry and integrity verification is skipped for the affected packages. `Dependency Review` is currently green, but it only reads top-level `package.json` — it does not re-verify integrity on transitive dev entries.
-
-**Fix:** regenerate cleanly.
-
-```bash
-cd backend
-rm package-lock.json
-npm i --package-lock-only        # or a clean `npm install` if node_modules is empty
-```
-
-Confirm afterwards that `grep -c '"resolved":' package-lock.json` matches `origin/dev` (214) modulo any deliberate dependency changes — this PR makes no dep changes, so the count should match exactly.
-
-If the strip is a project convention I'm not aware of, please confirm on the PR and I'll withdraw this item.
-
-#### Item 8 — PR title fails Conventional Commits (was Minor)
-
-**Status: RESOLVED**
-
-Title is now `feat: Paysys/Add Rule properties inside Typology in Visualization`. `conventional-commits / validate-pr-title` is green.
-
-#### Item 9 — `node-ci / check tests` failing (was Major)
-
-**Status: RESOLVED**
-
-Green on `6af19f18`. The follow-up commits added substantial new test coverage:
-
-- **Backend** (`alerts-lakehouse.service.spec.ts`, +117 lines) — three new tests explicitly cover the new `rule_desc`/`matched_band_reason` pass-through, the null case, and the flow-processor exclusion.
-- **Frontend service** (`alertNavigatorService.test.ts`, +87 lines) — 7 tests covering empty typologies, multi-typology parsing, other-field preservation, URL construction, and error propagation (network + malformed JSON).
-- **Frontend component** (`AlertNavigatorTab.test.tsx`, +481 net) — expand/collapse behaviour, rule-detail rendering (present/null/undefined/one-of-two/multi-rule), flow-processor banner, alert-metadata fallbacks, score-color thresholds, statistics summary. Notably the initial-review call for a "`loading data={null}` render" test is materially covered: `renders data on successful fetch` (line ~76), `shows "No data available" when the fetch resolves with no data` (line ~478), and every `rule detail rendering` test would fail if the loading branch broke again.
-
-| # | Item | Status |
+| # | Item | Status at end of follow-up |
 |---|------|--------|
 | 1 | "No data available" flashes during fetch | ✅ Resolved (loading branch restored in `6af19f18`) |
 | 2 | `RuleDetailDto.ruleDesc` type widening | ✅ Resolved (renamed to `rule_desc: string \| null`) |
@@ -351,7 +184,7 @@ Green on `6af19f18`. The follow-up commits added substantial new test coverage:
 | 4 | Phantom `band_reasons_with_sub_rule_refs_json` | ⚠️ Partial — removed from `RuleDetailDto`, still on `RawRuleRow` |
 | 5 | Five unused `RuleDetailDto` fields | ✅ Resolved |
 | 6 | `check style` failing (trailing whitespace) | ❌ Not resolved — still red on `6af19f18` |
-| 7 | `backend/package-lock.json` — 133 integrity entries stripped | ❌ Not resolved — count still 81 vs. 214 |
+| 7 | `backend/package-lock.json` — 133 integrity entries stripped | ❌ Not resolved — count 81 vs. 214 on `origin/dev` |
 | 8 | PR title fails Conventional Commits | ✅ Resolved |
 | 9 | `check tests` failing | ✅ Resolved (green + substantial new coverage added) |
 
@@ -361,30 +194,168 @@ Green on `6af19f18`. The follow-up commits added substantial new test coverage:
 
 ### New Issues Found in Updated Commits
 
-#### New Issue F1 — `check style` still failing
+Three new observations were raised in follow-up:
 
-**Severity: Major (Code Quality — CI blocker)**
+- **F1** — `check style` still failing (Major, CI blocker; same root cause as Item 6).
+- **F2** — Restored `if (loading)` block indented with three leading spaces (Minor).
+- **F3** — `AlertNavigatorTab.test.tsx:487-488` uses a dead-guard + `parentElement` DOM walk (Informational).
 
-Fully covered under [Item 6](#item-6--trailing-whitespace--stray-blank-lines-was-minor--ci-blocker). Same root cause as before — the trailing whitespace / stray blank lines simply weren't fixed. Elevated to Major here because CI has flagged it three times (initial review, CodeRabbit pass 2, CodeRabbit pass 3) and it remains red.
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
 
-#### New Issue F2 — Stylistically odd control-flow indentation
+---
 
-**Severity: Minor (Code Quality)**
+### CodeRabbit Activity — Passes 2 & 3
 
-`AlertNavigatorTab.tsx:86` — the restored `if (loading)` block is indented as `   if (loading) {` (three leading spaces) with no blank line separating it from the previous helper. It is functionally correct but visually broken. This is one of the specific lines Prettier will fix if run.
+**Pass 2** (`ac86c1c1`): 3 actionable + 1 nitpick — trailing whitespace in `alerts-lakehouse.service.ts:182-184` (Critical), trailing whitespace on `raw-rule-row.types.ts:10` (Minor), placeholder test file needing restoration (Major, resolved in `6af19f18`), naming nitpick (Trivial).
 
-#### New Issue F3 — Test uses `.closest('div').parentElement` DOM walk
+**Pass 3** (`6af19f18`): 0 actionable, 1 nitpick — simplify the statistics-summary DOM walk in `AlertNavigatorTab.test.tsx:487-488` (Trivial). Pass 3 also reposted the `raw-rule-row.types.ts:10` trailing-whitespace concern under the new commit, confirming it was still unresolved.
 
-**Severity: Informational (Test Quality)**
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
 
-`AlertNavigatorTab.test.tsx:487-488` — the statistics-summary assertion is:
+---
+
+### Test Coverage (updated)
+
+Substantial new coverage added: backend service (rule_desc/matched_band_reason pass-through + null + flow-processor exclusion), frontend service (empty/multi-typology/URL/error paths), and frontend component (expand/collapse, rule-detail rendering across value states, flow-processor banner, alertMetadata fallbacks, score-color thresholds, statistics summary). `node-ci / check tests` green.
+
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
+
+---
+
+### Updated Verdict
+
+**Verdict at end of follow-up: Changes Requested** — Item 6 (whitespace / `check style` red) and Item 7 (lockfile integrity strip) remained blocking. Items 3, 4, F3, F2 were non-blocking recommendations.
+
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
+
+---
+---
+---
+
+## Final Review (2026-07-14)
+
+**Reviewed commit:** `021a9b3f4409d3c5cca3e180d4c47cca54a55323` — *"fix white-spaces"* (2026-07-13 19:58 UTC, committed 2026-07-14 in local TZ)
+**Reviewed against:** Changes Requested on `6af19f18` by `ahmad-paysys` (2026-07-13 15:50 UTC, [issue comment](https://github.com/tazama-lf/case-management-system/pull/241#issuecomment-))
+**Developer response:** No written comment. Resolution is via a single new commit — `021a9b3f` "fix white-spaces". Head SHA verified against `gh pr view 241 --json headRefOid` — matches `021a9b3f`.
+
+**Size on final head:** +684 / -413 lines across 9 files. **All CI checks green** on `021a9b3f`, including `node-ci / check style` (previously red).
+
+**What the final commit changed** (`git show 021a9b3f --stat`):
+
+| File | Δ |
+|------|---|
+| `backend/package-lock.json` | −106 lines (further `resolved`/`integrity` strips) |
+| `backend/src/modules/gold-lakehouse/alerts-lakehouse.service.ts` | ±18 lines (whitespace, added rationale comment, indent fixes) |
+| `backend/src/modules/gold-lakehouse/types/raw-rule-row.types.ts` | ±5 lines (dropped `band_reasons_with_sub_rule_refs_json`, whitespace fixed) |
+| `frontend/.../__tests__/AlertNavigatorTab.test.tsx` | ±6 lines (F3 fix — statistics DOM walk rewritten per CodeRabbit) |
+| `frontend/.../alertnavigator/AlertNavigatorTab.tsx` | ±13 lines (F2 fix — `if (loading)` reindented; stray blank lines removed; band-reason JSX cleaned) |
+| `frontend/.../alertnavigator/types/index.ts` | ±5 lines (trailing whitespace + stray blank lines removed; rationale comment added) |
+
+### Resolution Status — All Outstanding Items
+
+#### Item 3 — Wire-format naming inconsistency (was ➖ Preserved by author)
+
+**Status: RESOLVED (via documenting comment)**
+
+The mixed shape is preserved, but the author now documents the intent inline. In `alerts-lakehouse.service.ts:176`:
 
 ```ts
-const typologiesCard = screen.getByText('Typologies Triggered').closest('div');
-expect(typologiesCard && within(typologiesCard.parentElement as HTMLElement).getByText('1')).toBeInTheDocument();
+// rule_desc and matched_band_reason intentionally keep snake_case: they mirror the underlying SQL column names
+const mappedRules = triggeredRulesData.map((r) => ({
+  ruleId: r.rule_id,
+  ruleWeight: r.rule_weight,
+  subRef: r.rule_sub_ref,
+  independentVariable: r.rule_independent_variable,
+  rule_desc: r.rule_desc,
+  matched_band_reason: r.matched_band_reason,
+}));
 ```
 
-CodeRabbit's pass-3 nitpick correctly notes: the `typologiesCard && …` guard is dead (`getByText` throws rather than returning falsy), and walking through `parentElement` couples the test to the current markup. A cleaner form is:
+Mirroring comment in `frontend/.../alertnavigator/types/index.ts:7`:
+
+```ts
+// rule_desc and matched_band_reason intentionally keep snake_case: they mirror the underlying SQL column names
+rule_desc?: string | null;
+matched_band_reason?: string | null;
+```
+
+Exactly the resolution suggested in the previous follow-up ("if deliberate, worth a one-line comment on the DTO stating the mix is intentional"). Closed.
+
+#### Item 4 — Phantom `band_reasons_with_sub_rule_refs_json` on `RawRuleRow` (was ⚠️ Partial)
+
+**Status: RESOLVED**
+
+Removed from the type. Current `RawRuleRow` (`backend/src/modules/gold-lakehouse/types/raw-rule-row.types.ts`):
+
+```ts
+export interface RawRuleRow {
+  rule_id: string | null;
+  rule_weight: number | null;
+  rule_independent_variable: unknown;
+  rule_sub_ref: string | null;
+  rule_processing_time_ms: number | null;
+  rule_tenant_id: string | null;
+  rule_desc: string | null;
+  matched_band_reason: string | null;
+}
+```
+
+No more unused field.
+
+#### Item 6 — `check style` failing (trailing whitespace) (was ❌ Not resolved / Major)
+
+**Status: RESOLVED**
+
+`node-ci / check style` is **green** on `021a9b3f` (CI: [job 86920793139 — SUCCESS](https://github.com/tazama-lf/case-management-system/actions/runs/29280672257/job/86920793139)). Direct inspection of the diff confirms the trailing spaces flagged in every prior round are gone:
+
+- `alerts-lakehouse.service.ts:53` — the whitespace-only line inside `json_build_object` was removed and `'matched_band_reason', anr.matched_band_reason` is now aligned with the sibling columns.
+- `alerts-lakehouse.service.ts:176-181` — trailing whitespace after `rule_desc: r.rule_desc,` and `matched_band_reason: r.matched_band_reason` gone; indentation normalized.
+- `raw-rule-row.types.ts:7-8` — trailing spaces after both new fields removed.
+- `AlertNavigatorTab.tsx` — the stray blank line after `setData(result);`, the stray blank line inside the rule-map iteration, and the trailing whitespace on the Band Reason `<div>` are all gone. Two JSX blocks (`Rule Description` and `Band Reason`) also collapsed from three lines to one.
+- `types/index.ts:7-10` — trailing spaces after `rule_desc?: string | null;` gone, two stray blank lines before the closing `}` gone.
+
+#### Item 7 — `backend/package-lock.json` — 133 `resolved`/`integrity` entries stripped (was ❌ Not resolved / Major)
+
+**Status: NOT RESOLVED — worse than the follow-up round**
+
+The `fix white-spaces` commit also touched `backend/package-lock.json`, stripping an *additional* 53 packages' `resolved`/`integrity` pairs. Current count:
+
+```
+grep -c '"resolved":' backend/package-lock.json                → 28
+git show origin/dev:backend/package-lock.json | grep -c '"resolved":' → 214
+```
+
+That's 186 packages now missing tarball URLs and SHA-512 hashes (up from 133 in the follow-up round). The regression happened because the commit only fixed whitespace in the source files but continued to reflect a lockfile that was not regenerated with `npm install` / `npm ci`. No dependency changes are made in this PR, so the count should match `origin/dev` exactly.
+
+**Why it matters:** `npm ci` verifies packages against `integrity` when present. With 186 entries stripped, integrity verification is skipped for those packages during install. `Dependency Review` remains green but it only reads top-level `package.json`, not transitive dev entries.
+
+**Fix (unchanged from prior round):**
+
+```bash
+cd backend
+rm package-lock.json
+npm i --package-lock-only
+```
+
+Then confirm `grep -c '"resolved":' backend/package-lock.json` matches the `origin/dev` count of 214, then commit the regenerated file. If this strip is a deliberate convention I'm missing, a one-line note on the PR would close this item.
+
+#### Item F2 — Three-space indent on restored `if (loading)` (was Minor)
+
+**Status: RESOLVED**
+
+`AlertNavigatorTab.tsx:85-86`:
+
+```tsx
+  };
+
+  if (loading) {
+```
+
+Proper two-space indent, blank line above.
+
+#### Item F3 — `AlertNavigatorTab.test.tsx:487-488` statistics DOM walk (was Informational)
+
+**Status: RESOLVED — applied CodeRabbit's suggested form**
 
 ```ts
 const typologiesCard = screen
@@ -393,97 +364,62 @@ const typologiesCard = screen
 expect(within(typologiesCard).getByText('1')).toBeInTheDocument();
 ```
 
-Non-blocking, but worth applying while the test file is warm.
+The dead `typologiesCard && …` guard and inline `parentElement` walk are gone. Matches the rewrite suggested in the follow-up round.
+
+### Summary Table — Final Resolution Status
+
+| # | Item | Final Status |
+|---|------|--------|
+| 1 | "No data available" flashes during fetch | ✅ Resolved (`6af19f18`) |
+| 2 | `RuleDetailDto.ruleDesc` type widening | ✅ Resolved (`ac86c1c1`, via rename) |
+| 3 | Wire-format naming inconsistency | ✅ Resolved (`021a9b3f`, via inline rationale comment) |
+| 4 | Phantom `band_reasons_with_sub_rule_refs_json` | ✅ Resolved (`021a9b3f`) |
+| 5 | Five unused `RuleDetailDto` fields | ✅ Resolved (`ac86c1c1`) |
+| 6 | `check style` failing (trailing whitespace) | ✅ Resolved (`021a9b3f` — CI green) |
+| 7 | `backend/package-lock.json` — integrity entries stripped | ❌ **Worse — 186 entries stripped (was 133)** |
+| 8 | PR title fails Conventional Commits | ✅ Resolved (`ac86c1c1`) |
+| 9 | `check tests` failing | ✅ Resolved (`ac86c1c1`) |
+| F1 | `check style` (dup of Item 6) | ✅ Resolved (`021a9b3f`) |
+| F2 | Three-space indent on `if (loading)` | ✅ Resolved (`021a9b3f`) |
+| F3 | Statistics test DOM walk | ✅ Resolved (`021a9b3f`) |
 
 [↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
 
 ---
 
-### CodeRabbit Activity — Passes 2 & 3
+### New Issues Found in Final Commit
 
-**Reconciliation:** every CodeRabbit finding in the follow-up rounds is covered by an item above.
+#### New Issue G1 — Lockfile integrity strip expanded
 
-#### Pass 2 — `ac86c1c1` (2026-07-13 14:00 UTC)
+**Severity: Major (Supply-chain integrity — regression)**
 
-**Findings:** 3 actionable (2 inline potential-issue + 1 test-restoration ask) + 1 nitpick
+The `fix white-spaces` commit (`021a9b3f`) stripped 53 additional `resolved`/`integrity` pairs from `backend/package-lock.json`, on top of the 133 already flagged in the initial round. The scope of the commit was supposed to be whitespace cleanup only — the lockfile changes are unrelated to that scope and should not have been included.
 
-| Finding | Severity | Status | Where covered |
-|---------|----------|--------|---------------|
-| Trailing whitespace / indent in `alerts-lakehouse.service.ts:182-184` | Critical | ❌ Not resolved on `6af19f18` | Item 6 / New Issue F1 |
-| Trailing whitespace on `raw-rule-row.types.ts:10` | Minor | ❌ Not resolved | Item 6 |
-| `AlertNavigatorTab.test.tsx` placeholder — restore test suite | Major | ✅ Resolved in `6af19f18` — CodeRabbit's own comment carries an `✅ Addressed in commit 6af19f1` marker | Test Coverage (updated) |
-| camelCase / snake_case in `mappedRules` (nitpick) | Trivial | ➖ Preserved by author | Item 3 |
+Grouped under Item 7 in the summary table but called out separately here because it is a *new* regression introduced in this round, not simply the persistence of an old issue.
 
-#### Pass 3 — `6af19f18` (2026-07-13 15:03 UTC)
+**Suggested action:** regenerate the lockfile cleanly (`rm backend/package-lock.json && npm i --package-lock-only`) and commit the result. If the strip is intentional (e.g. an offline-mirror workflow), please confirm on the PR and I will withdraw both Item 7 and G1.
 
-**Findings:** 0 actionable, 1 nitpick
-
-| Finding | Severity | Status | Where covered |
-|---------|----------|--------|---------------|
-| `AlertNavigatorTab.test.tsx:487-488` — simplify the `parentElement` walk in the statistics assertion | Trivial | ❌ Not addressed | New Issue F3 |
-
-Note: pass-3 review also confirmed pass-2's trailing-whitespace concern on `raw-rule-row.types.ts:10` remained unfixed (that comment is now attached to commit `6af19f18` on line 10). This is redundant evidence for Item 6.
-
-**Unresolved CodeRabbit comments (open at time of writing):**
-
-1. **Pass 2 inline** on `backend/src/modules/gold-lakehouse/alerts-lakehouse.service.ts:184` — trailing whitespace + indent (Critical) — https://github.com/tazama-lf/case-management-system/pull/241 (`cr-comment:v1:9dffa46eebc951e331fc35fa`).
-2. **Pass 2 inline** on `backend/src/modules/gold-lakehouse/types/raw-rule-row.types.ts:10` — trailing whitespace (Minor) — (`cr-comment:v1:1bf547272290dd91c637d8a7`). *CodeRabbit reposted this same location under commit `6af19f18` in pass 3, confirming still unresolved.*
-3. **Pass 2 inline** on `backend/src/modules/gold-lakehouse/alerts-lakehouse.service.ts:177-186` — camelCase / snake_case naming nitpick (Trivial) — (`cr-comment:v1:a9a109a2c113d5d50683c8f0`). Preserved by author; consider marking resolved with a rationale.
-4. **Pass 3 inline** on `frontend/.../__tests__/AlertNavigatorTab.test.tsx:487-488` — simplify the statistics DOM walk (Trivial) — (`cr-comment:v1:0a484796d55115fb60e97eae`).
-
-Comments marked ✅ by CodeRabbit itself and therefore not carried forward:
-
-- Pass 1 outside-diff on `AlertNavigatorTab.tsx:86-87` (loading branch) — resolved in `6af19f18`.
-- Pass 1 inline on `types/index.ts:7-14` (ruleDesc nullability) — resolved via rename in `ac86c1c1`.
-- Pass 2 inline on `AlertNavigatorTab.test.tsx:1` (placeholder-only test file) — resolved in `6af19f18`.
+No other new issues introduced by `021a9b3f`. The commit is otherwise a clean whitespace / cosmetic cleanup that also closes several open recommendation items.
 
 [↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
 
 ---
 
-### Test Coverage (updated)
-
-**What is now tested:**
-
-- Backend lakehouse aggregation: three new tests cover `rule_desc` / `matched_band_reason` present, null, and flow-processor-not-leaked cases.
-- Frontend service: 7 tests cover empty response, multi-typology parsing independence, response-field preservation, URL shape, and error propagation for network + JSON errors.
-- Frontend component: expand/collapse behaviour (single, toggle, single-open-at-a-time), rule-detail rendering across value present / null / undefined / one-of-two / multi-rule variants, flow-processor banner presence and absence, alertMetadata fallbacks (PENDING, N/A, `||`-split transactionId, block-reason section), score-color thresholds (70 orange, 40 yellow), and statistics summary.
-
-**What is still not tested:**
-
-- The `getTransactionHistory` change (log removal) has no assertion, but it's a deletion, so this is defensible.
-- No test asserts the loading spinner *renders* during an in-flight fetch — the coverage is indirect (the successful-fetch tests would fail if a "No data available" flash returned). If the loading branch were removed again, several tests would break, so this is adequate in practice.
-
-**CI:** `node-ci / check tests` is green on `6af19f18`.
-
-[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
-
----
-
-### Updated Verdict
+### Final Verdict
 
 **Verdict: Changes Requested**
 
-Substantial progress: the loading-UX regression is fixed, the DTO/type-widening issue is resolved (by rename), speculative fields are trimmed, the PR title now passes Conventional Commits, `check tests` is green, and — importantly — the follow-up added a large and carefully-scoped test suite that would catch regressions of every fix. The camelCase/snake_case mix is now clearly an authoring decision.
+The author has done a thorough job across three rounds: the loading regression is fixed, the DTO is trimmed and correctly nullable, the naming decision is now explicitly documented in comments on both backend and frontend, the phantom `band_reasons_with_sub_rule_refs_json` field is removed, the test suite is substantial and well-scoped, the PR title passes Conventional Commits, `check tests` is green, and — new this round — `check style` is finally green as well. Every prior review recommendation except the lockfile issue has been actioned. On code quality this is now a merge-ready PR.
 
-Two of the original blockers, however, are still un-addressed on the current head (`6af19f18`):
-
-1. **`node-ci / check style` is still red** — trailing whitespace and stray blank lines from the earlier round remain in `alerts-lakehouse.service.ts` (SQL block + mapped-rule literal), `raw-rule-row.types.ts` (both new fields), `AlertNavigatorTab.tsx` (twice), and `types/index.ts`. CodeRabbit pass 2 & pass 3 both flagged this. Run `npm run lint -- --fix` or `prettier --write` on the five modified source files.
-2. **`backend/package-lock.json` still has 133 `resolved`/`integrity` entries stripped** — count remains 81 (this PR) vs. 214 (`origin/dev`). Please regenerate the lockfile cleanly and commit the result. If this strip is intentional, please state so on the PR.
-
-There are also two open CodeRabbit nitpicks (naming consistency and the statistics-test DOM walk) that are safe to defer, and one partial-resolution item (`RawRuleRow.band_reasons_with_sub_rule_refs_json` — still declared, still not selected).
+The one remaining blocker is the same one from the initial round, and it has actually **regressed**: the whitespace-fix commit stripped an additional 53 `resolved`/`integrity` entries from `backend/package-lock.json`, bringing the total to 186 packages (28 vs. 214 on `origin/dev`) that will not be integrity-verified during `npm ci`. This is unrelated to the whitespace fix that was the commit's stated purpose and needs a clean lockfile regeneration before merge.
 
 ### Blocking
 
-1. **`check style` failing (Item 6 / F1)** — trailing whitespace and stray blank lines in five modified files; unchanged since initial round. Run the project's lint-fix.
-2. **Lockfile integrity strip (Item 7)** — 133 packages missing `resolved`/`integrity`. Regenerate `backend/package-lock.json` cleanly.
+1. **Lockfile integrity strip (Item 7 + G1)** — `backend/package-lock.json` is now missing 186 `resolved`/`integrity` entries (regressed further in `021a9b3f`). Regenerate cleanly with `npm i --package-lock-only` in `backend/` and commit; or, if the strip is deliberate, confirm on the PR.
 
-### Non-blocking but recommended
+### Non-blocking
 
-3. **Drop or wire `RawRuleRow.band_reasons_with_sub_rule_refs_json` (Item 4)** — still declared, never selected.
-4. **Wire-format naming (Item 3)** — mixed camelCase/snake_case is now locked. If deliberate, worth a one-line comment in the DTO. Otherwise, unify.
-5. **Simplify `AlertNavigatorTab.test.tsx:487-488` (F3)** — remove the redundant `&&` guard and `parentElement` walk (CodeRabbit pass-3 nitpick).
-6. **Indent the restored `if (loading)` block (F2)** — the three-space leading indent will be fixed automatically by the lint-fix that clears Item 6.
+None — every other item has been resolved.
 
 [↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
 
@@ -492,30 +428,28 @@ There are also two open CodeRabbit nitpicks (naming consistency and the statisti
 ### GitHub Review Comment
 
 ````markdown
-**Changes Requested (follow-up)**
+**Changes Requested (final round)**
 
-Good progress since the last round — the loading UX is fixed, the DTO is trimmed and correctly nullable, the PR title now passes Conventional Commits, and `check tests` is green with a solid new test suite (backend + frontend service + component). Two of the original blockers, though, are still open on the current head (`6af19f18`), plus a couple of unresolved CodeRabbit nitpicks worth clearing before merge.
+Great progress this round — every code-quality item from the prior two rounds is now closed. `check style` is green, the `if (loading)` branch is indented cleanly, the naming decision is documented in inline comments on both backend and frontend, the phantom `RawRuleRow.band_reasons_with_sub_rule_refs_json` field is gone, and the CodeRabbit pass-3 nitpick on `AlertNavigatorTab.test.tsx:487-488` was applied verbatim. On the feature itself this PR is ready.
+
+The one blocker is `backend/package-lock.json`, and it has actually got worse in `021a9b3f`.
 
 ---
 
 ### Blocking
 
-**1. `node-ci / check style` is still failing — trailing whitespace / stray blank lines**
+**1. `backend/package-lock.json` — 186 packages now missing `resolved`/`integrity`**
 
-The whitespace issues from the initial round were not cleaned up. Concretely, on `6af19f18`:
+The `fix white-spaces` commit (`021a9b3f`) stripped 53 more `resolved`/`integrity` pairs from the lockfile, on top of the 133 already flagged in the earlier rounds. Direct count on the current head:
 
-- `backend/src/modules/gold-lakehouse/alerts-lakehouse.service.ts:53` — a whitespace-only line inside the `json_build_object` block, and trailing whitespace on lines 182 (`rule_desc: r.rule_desc,        `) and 183 (`matched_band_reason: r.matched_band_reason                              `).
-- `backend/src/modules/gold-lakehouse/types/raw-rule-row.types.ts:10-11` — trailing whitespace after `rule_desc: string | null;··` and `matched_band_reason: string | null;·`. CodeRabbit flagged this in pass 2 (line 10) and reposted in pass 3 — still not addressed.
-- `frontend/src/features/cases/components/view/visualizations/alertnavigator/AlertNavigatorTab.tsx:54, :86, :309, :337` — stray whitespace-only lines and trailing whitespace on the Band Reason `<div>`; the restored `if (loading)` block is also indented with three leading spaces (`   if (loading) {`) without a blank line above it.
-- `frontend/src/features/cases/components/view/visualizations/alertnavigator/types/index.ts:7-10` — trailing whitespace after `rule_desc?: string | null;` and two stray blank lines before the closing `}`.
+```
+grep -c '"resolved":' backend/package-lock.json                → 28
+git show origin/dev:backend/package-lock.json | grep -c '"resolved":' → 214
+```
 
-Running `npm run lint -- --fix` (or `npx prettier --write`) on those five files should clear the check.
+That's 186 packages that `npm ci` can no longer integrity-verify. This PR makes no dependency changes, so the count should match `origin/dev` exactly. The lockfile changes also seem outside the intent of a "fix white-spaces" commit.
 
-**2. `backend/package-lock.json` is still missing 133 `resolved`/`integrity` entries**
-
-Direct comparison: `origin/dev` has 214 `"resolved":` entries; this PR still has 81. The 133 dev-subtree packages that lost their tarball URL and SHA-512 hash on the initial push are still stripped on `6af19f18`. `npm ci` cannot integrity-check those packages any more, and `Dependency Review` doesn't cover transitive dev entries.
-
-Please regenerate the lockfile cleanly:
+Please regenerate cleanly and commit:
 
 ```bash
 cd backend
@@ -523,37 +457,11 @@ rm package-lock.json
 npm i --package-lock-only
 ```
 
-…and commit the result. Afterwards `grep -c '"resolved":' backend/package-lock.json` should match `origin/dev`. If the strip is intentional in your workflow, please say so on the PR and I'll withdraw this item.
+After the regeneration, `grep -c '"resolved":' backend/package-lock.json` should be 214. If this strip is deliberate for your workflow (offline mirror, private registry, etc.), please say so on the PR and I'll withdraw the item.
 
 ---
 
-### Non-blocking (please address in this PR if possible)
-
-**3. Unresolved CodeRabbit nitpick — `AlertNavigatorTab.test.tsx:487-488`**
-
-CodeRabbit pass 3 pointed out that the statistics assertion is fragile:
-
-```ts
-const typologiesCard = screen.getByText('Typologies Triggered').closest('div');
-expect(typologiesCard && within(typologiesCard.parentElement as HTMLElement).getByText('1')).toBeInTheDocument();
-```
-
-The `typologiesCard && …` guard is dead (`getByText` throws rather than returning falsy), and walking `parentElement` couples the test to markup structure. Suggested rewrite:
-
-```ts
-const typologiesCard = screen
-  .getByText('Typologies Triggered')
-  .closest('div')?.parentElement as HTMLElement;
-expect(within(typologiesCard).getByText('1')).toBeInTheDocument();
-```
-
-**4. `RawRuleRow.band_reasons_with_sub_rule_refs_json` still declared but never selected**
-
-`backend/src/modules/gold-lakehouse/types/raw-rule-row.types.ts:6` declares `band_reasons_with_sub_rule_refs_json: string[] | null`, but the SQL `json_build_object` in `alerts-lakehouse.service.ts` doesn't select it, so it's always `undefined` at runtime. Either add it to the query or drop it from the type — same principle you already applied to the frontend DTO.
-
-**5. Wire-format naming inconsistency — CodeRabbit pass 2 nitpick**
-
-The `mappedRules` object mixes camelCase (`ruleId`, `ruleWeight`, `subRef`, `independentVariable`) with snake_case (`rule_desc`, `matched_band_reason`), which the frontend `RuleDetailDto` mirrors. This is fine if deliberate, but please either unify or leave a one-line comment on the DTO stating the mix is intentional (e.g. "keys mirror the underlying SQL column names for new fields"). Otherwise the shape locks in on merge.
+Everything else from previous rounds is resolved. Once the lockfile is regenerated, this is good to merge.
 ````
 
 [↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
