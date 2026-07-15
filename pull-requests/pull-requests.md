@@ -460,11 +460,26 @@ Only mark an item `❌ Not resolved` after confirming there is no author respons
 ### 6.2 Follow-up section contents
 
 Each follow-up section contains:
-1. Resolution Status (one `### Item N` subsection per prior item) — every item must cite either the commit that fixed it OR the comment (with URL) that answered it OR an explicit `no author response` note.
-2. New Issues Found in Updated Commits (if any new problems were introduced)
-3. Updated Verdict (new verdict table + one-paragraph reasoning)
+1. Resolution Status (one `### Item N` subsection per prior item) — every item must cite either the commit that fixed it OR the comment (with URL) that answered it OR an explicit `no author response` note. End with a summary table.
+2. New Issues Found in Updated Commits (if any new problems were introduced) — treat these as first-class findings with severity + fix, same standards as initial-round issues.
+3. Updated Verdict (new verdict + blocking / non-blocking split with one-paragraph reasoning).
+4. **GitHub Review Comment (Follow-up)** — a per-round, ready-to-paste GitHub comment. Each follow-up round produces its OWN self-contained comment, headed e.g. `**Changes Requested (follow-up, HEAD `{sha}`)**`, listing only the still-blocking items and any new-issue blockers from this round. Do not rely on the initial round's comment being read alongside it — the follow-up comment must stand on its own so the author sees exactly what is still owed.
 
-The Final Review section replaces the Summary and Verdict section from the initial review and includes the definitive verdict with the complete resolution table.
+The Final Review section (only when the PR is closed out) replaces the Summary and Verdict section from the initial review and includes the definitive verdict with the complete resolution table.
+
+### 6.3 Append mode — do not rewrite prior rounds
+
+**When adding a follow-up round to an existing review file, append; never rewrite.** The prior round's Overview, What-Changed, Issues-and-Observations, Summary-and-Verdict, and GitHub-Review-Comment sections stay intact as the historical record — they capture what was known and posted at that time, and are the anchor for the author's follow-up response. Concretely:
+
+1. **Preserve everything above.** Do not edit prior-round headings, tables, verdict wording, or the initial GitHub Review Comment. If a prior-round claim turned out to be wrong, note the correction in the follow-up section rather than rewriting history.
+2. **Extend the Table of Contents.** Add nested entries for the new round (e.g. `- [Follow-up Review (YYYY-MM-DD)](#follow-up-review-yyyy-mm-dd)` with sub-entries for Resolution Status, New Issues, Updated Verdict, GitHub Review Comment). Do not remove the original single-round ToC entries.
+3. **Separator.** Insert a triple `---` divider (three `---` lines on their own with blank lines between, or run together — either is fine) between the previous round's final section and the new `## Follow-up Review (YYYY-MM-DD)` heading.
+4. **Header block for the new round.** Start with a metadata block covering: `Reviewed commit`, `Reviewed against` (which prior-round item set), `Delta reviewed` (`git diff prior..new --stat` one-liner), any force-push / rebase note per Section 4, and the `Developer response` quoted verbatim with a link to the issue-comment (`https://github.com/.../pull/{number}#issuecomment-{id}`).
+5. **Force-push handling.** If the branch was force-pushed and prior-round SHAs no longer exist on `origin`, follow Section 4's reconstruction rules — but still keep the prior round's SHA citations as-written. Note the force-push in the new round's metadata header.
+6. **One GitHub Review Comment per round.** Each round's `GitHub Review Comment` sub-section is independent. Do not merge or supersede the prior round's comment in-place. The reader can post the new comment on top of the prior thread; the historical comment stays in the file for reference.
+7. **Back-to-top links** still target the single H1 anchor at the top of the file, per Section 7.
+
+Result: a single file whose sections read top-to-bottom in chronological order, each round self-contained, with the newest round's GitHub Review Comment as the tail block.
 
 ---
 
