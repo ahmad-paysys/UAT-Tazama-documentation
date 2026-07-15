@@ -21,6 +21,11 @@
   - [New Issues Found in Final Commit](#new-issues-found-in-final-commit)
   - [Final Verdict](#final-verdict)
   - [GitHub Review Comment](#github-review-comment)
+- [Follow-up Review (2026-07-15)](#follow-up-review-2026-07-15)
+  - [Resolution Status — Prior Outstanding Items](#resolution-status--prior-outstanding-items)
+  - [New Issues Found in Updated Commits (Follow-up 2026-07-15)](#new-issues-found-in-updated-commits-follow-up-2026-07-15)
+  - [Updated Verdict (Follow-up 2026-07-15)](#updated-verdict-follow-up-2026-07-15)
+  - [GitHub Review Comment (Follow-up 2026-07-15)](#github-review-comment-follow-up-2026-07-15)
 
 ---
 ---
@@ -462,6 +467,172 @@ After the regeneration, `grep -c '"resolved":' backend/package-lock.json` should
 ---
 
 Everything else from previous rounds is resolved. Once the lockfile is regenerated, this is good to merge.
+````
+
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
+
+---
+---
+---
+
+## Follow-up Review (2026-07-15)
+
+**Reviewed commit:** `f464bc065d7c2e6c7141443e84e2fedbdf9d5049` — *"fix lint"* (2026-07-14 14:29 +05:00). Head SHA verified against `gh pr view 241 --json headRefOid` — matches `f464bc06`.
+**Reviewed against:** Changes Requested in the Final Review (2026-07-14) on commit `021a9b3f`, which left one blocking item open (Item 7 / G1 — `backend/package-lock.json` integrity strip).
+**Delta reviewed:** `git diff 021a9b3f..f464bc06 --stat` — 16 files, +3907 / −885 (of which `backend/package-lock.json` alone is +3452 / −783, i.e. a full regeneration; the remaining files come from a merge of `dev` at `389dc0f7` which pulled in the SLA-state filtering feature from PR #244, plus three small lint commits by the author on `case-query.service.ts`, `alert-priority.service.ts`, and `triage.service.ts`).
+**Force-push note:** No force-push. Prior-round SHAs (`05ab1c32`, `ac86c1c1`, `6af19f18`, `021a9b3f`) all still exist on `origin` and reachable from `f464bc06` via linear history.
+**Developer response:** No written comment on the PR since the Final Review. Resolution is via new commits only. The relevant commits since `021a9b3f`:
+
+| Commit | Author | Purpose |
+|--------|--------|---------|
+| `b49ccd8a` | AdeelKahan | `fix package-lock.json` — full regeneration of `backend/package-lock.json` |
+| `d13ad595` | Justus Ortlepp | Merge PR #244 (SLA-task) into `dev` (not part of this PR branch directly) |
+| `389dc0f7` | AdeelKahan | `fix: merged with dev` — merges `origin/dev` (including PR #244) into `paysys/addRulesPropsInTypology` |
+| `6e8c8415` | AdeelKahan | `fix lint in triage service` — replaces `\|\|` with `?? ''` |
+| `fbac3cec` | AdeelKahan | `fix-lint-issue` — removes redundant `?? ''` and adds `!existingAlert.case_id` guard |
+| `f464bc06` | AdeelKahan | `fix lint` — Prettier reflow in `alert-priority.service.ts` and `case-query.service.ts` |
+
+**CI status on `f464bc06`:** all 15 checks **SUCCESS**, including `node-ci / check style`, `node-ci / check tests`, `node-ci / run build`, `Analyze (javascript-typescript)`, `Analyze (actions)`, `CodeQL`, `dco-check`, `dependency-review`, `njsscan`, `nodejsscan`, `encoding-check`, `dockerfile-linter`, `gpg-verify`, `conventional-commits / validate-pr-title`, and `CodeRabbit`. `mergeStateStatus` is `BLOCKED` on branch protection (not CI) — awaiting reviewer approval; `mergeable` is `MERGEABLE`.
+
+### Resolution Status — Prior Outstanding Items
+
+Only one item was open at the end of the Final Review — Item 7 / G1 (`backend/package-lock.json` integrity strip). Every other prior-round item was already ✅ Resolved and is not re-litigated here.
+
+#### Item 7 / G1 — `backend/package-lock.json` integrity strip (was ❌ NOT RESOLVED / Major)
+
+**Status: RESOLVED (`b49ccd8a`)**
+
+The author addressed this directly in commit `b49ccd8a fix package-lock.json`, a clean regeneration of the lockfile. Current counts on `f464bc06`:
+
+```
+grep -c '"resolved":' backend/package-lock.json         → 1269
+grep -c '"node_modules/' backend/package-lock.json      → 1269
+```
+
+Every package in the lockfile now has a `"resolved":` tarball URL (and its corresponding `"integrity"` SHA), so `npm ci` can integrity-verify all packages. The comparison against `origin/dev` used in prior rounds (214 `"resolved":` entries) turns out to be an artifact of `dev`'s own lockfile — `dev` itself carries 1263 packages with only 214 fully-hashed entries, so `origin/dev` is the *less* complete file. The PR now brings `backend/package-lock.json` to a fully-hashed state (all 1269 packages hashed), which is a net improvement over the base branch.
+
+Verification:
+
+```bash
+# On PR head f464bc06
+grep -c '"resolved":' backend/package-lock.json           # 1269
+grep -c '"node_modules/' backend/package-lock.json        # 1269
+# On origin/dev
+git show origin/dev:backend/package-lock.json | grep -c '"resolved":'    # 214
+git show origin/dev:backend/package-lock.json | grep -c '"node_modules/' # 1263
+```
+
+Item 7 and its Final-Review companion G1 are both closed.
+
+### Summary Table — All Items Across All Rounds
+
+| # | Item | Final Status |
+|---|------|--------|
+| 1 | "No data available" flashes during fetch | ✅ Resolved (`6af19f18`) |
+| 2 | `RuleDetailDto.ruleDesc` type widening | ✅ Resolved (`ac86c1c1`) |
+| 3 | Wire-format naming inconsistency | ✅ Resolved (`021a9b3f` — documented inline) |
+| 4 | Phantom `band_reasons_with_sub_rule_refs_json` | ✅ Resolved (`021a9b3f`) |
+| 5 | Five unused `RuleDetailDto` fields | ✅ Resolved (`ac86c1c1`) |
+| 6 | `check style` failing (trailing whitespace) | ✅ Resolved (`021a9b3f`) |
+| 7 / G1 | `backend/package-lock.json` integrity strip | ✅ Resolved (`b49ccd8a`) |
+| 8 | PR title fails Conventional Commits | ✅ Resolved (`ac86c1c1`) |
+| 9 | `check tests` failing | ✅ Resolved (`ac86c1c1`) |
+| F1 | `check style` (dup of Item 6) | ✅ Resolved (`021a9b3f`) |
+| F2 | Three-space indent on `if (loading)` | ✅ Resolved (`021a9b3f`) |
+| F3 | Statistics test DOM walk | ✅ Resolved (`021a9b3f`) |
+
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
+
+---
+
+### New Issues Found in Updated Commits (Follow-up 2026-07-15)
+
+Two observations came in on the commits added since the Final Review. Both are minor and neither blocks merge on this PR's original scope (Alert-Navigator rule properties). The bulk of the delta since `021a9b3f` came in via merging `origin/dev` (`389dc0f7`) and is therefore code already reviewed on other PRs (#240, #244), not authored inside this PR — that content is out of scope for this review and is not re-litigated here.
+
+#### New Issue H1 — Redundant nullish coalescing in `triage.service.ts` was toggled twice (Informational)
+
+**Severity: Informational (Code Quality)**
+
+Commit `6e8c8415 fix lint in triage service` first *added* `?? ''` to `transactionType: alert.txtp` and `reason: alert.message` (converting from `||` to `??`). Immediately after, `fbac3cec fix-lint-issue` *removed* those very same `?? ''` fallbacks to satisfy `check style` (the fields are typed non-nullable, so the fallback is dead code). This matches CodeRabbit's inline comment ([id 3576681151](https://github.com/tazama-lf/case-management-system/pull/241#discussion_r3576681151), 2026-07-14 06:56 UTC). Net result on `f464bc06` is correct — the fallbacks are gone — so this is just a note that the two lint commits could have been squashed. Not a blocker; git history is what it is.
+
+#### New Issue H2 — `existingAlert.case_id` null guard was added but the surrounding code still uses `!`-asserted access to `existingAlert.case_id` implicitly (Informational)
+
+**Severity: Informational (Code Quality)**
+
+Commit `fbac3cec` added a defensive guard in `backend/src/modules/triage/triage.service.ts` around line 310:
+
+```ts
+if (!existingAlert) {
+  throw new NotFoundException(`Alert with id ${alertId} not found`);
+}
+if (!existingAlert.case_id) {
+  throw new BadRequestException(`Alert ${alertId} is not linked to a case`);
+}
+const existingCase = await this.caseRepository.findCaseById(existingAlert.case_id, tenantId);
+```
+
+This is a real improvement over the prior `existingAlert.case_id!` non-null assertion (dropped in `6e8c8415`) — a `BadRequestException` is more informative than a runtime undefined dereference. The new behaviour is that manual-triage against an alert with `case_id === null` now fails fast with 400 instead of the previous silent `!`-assertion that would have thrown a Prisma error deep inside `findCaseById`. That is a semantic change worth flagging for QA but is a strict improvement.
+
+No new test in `backend/test/triage.service.spec.ts` covers the `case_id === null` branch. Adding one line of coverage would close this observation, but it's out of scope for this PR's stated purpose.
+
+#### Out-of-scope notes (informational, tracked here for completeness)
+
+These come in via the `389dc0f7` merge with `dev` and belong to PR #244 (SLA-task), not to PR 241. Listed only so the reader knows why the `git diff 021a9b3f..f464bc06` looks large:
+
+- **CodeRabbit nitpick still open** on `backend/src/modules/case/services/case-query.service.ts:516-537` / `:666-681`: duplicate SLA-candidate lookup pipeline, unbounded scan. This lives on the SLA feature that came in via merge — not written for this PR. Should be tracked on PR #244 or a follow-up issue, not blocked on this PR.
+- **`backend/package-lock.json` full regeneration** (`b49ccd8a`) is a much bigger churn than the prior `21a9b3f`-vs-`origin/dev` diff would have suggested, because `dev` itself carries an under-hashed lockfile. This PR ends up *upgrading* the lockfile's integrity coverage from 214 to 1269 packages, so the noise is a net positive.
+
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
+
+---
+
+### Updated Verdict (Follow-up 2026-07-15)
+
+**Verdict: Approved**
+
+All prior blocking items are resolved. The last outstanding blocker from the Final Review (`backend/package-lock.json` integrity strip — Item 7 / G1) was cleaned up in `b49ccd8a` with a full lockfile regeneration; the lockfile now carries `"resolved":` and `"integrity":` entries for all 1269 packages, which is more complete than `origin/dev`. `check style` remained green after the follow-up lint commits, and all 15 CI checks are SUCCESS on `f464bc06`. The `mergeStateStatus: BLOCKED` state is due to branch protection requiring reviewer approval, not to any CI failure.
+
+The PR's `git diff 021a9b3f..f464bc06` looks large only because the author merged `dev` in, which brought in PR #244's SLA-state filtering feature. That code is out of scope for this review — it was reviewed on PR #244 — and any residual CodeRabbit nitpicks on it (e.g. the duplicate SLA-candidate lookup in `case-query.service.ts:516-537`) should be tracked there, not blocked on PR 241. The three small lint commits by this PR's author since `389dc0f7` (`6e8c8415`, `fbac3cec`, `f464bc06`) are cosmetic Prettier / nullish-coalescing cleanups; `fbac3cec` also adds a small defensive guard against a `null` `existingAlert.case_id` in `triage.service.ts` that is a strict improvement.
+
+### Blocking
+
+None.
+
+### Non-blocking
+
+1. **H2 — `case_id === null` branch is uncovered in `triage.service.ts` tests** — the new `BadRequestException` guard added in `fbac3cec` has no unit test. Out of scope for this PR's stated purpose; worth a one-line test in a follow-up.
+
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
+
+---
+
+### GitHub Review Comment (Follow-up 2026-07-15)
+
+````markdown
+**Approved (follow-up 2026-07-15, HEAD `f464bc06`)**
+
+The last blocker from the previous round — `backend/package-lock.json` missing `resolved`/`integrity` entries — is cleaned up in `b49ccd8a fix package-lock.json`. Every one of the 1269 packages in the lockfile now has a `resolved` URL and `integrity` SHA, so `npm ci` can integrity-verify the full dependency tree. That's actually more complete than the current `origin/dev` (which carries 1263 packages with only 214 fully-hashed entries), so this PR is a net supply-chain improvement over the base branch.
+
+All 15 CI checks are green on `f464bc06`, including `check style`, `check tests`, `run build`, `CodeQL`, `njsscan`, `nodejsscan`, `dependency-review`, and `conventional-commits`. `mergeStateStatus` is `BLOCKED` on branch protection (awaiting reviewer approval), not on CI.
+
+---
+
+### Verified since the Final Review
+
+- `b49ccd8a` — full regeneration of `backend/package-lock.json`; 1269/1269 packages hashed.
+- `389dc0f7` — merge with `dev`. Brings in PR #244 (SLA-state filtering). Not part of this PR's original scope but doesn't conflict with the Alert-Navigator changes.
+- `6e8c8415` / `fbac3cec` — lint fixes in `backend/src/modules/triage/triage.service.ts`. `?? ''` toggled on then off (net: removed, correct — the fields are typed non-nullable). Also adds a `BadRequestException` guard for `existingAlert.case_id === null`, which is a small but genuine hardening over the prior `!`-assertion.
+- `f464bc06` — Prettier reflow in `backend/src/modules/alert-priority/alert-priority.service.ts` and `backend/src/modules/case/services/case-query.service.ts`. Cosmetic.
+
+### Non-blocking (out-of-scope for this PR, informational)
+
+**1. CodeRabbit still has an open nitpick on `case-query.service.ts:516-537` / `:666-681`** — duplicate SLA-candidate lookup pipeline and an unbounded in-memory scan. That code came in via the merge with `dev` (PR #244), not this PR — please track on #244 or as a follow-up issue.
+
+**2. `case_id === null` branch in `triage.service.ts` is untested.** The new `BadRequestException` guard added in `fbac3cec` has no unit test. One-liner in a follow-up would close it.
+
+---
+
+Ready to merge on my side.
 ````
 
 [↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
