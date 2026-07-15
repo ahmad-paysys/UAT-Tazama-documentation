@@ -26,6 +26,11 @@
   - [New Issues Found in Updated Commits (Follow-up 2026-07-15)](#new-issues-found-in-updated-commits-follow-up-2026-07-15)
   - [Updated Verdict (Follow-up 2026-07-15)](#updated-verdict-follow-up-2026-07-15)
   - [GitHub Review Comment (Follow-up 2026-07-15)](#github-review-comment-follow-up-2026-07-15)
+- [Follow-up Review (2026-07-15, round 2)](#follow-up-review-2026-07-15-round-2)
+  - [Resolution Status — Prior Outstanding Items (Round 2)](#resolution-status--prior-outstanding-items-round-2)
+  - [New Issues Found (Follow-up 2026-07-15 Round 2)](#new-issues-found-follow-up-2026-07-15-round-2)
+  - [Updated Verdict (Follow-up 2026-07-15 Round 2)](#updated-verdict-follow-up-2026-07-15-round-2)
+  - [GitHub Review Comment (Follow-up 2026-07-15 Round 2)](#github-review-comment-follow-up-2026-07-15-round-2)
 
 ---
 ---
@@ -633,6 +638,114 @@ All 15 CI checks are green on `f464bc06`, including `check style`, `check tests`
 ---
 
 Ready to merge on my side.
+````
+
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
+
+---
+---
+---
+
+## Follow-up Review (2026-07-15, round 2)
+
+**Reviewed commit:** `df6dc10d6905d9b6c8c32e7322feb503e8cba9bc` — *"merge with dev"* (merge commit). Head SHA verified against `gh pr view 241 --json headRefOid` — matches `df6dc10d`.
+**Reviewed against:** Approved verdict from Follow-up Review (2026-07-15, round 1) on `f464bc06`.
+**Delta reviewed:** `git diff f464bc06..df6dc10d --stat` — 49 files, +1929 / −1440. Entire delta is imported via a single merge commit (`df6dc10d merge with dev`) that pulls `origin/dev` (which had just merged PR #242 "paysys/dashboard-fixes" at `6a10bbff`). **No new author-authored non-merge commits on this PR branch itself** since round 1. Files in this PR's original scope (`backend/src/modules/gold-lakehouse/**`, `backend/src/modules/alert/alert.service.ts`, `frontend/src/features/cases/components/view/visualizations/alertnavigator/**`) are byte-identical between `f464bc06` and `df6dc10d` (`git diff` on those paths returns 0 lines).
+**dev-drift note:** **0 commits behind `origin/dev`** (`git log --oneline HEAD..origin/dev` → empty). `origin/dev` is at `6a10bbff2795fa6b4d6665df8ed7f1696c18cfc0`; `df6dc10d` includes `6a10bbff` as its second parent. The 20-commit drift that had appeared after PR #242 merged is now fully absorbed.
+**Force-push note:** No force-push. Round-1 head `f464bc06` still exists and is the first parent of `df6dc10d`.
+**Developer response:** No written comment on the PR since round 1. No new inline review comments and no new reviews on GitHub since `2026-07-14T06:56:52Z` (last CodeRabbit review). Round 2 is triggered only by the author merging `dev` into the branch to clear the drift.
+
+**CI status on `df6dc10d`:** 14 checks green, 1 pending. Green: `Analyze (actions)`, `Analyze (javascript-typescript)`, `CodeQL`, `CodeRabbit`, `conventional-commits / validate-pr-title`, `dco-check`, `dependency-review`, `dockerfile-linter`, `encoding-check`, `gpg-verify`, `njsscan`, `node-ci / check style`, `node-ci / run build`, `nodejsscan`. Pending: `node-ci / check tests` (run id `29398648642`, job `87297862422`, still in progress at time of this review). `mergeStateStatus: BLOCKED` (branch protection), `mergeable: MERGEABLE`.
+
+### Resolution Status — Prior Outstanding Items (Round 2)
+
+Round 1 closed with verdict Approved and one non-blocking item open (H2 — `case_id === null` branch untested in `triage.service.ts`). Re-verifying:
+
+#### Item H2 — `case_id === null` branch untested in `triage.service.ts` (was Non-blocking / Informational)
+
+**Status: UNCHANGED — still open, still Non-blocking**
+
+No new tests added to `backend/test/triage.service.spec.ts` since round 1 (the file is not among the 49 changed files in `f464bc06..df6dc10d`). The `BadRequestException` guard added in `fbac3cec` remains uncovered. Same disposition as round 1 — out of scope for this PR's stated purpose, worth a one-line follow-up test. No author response.
+
+#### All previously-resolved items (1, 2, 3, 4, 5, 6, 7/G1, 8, 9, F1, F2, F3)
+
+**Status: STILL RESOLVED**
+
+Original-scope files unchanged between `f464bc06` and `df6dc10d` — the merge with `dev` does not touch `alerts-lakehouse.service.ts`, `raw-rule-row.types.ts`, `AlertNavigatorTab.tsx`, `alertnavigator/types/index.ts`, or `alert.service.ts`. All resolutions confirmed in round 1 still hold verbatim on `df6dc10d`.
+
+### Summary Table — Round 2
+
+| # | Item | Status on `df6dc10d` |
+|---|------|--------|
+| 1–9, F1–F3 | All items closed in prior rounds | ✅ Still Resolved (original-scope files unchanged since `f464bc06`) |
+| H2 | `case_id === null` branch untested | ➖ Unchanged — Non-blocking, no author action |
+| N1 (new) | dev-merge scope import | ℹ️ Non-blocking — see below |
+
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
+
+---
+
+### New Issues Found (Follow-up 2026-07-15 Round 2)
+
+#### New Issue N1 — Merge with `dev` imports PR #242 changes into this PR's diff (Informational)
+
+**Severity: Informational (Scope / Review-hygiene)**
+
+The merge commit `df6dc10d merge with dev` pulls in 19 non-merge commits from PR #242 ("paysys/dashboard-fixes", `6a10bbff`), all authored by AdeelKahan and covering dashboard/reports fixes (`backend/src/modules/report/**`, `frontend/src/features/dashboard/**`, `frontend/src/features/reports/**`, `frontend/src/features/cases/**`, `notebooks/transaction-viz.ipynb`). Those changes were reviewed on PR #242 and are not the subject of this PR — but they now appear in `gh pr diff 241`, which can make reviewers double-count them.
+
+For this PR's scope (Alert-Navigator rule properties on the `gold-lakehouse` service and `AlertNavigatorTab`), nothing in the merged content overlaps or conflicts with the round-1 changes. `git diff f464bc06..df6dc10d -- 'backend/src/modules/gold-lakehouse/' 'frontend/src/features/cases/components/view/visualizations/alertnavigator/' 'backend/src/modules/alert/alert.service.ts'` returns zero lines, confirming the merge preserved the round-1 head for original-scope files.
+
+Not a blocker. Just a note for anyone opening the PR diff today — the size jump is entirely from the `dev` merge, not from new PR-241 work.
+
+#### `node-ci / check tests` — pending at time of review
+
+Not a new issue, but flagged for completeness: `check tests` is still running on `df6dc10d` (job `87297862422`). All 14 other checks are green including `check style` and `run build`. Historically this suite has been green on every commit in this PR since `ac86c1c1`, and the merge did not touch any test-relevant file that would be expected to regress it. If it lands red I'll re-open this round; assuming green (extrapolated from history and from `run build` already passing), the verdict below stands.
+
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
+
+---
+
+### Updated Verdict (Follow-up 2026-07-15 Round 2)
+
+**Verdict: Approved**
+
+Nothing in the round-1 approval has changed. The only new activity since then is the author merging `origin/dev` into the PR branch to absorb PR #242's 19 dashboard-fix commits and eliminate the ~20-commit dev drift. That merge does not touch any file in this PR's original scope, and the round-1 verification of all Alert-Navigator rule-property changes remains valid on `df6dc10d`. 14 of 15 CI checks are green; `node-ci / check tests` is still running but there is no reason to expect a regression (nothing changed in test-relevant paths since round 1, and `run build` and `check style` are both green on this HEAD).
+
+`mergeStateStatus` is still `BLOCKED` on branch protection (awaiting reviewer approval), not on CI. `mergeable: MERGEABLE`. Once `check tests` completes green and a reviewer approves on GitHub, the PR is ready to merge.
+
+### Blocking
+
+None.
+
+### Non-blocking
+
+1. **H2 (carried from round 1)** — `case_id === null` branch is untested in `triage.service.ts`. One-liner in a follow-up would close it.
+2. **N1 (new)** — Merge with `dev` imports PR #242's changes into this PR's diff. Informational only; original-scope files unchanged. No action needed on this PR.
+3. **`node-ci / check tests` pending** — verify green before merge; no evidence of impending failure.
+
+[↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
+
+---
+
+### GitHub Review Comment (Follow-up 2026-07-15 Round 2)
+
+````markdown
+**Approved (follow-up 2026-07-15 round 2, HEAD `df6dc10d`)**
+
+Re-verifying after the `merge with dev` commit that closed the ~20-commit drift caused by PR #242 merging into `dev`. Every file in this PR's original scope (`backend/src/modules/gold-lakehouse/**`, `backend/src/modules/alert/alert.service.ts`, `frontend/src/features/cases/components/view/visualizations/alertnavigator/**`) is byte-identical between the prior head `f464bc06` and the current head `df6dc10d` — the round-1 approval carries over unchanged.
+
+`git log --oneline HEAD..origin/dev` is empty; the PR is now at parity with `dev`. `mergeable: MERGEABLE`, `mergeStateStatus: BLOCKED` on branch protection (awaiting reviewer approval).
+
+### CI
+
+14 of 15 checks are green on `df6dc10d`, including `check style`, `run build`, `CodeQL`, `Analyze (javascript-typescript)`, `Analyze (actions)`, `dependency-review`, `njsscan`, `nodejsscan`, `dco-check`, `gpg-verify`, `encoding-check`, `dockerfile-linter`, `conventional-commits`, `CodeRabbit`. `node-ci / check tests` was still pending at the time of this review — worth confirming green before merge, though nothing in the merge touches test-relevant paths and history is clean.
+
+### Non-blocking
+
+1. **H2 (carried from round 1)** — `case_id === null` branch in `triage.service.ts` is still uncovered by unit tests. One-liner in a follow-up.
+2. **N1 (new, informational)** — The `merge with dev` commit imports PR #242's 19 dashboard-fix commits into this PR's `gh pr diff`. Those were reviewed on PR #242 and are not part of this PR's scope; the size jump is purely from the merge, not from new PR-241 work.
+
+Ready to merge on my side once `check tests` reports green.
 ````
 
 [↑ Back to top](#pr-review-cms-241--feat-paysysadd-rule-properties-inside-typology-in-visualization)
