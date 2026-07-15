@@ -36,6 +36,11 @@
 - [CodeRabbit Activity](#coderabbit-activity)
 - [Summary and Verdict](#summary-and-verdict)
 - [GitHub Review Comment](#github-review-comment)
+- [Follow-up Review (2026-07-14)](#follow-up-review-2026-07-14)
+  - [Resolution Status — All Prior Items](#resolution-status--all-prior-items)
+  - [New Issues Found in Updated Commits](#new-issues-found-in-updated-commits)
+  - [Updated Verdict](#updated-verdict)
+  - [GitHub Review Comment (Follow-up)](#github-review-comment-follow-up)
 
 ---
 
@@ -621,6 +626,365 @@ Both are CodeRabbit trivials from pass 1.
 **12. `isInvestigator` claim computation duplicated across 3 controller methods**
 
 Extract to a helper (CodeRabbit nitpick, pass 2).
+`````
+
+[↑ Back to top](#pr-review-cms-242--fix-case-dashboard-count)
+
+---
+---
+---
+
+## Follow-up Review (2026-07-14)
+
+**Reviewed commit:** `e3d532bf4071f86b317ee3b207f58ce0ecc4cb19` — *"fix: review bugs"* (HEAD of `paysys/dashboard-fixes` at review time)
+**Reviewed against:** Changes-Requested items 1–12 from the initial GitHub Review Comment posted 2026-07-14T09:19:33Z by `ahmad-paysys`.
+**Delta reviewed:** `git diff da2108bb..e3d532bf` — 22 files, +479/-141 lines. Prior head `da2108bb` still exists as a git object locally, but is **no longer in the branch ancestry** — the follow-up was landed via force-push/rebase that rewrote every prior SHA. Because the object survives, diffs remain trustworthy; the SHAs cited in the initial review header, however, will not resolve on `origin`.
+**Force-push note:** All 17 prior commits were rewritten to new SHAs. Prior findings are reconciled against the new HEAD by content (file + function + concern), not by commit range.
+**Developer response:** sobia-rizwan1567 replied inline on the review comment at 2026-07-14T09:37:09Z ([issuecomment on PR](https://github.com/tazama-lf/case-management-system/pull/242#issuecomment-4967374839)). Selected justifications:
+> 1. In the document attached, Abandoned Status should be in closed status. `[CMS-Dashboard-Review.pdf](https://github.com/user-attachments/files/30001618/CMS-Dashboard-Review.pdf)`
+> 2. On frontend all cases would be seen Open, Draft and Close separately. The reason for add drafted was so all drafted case could be fetched regardless of their owner in the Case List.
+> 5. Issue #210 was dependent on Dashboard, and was fixed early. Re-tested it and it is working fine. #217 again was dependent on Dashboard working fine now.
+> 8. Investigator should be able to see all the Draft and Ready for Assignment Cases available.
+> 10. FRAUD_AND_AML has Draft and pending case creation on query level only those are to be counted.
+>
+> Apart from these rest are fixed.
+
+(Note: the author's item-5 reply references "#210" — this appears to be a typo; #210 was never among the blocking items. Interpreting as #201.)
+
+[↑ Back to top](#pr-review-cms-242--fix-case-dashboard-count)
+
+---
+
+### Resolution Status — All Prior Items
+
+#### Item 1 — Remove `STATUS_99_ABANDONED` from `CLOSED_STATUSES`
+
+**Status: ➖ Declined by author (conditionally acceptable, but semantic concern unresolved)**
+
+`backend/src/modules/report/report.service.ts` L46-53 unchanged — `STATUS_99_ABANDONED` remains in `CLOSED_STATUSES`.
+
+Author cites [CMS-Dashboard-Review.pdf](https://github.com/user-attachments/files/30001618/CMS-Dashboard-Review.pdf) attached to the reply as product direction that abandoned belongs in the closed bucket. That justifies the *bucket membership*, but does not address the concrete downstream risks called out in the original item:
+
+- `avgResolutionTime` and MTTR-style aggregates will fold abandoned cases (which by definition were **not resolved** on merit) into the resolution-time mean, skewing the metric.
+- `computeOutcomes` still has no bucket for abandoned, so the Outcomes pie total still won't equal `closedCases` on the same page (visible discrepancy).
+
+**Recommendation:** accept the decline for the dashboard "closed" count but split the semantics for reporting-heavy code paths. A locally-scoped `TERMINAL_STATUSES = [...CLOSED_STATUSES, STATUS_99_ABANDONED]` used only where terminal-state is needed, and reserving `CLOSED_STATUSES` for statuses that reflect a resolution decision, would satisfy both product and integrity.
+
+#### Item 2 — `checkUserCaseAccess` DRAFT divergence with `getAllCases`
+
+**Status: ➖ Declined by author (acceptable — UX asymmetry worth confirming)**
+
+`backend/src/modules/case/services/case-query.service.ts` L933-942 — `checkUserCaseAccess` still gates on `STATUS_02_READY_FOR_ASSIGNMENT` + owner/task/null; **not** widened to include `STATUS_00_DRAFT`.
+
+Author's justification: list-view visibility (`getAllCases`) is deliberately broader than per-case authorization (`checkUserCaseAccess`) — an investigator sees all drafts in the list but cannot open another investigator's draft. Reasonable, but this creates a **list-vs-open asymmetry** — the investigator will see draft cases in the list that 403 when clicked. Please confirm the frontend either (a) filters the list to only the investigator's own drafts before rendering, or (b) hides the "open" action for drafts belonging to other investigators. Otherwise this will read as a bug.
+
+#### Item 3 — `openAssignedCases` missing from fallback + fixtures
+
+**Status: ✅ Resolved**
+
+`frontend/src/features/reports/services/reportsService.ts:66` now includes `openAssignedCases: 0` in the error fallback. Fixture additions confirmed in `useReports.test.tsx`, `ReportStatsCards.test.tsx`, and `reports.types.test.ts`. Grep across `frontend/src/features/reports/` shows the field present in every fallback and every test fixture that constructs a `CaseStatusStats`.
+
+#### Item 4 — `getCaseAgeingData` `safeFallback(x, 0)` erases nullable-null contract
+
+**Status: ⚠️ Partially resolved (frontend done, backend still cannot emit null)**
+
+Frontend fix landed cleanly:
+
+```typescript
+// frontend/src/features/reports/services/reportsService.ts:236-237
+avgCaseAge: response.stats.avgCaseAge ?? null,
+avgResolutionTime: response.stats.avgResolutionTime ?? null,
+```
+
+Error fallback (L260-261) also switched to `null`, and `CaseAgeingStatsCards.tsx:24` now renders `'N/A'` for null/undefined instead of `'0 days'`.
+
+However, the backend at `report.service.ts:1268-1269` still emits `Math.round(avgCaseAge)` / `Math.round(avgResolutionTime)` where the pre-round values are initialized to `0` for empty populations. **The backend cannot actually produce `null`**, so the "N/A" UX will never trigger in production — it only triggers on an outright network error via the fallback path. To fulfill the intent, backend must switch the initializer to `null` when the population is empty, or the frontend contract can be narrowed back to `number`.
+
+#### Item 5 — Issues #201 and #217 not addressed
+
+**Status: ❌ Not resolved (author's justification not supported by code)**
+
+Ageing report code paths are **untouched** in the diff:
+
+- `frontend/src/features/reports/pages/CaseAgeingReport.tsx` — not in the changed-file list.
+- `backend/src/modules/report/report.service.ts:1263` still emits `investigator: case_.case_owner_user_id ?? 'Unassigned'` — the raw UUID is the investigator field. This is the #201 bug verbatim.
+- Three copy-pasted OR-clause blocks in `getCaseAgeing` at L1029, L1149, L1217 remain identical to their pre-review state and do **not** delegate to `applyInvestigatorScope`.
+- Issues #201 and #217 both remain `state: OPEN` on GitHub.
+
+Author claim ("was fixed early. Re-tested it and it is working fine ... [217] again was dependent on Dashboard working fine now") does not match the code — no code path relevant to either issue was modified in this PR. If the author has manually re-verified the export and it shows a name rather than a UUID, that likely means she was looking at the on-screen table (which resolves usernames client-side elsewhere), not the actual XLSX/CSV export payload, which comes directly from the backend field above.
+
+**Please either:**
+1. Land the actual fixes for #201 (join `cms_usernames` in the ageing export path, or resolve names client-side in `exportUtils.ts`) and #217 (apply `applyInvestigatorScope`, add STATUS_99 handling, extract the shared helper) in this PR, **or**
+2. Remove `#201` and `#217` from the closing set so they aren't auto-closed on merge, and open follow-up PRs.
+
+#### Item 6 — `computeStatusDetails` hides `STATUS_03_RETURNED`
+
+**Status: ❌ Not resolved (no author response)**
+
+`backend/src/modules/report/report.service.ts:337` and its duplicate at L558 still contain:
+
+```typescript
+.filter((status) => !ReportsService.CLOSED_STATUSES.includes(status)
+                    && status !== CaseStatus.STATUS_03_RETURNED)
+```
+
+Author's "rest are fixed" reply does not cover this item explicitly, and the code did not change. Non-blocking. Suggest adding a `// #219: RETURNED is treated as an active workflow state elsewhere but omitted from this widget because …` comment, or dropping the exclusion entirely.
+
+#### Item 7 — `formatStatusName` output shape
+
+**Status: ✅ Resolved (reverted to pre-PR shape)**
+
+`report.service.ts:1292-1294`:
+
+```diff
+-  return status
+-    .replace(/^STATUS_/v, '')
+-    .toLowerCase()
+-    .replace(/_/gv, ' ')
+-    .replace(/\b\w/gv, (char) => char.toUpperCase());
++  return status.replace('STATUS_', '').replace(/_/gv, ' ');
+```
+
+Output shape restored to `"10 ASSIGNED"`. Consumer contract preserved.
+
+#### Item 8 — `applyInvestigatorScope` widened without ownership guard
+
+**Status: ➖ Declined by author (acceptable — now documented in-code)**
+
+`report.service.ts:130-176` — the misleading comment at L164 was corrected in the diff:
+
+```diff
+- // DRAFT or READY_FOR_ASSIGNMENT where owner is null or owner is the user
++ // Every DRAFT or READY_FOR_ASSIGNMENT case, regardless of owner.
+```
+
+A JSDoc block above (L130-143) now documents the intent. Author's product justification ("Investigator should be able to see all the Draft and Ready for Assignment Cases available") is captured in the source. Accept.
+
+#### Item 9 — Swagger `@ApiQuery` enum missing `'all'`
+
+**Status: ✅ Resolved**
+
+`backend/src/modules/report/report.controller.ts` L201, L306, L356, L410 — all four `@ApiQuery` enum arrays now include `'all'`. OpenAPI docs and DTO enum in agreement.
+
+#### Item 10 — `NON_CONTAINER_CASE_FILTER` widened for DRAFT / PENDING_APPROVAL FRAUD_AND_AML
+
+**Status: ➖ Declined by author (acceptable — JSDoc explains intent)**
+
+`report.service.ts:78-93` unchanged. JSDoc at L78-83 documents the rationale explicitly: "at that point they haven't split into their FRAUD/AML siblings yet, so they should still count under their own type in every report/dashboard query." Author's business-rule justification aligns with the in-code comment. Accept.
+
+#### Item 11 — Duplicate closed-status list + duplicate color helpers
+
+**Status: ✅ Resolved**
+
+- `frontend/src/features/cases/components/CaseFilters.tsx:13-18` — new `CLOSED_STATUS_VALUES` constant, used at L133 and L148 in place of two prior inline duplicates.
+- `frontend/src/features/dashboard/components/AlertSummaryItem.tsx` — `getPriorityBarColor` deleted; bar rendering at L82 reuses `getPriorityDotColor`.
+
+#### Item 12 — `isInvestigator` claim computation duplicated
+
+**Status: ✅ Resolved**
+
+`report.controller.ts:39-42` adds:
+
+```typescript
+private isInvestigatorOnly(userClaims: string[]): boolean {
+  return userClaims.includes(UserRoles.INVESTIGATOR) && !userClaims.includes(UserRoles.SUPERVISOR);
+}
+```
+
+Three call-sites (L285, L466, L526) now delegate to the helper.
+
+---
+
+**Summary table**
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | Remove `STATUS_99_ABANDONED` from `CLOSED_STATUSES` | ➖ Declined — accept for dashboard; semantic risk in reporting aggregates remains |
+| 2 | `checkUserCaseAccess` DRAFT divergence | ➖ Declined — asymmetry acceptable pending frontend confirmation |
+| 3 | `openAssignedCases` missing in fallback/fixtures | ✅ Resolved |
+| 4 | `getCaseAgeingData` `safeFallback` erases null | ⚠️ Partial — frontend fixed, backend still cannot emit null |
+| 5 | Issues #201 and #217 not addressed | ❌ Not resolved — code unchanged despite "fixed" claim |
+| 6 | `computeStatusDetails` hides `STATUS_03_RETURNED` | ❌ Not resolved — no code change, no author response |
+| 7 | `formatStatusName` shape change | ✅ Resolved (reverted) |
+| 8 | `applyInvestigatorScope` widened without ownership guard | ➖ Declined — now documented in JSDoc |
+| 9 | Swagger `@ApiQuery` enum missing `'all'` | ✅ Resolved |
+| 10 | `NON_CONTAINER_CASE_FILTER` widened for DRAFT FRAUD_AND_AML | ➖ Declined — JSDoc explains intent |
+| 11 | Duplicate closed-status list / color helpers | ✅ Resolved |
+| 12 | `isInvestigator` duplicated across 3 methods | ✅ Resolved |
+
+[↑ Back to top](#pr-review-cms-242--fix-case-dashboard-count)
+
+---
+
+### New Issues Found in Updated Commits
+
+The follow-up commits also folded in PR #244 (SLA-state search/filter) plus miscellaneous dashboard fixes. New concerns:
+
+#### Issue N1 — Unbounded in-memory SLA filter
+
+**Severity: Major (Performance / Data Integrity)**
+
+`backend/src/modules/case/services/case-query.service.ts:672-682`:
+
+```typescript
+if (slaState) {
+  const candidateCases = await this.prismaService.case.findMany({
+    where: whereClause,
+    select: { ... },
+  });
+  // ... compute SLA state in Node ...
+  whereClause.case_id = { in: matchingCaseIds };
+}
+```
+
+Loads every case matching the pre-SLA filter into Node memory to compute derived state, then narrows by `case_id IN (...)`. For a tenant with 100k+ cases this will time out or OOM. Postgres `IN` clause has a practical parameter limit (~32k) and query planner degradation before that. Options:
+
+1. Compute `sla_state` as a Postgres generated column or view, filter in SQL directly.
+2. Cap `candidateCases` to a bounded page and paginate the SLA-filter application.
+3. Short-circuit when combined with another restrictive filter (tenant + status + date range) so the candidate set is always small.
+
+#### Issue N2 — `whereClause.case_id` clobbered
+
+**Severity: Minor (Maintainability)**
+
+The assignment at L681 unconditionally sets `whereClause.case_id = { in: matchingCaseIds }`, which would overwrite any existing top-level `case_id` filter. Currently safe because the search path only pushes `case_id` into `orConditions`, not directly onto `whereClause`, but this is a footgun for future edits. Prefer:
+
+```typescript
+whereClause.case_id = { ...(whereClause.case_id ?? {}), in: matchingCaseIds };
+```
+
+#### Issue N3 — Empty SLA-candidate set produces zero-row stats
+
+**Severity: Minor (UX)**
+
+When no candidates match the SLA state, `matchingCaseIds = []` and `{ case_id: { in: [] } }` returns zero rows — correct. But subsequent `groupBy` calls for status/priority/case_type distributions then produce entirely empty stats panels. Verify this is intended UX vs. surfacing the pre-SLA counts alongside a "0 matching SLA state" note.
+
+#### Issue N4 — Backend still cannot emit `null` for empty-population averages
+
+**Severity: Minor (Consistency)**
+
+See Item 4 above. Frontend now honors `null` for `avgCaseAge` and `avgResolutionTime`, but backend `getCaseAgeing` initializes both to `0` and always `Math.round()`s. The "N/A" render path is effectively unreachable in production.
+
+#### Issue N5 — `getCaseAgeing` OR-clauses still not refactored
+
+**Severity: Informational**
+
+Three near-identical 12-line OR blocks at L1029, L1149, L1217 could delegate to `applyInvestigatorScope`. The follow-up refactored the controllers (Item 12) while leaving this equivalent duplication in the service untouched. Not a regression, but a missed opportunity that ties into Item 5 (#217's shared-helper recommendation).
+
+#### Issue N6 — No new tests for SLA-filter empty-result path
+
+**Severity: Minor (Test Coverage)**
+
+`backend/test/case-query.service.spec.ts:379+` covers only the happy path with two candidates. Add:
+
+1. A test for `matchingCaseIds = []` (empty candidate set).
+2. A test that confirms candidate rows are not double-counted when the SLA filter overlaps with the pre-filter status set.
+
+[↑ Back to top](#pr-review-cms-242--fix-case-dashboard-count)
+
+---
+
+### Updated Verdict
+
+**Verdict: Changes Requested (reduced scope)**
+
+Ten of the twelve prior items are effectively closed — six resolved by code, four declined with acceptable justifications (now largely captured in JSDoc). The follow-up commit is a solid pass at addressing reviewable feedback and the code quality of the fixes themselves is good. **The unresolved concern is Item 5**: #201 and #217 remain untouched in the code despite the author's claim of "fixed", and both issues will be auto-closed by the current PR title/description if this PR merges as-is. That is a data-integrity risk against the issue tracker itself, independent of code correctness.
+
+Item 4 is partial — frontend does the right thing, but the backend cannot emit the nullable value the frontend now expects, so the improvement is invisible in production until backend is updated. Item 1's semantic split (dashboard "closed" vs reporting "resolved") remains worth revisiting but is not a blocker if product has signed off.
+
+Separately, the SLA-filter merge from PR #244 introduces an unbounded-in-memory query pattern (New Issue N1) that will not survive a tenant with realistic case volume; this should be sized before merge.
+
+#### Blocking
+
+1. **Item 5 — Remove #201 and #217 from the closing set or land the actual fixes** — the code paths for both issues are untouched; do not let them auto-close on merge.
+2. **New Issue N1 — SLA-state filter loads unbounded candidate set into memory** — replace with a SQL-side computation, a bounded page, or a required narrowing filter before merge.
+
+#### Non-blocking but recommended
+
+3. **Item 4 (partial) — Backend `getCaseAgeing` should emit `null` for empty populations** so the new `'N/A'` UX actually renders in production, not only on network-error fallback.
+4. **Item 1 (declined) — Introduce a `TERMINAL_STATUSES` local constant** for reporting aggregates (`avgResolutionTime`, MTTR, `computeOutcomes` reconciliation) so abandoned cases don't skew resolution-based metrics.
+5. **Item 2 (declined) — Confirm frontend list rendering hides "open" for drafts owned by other investigators** so the list-vs-open asymmetry doesn't surface as a 403 to the user.
+6. **Item 6 — Add a comment (or drop the exclusion) explaining why `STATUS_03_RETURNED` is filtered out of `computeStatusDetails`.**
+7. **New Issue N2 — Merge into existing `whereClause.case_id` rather than clobbering** (footgun for future edits).
+8. **New Issue N6 — Add spec coverage for empty SLA-candidate set** and overlap cases.
+
+[↑ Back to top](#pr-review-cms-242--fix-case-dashboard-count)
+
+---
+
+### GitHub Review Comment (Follow-up)
+
+`````markdown
+**Changes Requested (follow-up, HEAD `e3d532bf`)**
+
+Nice pass — most items landed cleanly. Two things still block merge, both independent of the twelve original findings.
+
+---
+
+### Blocking
+
+**1. Issues #201 and #217 are still not addressed — please remove them from the closing set or land the fixes**
+
+The response says these were "fixed early / working fine after Dashboard fix", but the code paths for both remain unchanged in this branch:
+
+- `backend/src/modules/report/report.service.ts` L1263 still emits `investigator: case_.case_owner_user_id ?? 'Unassigned'` in the ageing export — that's the raw UUID being written as the investigator name (the #201 bug).
+- `frontend/src/features/reports/pages/CaseAgeingReport.tsx` and `frontend/src/shared/utils/exportUtils.ts` (ageing export path) are not in the diff at all.
+- The three copy-pasted OR-clauses in `getCaseAgeing` (report.service.ts L1029, L1149, L1217) that #217 targets are untouched.
+
+If a screenshot of the on-screen ageing table shows names, that's because the frontend resolves usernames elsewhere — the actual XLSX/CSV export bytes still come from the backend field above.
+
+Please either:
+1. Land the fixes for both issues in this PR (join `cms_usernames` in `getCaseAgeing` output or resolve names client-side in `exportUtils`; apply `applyInvestigatorScope` and STATUS_99 handling in `getCaseAgeing`), or
+2. Drop `#201` and `#217` from the PR body's closing set so they aren't auto-closed on merge.
+
+**2. SLA-state filter loads unbounded candidate set into Node memory**
+
+Introduced via the #244 merge — `backend/src/modules/case/services/case-query.service.ts` L672-682:
+
+```typescript
+if (slaState) {
+  const candidateCases = await this.prismaService.case.findMany({ where: whereClause, select: {...} });
+  // ...derive SLA state in Node...
+  whereClause.case_id = { in: matchingCaseIds };
+}
+```
+
+For a tenant with 100k+ cases this will OOM or hit Postgres `IN`-clause parameter limits (~32k). Options:
+- Compute `sla_state` as a Postgres generated column / view and filter in SQL.
+- Cap candidate rows and paginate.
+- Require SLA-filter to co-occur with a narrowing filter (tenant + status + date-range) so the candidate set stays bounded.
+
+---
+
+### Non-blocking (please address in this PR if possible)
+
+**3. Backend `getCaseAgeing` should emit `null` for empty populations**
+
+Frontend now correctly does `avgCaseAge ?? null` → renders `'N/A'`. But backend `report.service.ts` L1268-1269 still `Math.round`s a `0`-initialized value, so the N/A UX never triggers in production. Initialize the averages to `null` (or return `null` when the closed-cases array is empty) so the frontend contract actually kicks in.
+
+**4. `TERMINAL_STATUSES` split for reporting aggregates**
+
+Accepting that abandoned belongs in the dashboard's "closed" bucket per the review PDF — but for `avgResolutionTime`, MTTR, and `computeOutcomes` reconciliation, abandoned cases skew the resolution-time mean and break the Outcomes-pie total. Introduce a local `TERMINAL_STATUSES = [...CLOSED_STATUSES, STATUS_99_ABANDONED]` for the not-active checks and keep `CLOSED_STATUSES` for statuses that reflect an actual resolution decision.
+
+**5. Confirm frontend hides "open" for other-investigator drafts**
+
+Item 2 decline is acceptable *if* the Cases list either filters drafts to the current investigator or hides the "open" action for other-investigator drafts — otherwise investigators will see the drafts and hit a 403 on click. Please confirm the current frontend behavior.
+
+**6. `computeStatusDetails` — one-line comment or drop the exclusion**
+
+`report.service.ts` L337/L558 still filters out `STATUS_03_RETURNED` alongside closed statuses. Neither #219 nor #217 asks for this. Please either drop the exclusion or add `// intentional: RETURNED is …` so future readers know it was deliberate.
+
+**7. Guard against clobbering `whereClause.case_id` in SLA filter**
+
+`case-query.service.ts` L681 assigns `whereClause.case_id = { in: matchingCaseIds }` unconditionally. Safe today, footgun tomorrow. Merge instead:
+
+```typescript
+whereClause.case_id = { ...(whereClause.case_id ?? {}), in: matchingCaseIds };
+```
+
+**8. SLA-filter spec coverage**
+
+`case-query.service.spec.ts` covers the happy path with two candidates only. Add a test for the empty-candidate case (`matchingCaseIds = []`) and a test that confirms candidate rows aren't double-counted when the SLA filter overlaps the pre-filter status set.
 `````
 
 [↑ Back to top](#pr-review-cms-242--fix-case-dashboard-count)
