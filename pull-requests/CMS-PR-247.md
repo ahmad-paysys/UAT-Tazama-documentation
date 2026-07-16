@@ -15,20 +15,28 @@
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [What Changed (Detailed)](#what-changed-detailed)
-  - [1. `AlertsDetailModal.tsx` — read EFRuP `subRuleRef` from `alert_data.tadpResult`](#1-alertsdetailmodaltsx--read-efrup-subruleref-from-alert_datatadpresult)
-  - [2. `AlertsDetailModal.test.tsx` — assert badge from `tadpResult` when `alerted_typologies` is filtered](#2-alertsdetailmodaltesttsx--assert-badge-from-tadpresult-when-alerted_typologies-is-filtered)
-- [Code Quality Analysis](#code-quality-analysis)
-  - [Strengths](#strengths)
-  - [Issues and Observations](#issues-and-observations)
-- [Security Assessment](#security-assessment)
-- [Test Coverage](#test-coverage)
-- [CodeRabbit Activity](#coderabbit-activity)
-- [Summary and Verdict](#summary-and-verdict)
-- [GitHub Review Comment](#github-review-comment)
+- [Initial Review (2026-07-16)](#initial-review-2026-07-16)
+  - [Overview](#overview)
+  - [What Changed (Detailed)](#what-changed-detailed)
+    - [1. `AlertsDetailModal.tsx` — read EFRuP `subRuleRef` from `alert_data.tadpResult`](#1-alertsdetailmodaltsx--read-efrup-subruleref-from-alert_datatadpresult)
+    - [2. `AlertsDetailModal.test.tsx` — assert badge from `tadpResult` when `alerted_typologies` is filtered](#2-alertsdetailmodaltesttsx--assert-badge-from-tadpresult-when-alerted_typologies-is-filtered)
+  - [Code Quality Analysis](#code-quality-analysis)
+    - [Strengths](#strengths)
+    - [Issues and Observations](#issues-and-observations)
+  - [Security Assessment](#security-assessment)
+  - [Test Coverage](#test-coverage)
+  - [CodeRabbit Activity](#coderabbit-activity)
+  - [Summary and Verdict](#summary-and-verdict)
+  - [GitHub Review Comment](#github-review-comment)
+- [Follow-up Review (2026-07-16)](#follow-up-review-2026-07-16)
+  - [Changes Requested — Resolution Status](#changes-requested--resolution-status)
+  - [New Issues Found in Updated Commits](#new-issues-found-in-updated-commits)
+  - [Updated Verdict](#updated-verdict)
+  - [GitHub Review Comment (Follow-up)](#github-review-comment-follow-up)
 
 ---
+
+## Initial Review (2026-07-16)
 
 ## Overview
 
@@ -436,6 +444,259 @@ it("does not display an EFRuP badge when the EFRuP rule's subRuleRef is empty", 
   expect(screen.queryByText("EFRuP:")).not.toBeInTheDocument();
 });
 ```
+```
+````
+
+[↑ Back to top](#pr-review-cms-247--fix-added-the-efrup-subrule-ref-in-alert-detail-tab)
+
+---
+
+---
+
+---
+
+## Follow-up Review (2026-07-16)
+
+**Reviewed commit:** `949cede7` — *"fix: added the tenantid column in sla_escalation_records"* (2026-07-16)
+**Reviewed against:** initial round approved on HEAD `c3261a4c` (Verdict: Approved, three non-blocking recommendations)
+**Delta reviewed:** `git diff c3261a4c..949cede7 --stat` — 4 files, +30 / -4 lines. One new Prisma migration, schema.prisma model update, one insert-site update in `alert-priority.service.ts`, and three matching spec assertions.
+**Developer response:** no comment from the author linking the new commit to the initial-round recommendations. The new commit changes scope rather than addressing prior items.
+
+### Changes Requested — Resolution Status
+
+The initial round's verdict was `Approved` with three non-blocking recommendations. Since the verdict was not `Changes Requested`, the author was not obligated to address these — but the new commit does not touch any of them.
+
+#### Item 1 — Document first-match semantics on the EFRuP loop
+
+**Status: NOT RESOLVED (still non-blocking)**
+
+No change to `AlertsDetailModal.tsx:180-192`. The loop remains without a comment explaining why the first non-empty `subRuleRef` is sufficient. Non-blocking, still worth adding.
+
+#### Item 2 — Confirm the `grid-cols-3 + justify-self-center` badge placement matches the design
+
+**Status: NOT RESOLVED (still non-blocking)**
+
+No change to the layout at `AlertsDetailModal.tsx:869`. Same layout stands — badge centred in the row, column 3 empty. Non-blocking, still worth confirming with the design.
+
+#### Item 3 — Add a whitespace-`subRuleRef` negative spec
+
+**Status: NOT RESOLVED (still non-blocking)**
+
+`AlertsDetailModal.test.tsx` gained no new EFRuP-related specs. The `.trim()` guard remains untested. Non-blocking.
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | Document first-match semantics on the EFRuP loop | ❌ Not resolved (non-blocking) |
+| 2 | Confirm `grid-cols-3` badge placement matches design | ❌ Not resolved (non-blocking) |
+| 3 | Add a whitespace-`subRuleRef` negative spec | ❌ Not resolved (non-blocking) |
+
+### New Issues Found in Updated Commits
+
+The new commit adds a `tenant_id` column to the `sla_escalation_records` table and threads it through the sole insert site plus its unit tests. Four files change:
+
+```
+backend/prisma/migrations/20260716120000_add_tenant_id_to_sla_escalation_records/migration.sql  (new, +24 lines)
+backend/prisma/schema.prisma                                                                    (+2 -0)
+backend/src/modules/alert-priority/alert-priority.service.ts                                    (+1 -1)
+backend/test/alert-priority.service.spec.ts                                                     (+3 -3)
+```
+
+**Migration file:**
+
+```sql
+-- Step 1
+ALTER TABLE "sla_escalation_records" ADD COLUMN "tenant_id" TEXT;
+
+-- Step 2
+UPDATE "sla_escalation_records" ser
+SET "tenant_id" = c."tenant_id"
+FROM "cases" c
+WHERE c."case_id" = ser."case_id";
+
+-- Step 3
+ALTER TABLE "sla_escalation_records" ALTER COLUMN "tenant_id" SET NOT NULL;
+
+-- CreateIndex
+CREATE INDEX "sla_escalation_records_tenant_id_idx" ON "sla_escalation_records"("tenant_id");
+```
+
+**Schema.prisma:**
+
+```diff
+ model SlaEscalationRecord {
+   id          Int      @id @default(autoincrement())
+   case_id     Int
++  tenant_id   String
+   sla_state   SlaState
+   notified_at DateTime @default(now()) @db.Timestamp(6)
+   ...
+   @@unique([case_id, sla_state])
++  @@index([tenant_id])
+   @@map("sla_escalation_records")
+ }
+```
+
+**Insert site (`alert-priority.service.ts:161`):**
+
+```diff
+-        data: { case_id: caseRecord.case_id, sla_state: state },
++        data: { case_id: caseRecord.case_id, tenant_id: caseRecord.tenant_id, sla_state: state },
+```
+
+**Test assertions:** three `.toHaveBeenCalledWith({ data: { case_id: 1, sla_state: ... } })` assertions updated to add `tenant_id: 'tenant-1'`, matching `buildCase`'s default (line 26).
+
+#### New Issue A — PR title and scope drift
+
+**Severity: Minor (Code Quality / Traceability)**
+
+The PR title is *"fix: added the efrup subrule ref in alert detail tab"* and the initial commit was scoped to that. This new commit lands an unrelated schema change (`sla_escalation_records.tenant_id`) with a separate concern (multi-tenant SLA data) on the same PR. Two knock-on effects:
+
+1. Anyone `git log --grep`-searching later for the SLA-tenant change will look under a "sla" or "tenant" title and miss this PR entirely.
+2. A reviewer approving on the strength of the EFRuP change may not realise a Prisma migration also lands.
+
+Options: (a) split the SLA-tenant change into its own PR (branch name `paysys/SLA-task` suggests this may have been the branch's original scope, and the EFRuP commit landed opportunistically); (b) update the PR title to something like `fix: EFRuP subrule ref in alert detail + add tenant_id to sla_escalation_records` and note both concerns in the description.
+
+Not blocking — the migration is safe to review in this PR — but the title drift is a real traceability cost.
+
+#### New Issue B — Migration rationale is not stated
+
+**Severity: Minor (Maintainability)**
+
+Neither the commit body, the PR description, nor the migration comment states **why** `sla_escalation_records` needs a `tenant_id` column. The current application code does not read `sla_escalation_records` by tenant — the only two callers are `findUnique` on the `(case_id, sla_state)` unique key and `create`. So the added column and its `@@index([tenant_id])` currently have **no application consumer**. The column is either:
+
+- **Prep for future multi-tenant reporting** (likely — the branch name is `paysys/SLA-task` and the tazama org has a multi-tenant footprint) — in which case a one-line comment in the migration or a linked issue would help future readers understand.
+- **Prep for tenant-scoped soft-delete or archival** — same, needs a note.
+
+Without stated intent, this reads as either "table normalisation for its own sake" or "dead schema". A one-line rationale in the migration comment or PR description resolves this cheaply.
+
+**Suggested migration-comment addition:**
+
+```sql
+-- tenant_id is denormalised onto sla_escalation_records to support tenant-scoped
+-- SLA reporting without joining cases on every query. Populated from cases.tenant_id
+-- on backfill; kept in sync at insert time via alert-priority.service.escalate().
+```
+
+#### New Issue C — No test asserts the tenant_id value reflects the *case's* tenant, not a hard-coded literal
+
+**Severity: Informational (Test Coverage)**
+
+The three updated spec assertions all use `tenant_id: 'tenant-1'` — which is `buildCase`'s default tenant. If the insert-site were accidentally changed to `tenant_id: 'DEFAULT'` or a hard-coded literal, these tests would fail — good. But no spec varies the tenant to verify the code actually reads `caseRecord.tenant_id` rather than closing over some other value.
+
+The `tenant-strict` test at line 249 (`buildCase({ ..., tenant_id: 'tenant-strict' })`) has the setup needed for such an assertion but doesn't check `.create.toHaveBeenCalledWith`. Extending that test with an assertion like:
+
+```typescript
+expect(prismaService.slaEscalationRecord.create).toHaveBeenCalledWith(
+  expect.objectContaining({
+    data: expect.objectContaining({ tenant_id: 'tenant-strict' }),
+  }),
+);
+```
+
+would lock in that the correct tenant flows through. Non-blocking — the code is straightforwardly `caseRecord.tenant_id`, so misdirection would be caught by any manual smoke test — but the coverage gap is worth noting.
+
+#### New Issue D — Migration relies on all `sla_escalation_records` rows having a matching `case_id` in `cases`
+
+**Severity: Informational (Data Integrity)**
+
+The Step 2 `UPDATE ... FROM cases c WHERE c.case_id = ser.case_id` uses an inner-equivalent join. If any `sla_escalation_records` row exists whose `case_id` is not present in `cases`, its `tenant_id` remains NULL and Step 3 (`ALTER COLUMN ... SET NOT NULL`) fails, aborting the migration mid-way. In practice this cannot happen because the original migration (`20260702120000_sla_escalation_records`) declares a `ON DELETE RESTRICT` FK from `sla_escalation_records.case_id` to `cases.case_id`, so orphans are structurally impossible.
+
+Not an issue — flagging only because migrations that rely on invariants elsewhere should ideally either restate the invariant in a comment or defensively handle the orphan case with a `COALESCE(...)` and a placeholder tenant. Given the FK is present, current form is fine.
+
+#### New Issue E — Index `sla_escalation_records_tenant_id_idx` is currently unused
+
+**Severity: Informational (Performance)**
+
+The new `@@index([tenant_id])` is not exercised by any query in the current codebase — no `.findMany` or `.count` filters by `tenant_id` alone. It's cheap to maintain (small table) and clearly intended for future tenant-scoped reporting, so this is not a defect. Just noting that the index exists in anticipation of a caller that this PR does not add.
+
+If a tenant-scoped query is added later (e.g. "count escalations per tenant for the last 30 days"), a composite `[tenant_id, notified_at]` index would probably beat this single-column one. Not something to change here — noted for the follow-up work that presumably uses this column.
+
+### Parallel-siblings hunt on new commit
+
+Grepped every reference to `slaEscalationRecord` / `sla_escalation_records` across `backend/`:
+- Two runtime call sites in `alert-priority.service.ts`: `findUnique` (line 102) and `create` (line 160).
+- The `findUnique` at line 102 uses the `case_id_sla_state` composite unique key, which does **not** require `tenant_id` and remains correct. `case_id` alone determines tenant (a case belongs to exactly one tenant), so tenant scoping on this lookup would be redundant and could mask cross-tenant misconfigurations.
+- The `create` at line 160 is updated in this commit — correctly.
+
+No parallel-siblings gap. All writes and reads are accounted for.
+
+### Guard/scope asymmetry hunt on new commit
+
+The new column is a data denormalisation, not an auth or scope boundary. No new endpoint, no new route, no new guard needed. Existing SLA notifications continue to be sent via `notificationService` with the same access checks. No asymmetry.
+
+### Type/prop drift hunt on new commit
+
+The Prisma model gains a `tenant_id: String` field. Prisma regenerates the client type; only one caller (`alert-priority.service.ts`) uses `.create` on this model and it was updated. `.findUnique` uses the composite key type and is unaffected. Test mocks (`jest.Mock`) don't need type updates since the shape assertions changed.
+
+### CI
+
+All 17 checks green at HEAD `949cede7`, including CodeQL (both flavours), njsscan, encoding-check, node-ci build/style/tests. CodeRabbit's context re-ran cleanly.
+
+### Updated Verdict
+
+**Verdict: Approved**
+
+The new commit is a clean, well-structured Prisma migration bundled onto the same PR as the EFRuP fix. The migration follows the correct online-safe pattern (add-nullable → backfill → set NOT NULL), the backfill uses a safe inner join against the FK'd parent table, the schema and single insert site are updated consistently, and every test assertion was updated to match the new payload. No blockers.
+
+The five new observations are all non-blocking: the PR-title drift is the most user-facing (traceability); the missing migration rationale is the most likely to bite a future reader; the coverage gap on tenant flow and the unused index are informational.
+
+The three initial-round recommendations remain open (also non-blocking) — the author has neither actioned them nor pushed back.
+
+#### Blocking
+
+None.
+
+#### Non-blocking but recommended
+
+1. **State the rationale for adding `tenant_id`** — one-line comment in the migration file or the PR description. Without it, the column and its index have no visible consumer in this PR and read as either dead schema or unexplained normalisation. (New Issue B.)
+2. **Update the PR title to reflect both scopes** — or split the SLA-tenant change into its own PR — so `git log` remains searchable for the SLA-tenant work. (New Issue A.)
+3. **Extend the `tenant-strict` test with a `.create.toHaveBeenCalledWith({ tenant_id: 'tenant-strict' })` assertion** — cheap coverage that the code actually reads `caseRecord.tenant_id` rather than a hard-coded value. (New Issue C.)
+4. **Address at least one of the three still-open initial-round items** — the first-match comment on the EFRuP loop is the cheapest and highest-value.
+
+[↑ Back to top](#pr-review-cms-247--fix-added-the-efrup-subrule-ref-in-alert-detail-tab)
+
+---
+
+### GitHub Review Comment (Follow-up)
+
+````markdown
+**Approved (follow-up, HEAD `949cede7`)**
+
+The new commit adds a `tenant_id` column to `sla_escalation_records` via a properly-staged online migration (add-nullable → backfill from `cases.tenant_id` → set NOT NULL), updates the Prisma model, threads `caseRecord.tenant_id` through the single insert site in `alert-priority.service.ts`, and updates all three affected `.toHaveBeenCalledWith` assertions in the spec. Parallel-siblings hunt: the only other caller of this model is `findUnique` on the `(case_id, sla_state)` composite key, which correctly doesn't need tenant scoping. CI is green (17/17). No blockers. Four small non-blocking items below.
+
+---
+
+### Non-blocking (please address in this PR if possible)
+
+**1. State the rationale for `tenant_id` on `sla_escalation_records`**
+
+`backend/prisma/migrations/20260716120000_add_tenant_id_to_sla_escalation_records/migration.sql`. No application code currently reads this table by tenant — the two callers use the `case_id_sla_state` unique key and a `case_id + tenant_id` insert. So the new column and its `@@index([tenant_id])` have no visible consumer in this PR. A one-line comment in the migration or PR description ("prep for tenant-scoped SLA reporting" / "denormalisation to avoid joining `cases` on every read") saves a future reader from wondering whether this is dead schema:
+
+```sql
+-- tenant_id is denormalised onto sla_escalation_records to support tenant-scoped
+-- SLA reporting without joining cases on every query. Populated from cases.tenant_id
+-- on backfill; kept in sync at insert time via alert-priority.service.escalate().
+```
+
+**2. Update the PR title (or split the PR) to reflect the SLA-tenant scope**
+
+The title *"fix: added the efrup subrule ref in alert detail tab"* covers only the initial commit. The new commit lands a Prisma migration on an unrelated concern (multi-tenant SLA). Someone `git log --grep`-searching later for the SLA-tenant change won't find this PR. Either update the title to something like *"fix: EFRuP subrule ref in alert detail + add tenant_id to sla_escalation_records"* or split the SLA change into its own PR (the branch name `paysys/SLA-task` suggests this may have originally been the intended scope).
+
+**3. Assert that the tenant flowing into `slaEscalationRecord.create` really comes from the case**
+
+`backend/test/alert-priority.service.spec.ts:249-261`. The `tenant-strict` test builds a case with `tenant_id: 'tenant-strict'` and asserts a bunch of things, but does not assert `.create.toHaveBeenCalledWith` — so nothing currently locks in that the code reads `caseRecord.tenant_id` rather than a hard-coded literal. Extending that test:
+
+```typescript
+expect(prismaService.slaEscalationRecord.create).toHaveBeenCalledWith(
+  expect.objectContaining({
+    data: expect.objectContaining({ tenant_id: 'tenant-strict' }),
+  }),
+);
+```
+
+**4. Consider actioning the still-open initial-round recommendations**
+
+The three non-blocking items from the initial round remain untouched (first-match-semantics comment on the EFRuP loop, layout confirmation for the `grid-cols-3` badge, and the whitespace-`subRuleRef` negative spec). The first is the cheapest to address — a one-line comment above the `for` loop in `AlertsDetailModal.tsx:180`.
 ```
 ````
 
