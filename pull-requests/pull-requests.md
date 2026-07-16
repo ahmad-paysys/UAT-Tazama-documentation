@@ -18,6 +18,7 @@ Before creating any files, run these checks:
 2. **Confirm base branch is correct.** For this repo's workflow, PRs typically target `dev`. If `baseRefName` is not `dev`, flag it as a potential blocking issue in the review (do not assume the author intended it).
 3. **Scope guardrail.** If the PR touches **more than 140 files**, stop and confirm scope with the user before writing. Offer: (a) proceed as one large review, (b) split "What Changed (Detailed)" into a grouped/summarised form, (c) narrow scope to specific files. Do not silently produce an unreviewable review file.
 4. **Out-of-scope PR check.** If the PR is purely a dependency bump (Renovate/Dependabot), a lockfile-only change, or a generated-file update with no human-authored logic, stop and ask the user whether they want the full-format review or a short-form note. Do not produce the full deliverable for a one-line version bump.
+5. **Check for an existing review file.** Look for `pull-requests/{REPO-ABBREVIATION}-PR-{number}.md`. If it exists, this is a follow-up round — go to Section 5 (Multi-Round PR Structure) and follow the append-mode rules in 5.3; do not create a new file or overwrite the existing one. If it does not exist, this is a fresh review — continue with Section 1.
 
 ---
 
@@ -27,6 +28,8 @@ Create a file at:
 ```
 pull-requests/{REPO-ABBREVIATION}-PR-{number}.md
 ```
+
+If one already exists, **stop and go to Section 5** — do not create a new file (see Preflight step 5).
 
 Where `REPO-ABBREVIATION` is the short name used in the project (e.g. `CMS`, `DEMS`, `TCS-LIB`, `TRS`) and `number` is the PR number (e.g. `221`). Match the abbreviation style already used in this directory.
 
@@ -47,10 +50,11 @@ gh pr diff {number} --repo tazama-lf/{repo-name}
 And fetch review activity (CodeRabbit and human reviewers):
 ```bash
 gh api repos/tazama-lf/{repo-name}/pulls/{number}/reviews
-gh api repos/tazama-lf/{repo-name}/pulls/{number}/comments
+gh api repos/tazama-lf/{repo-name}/pulls/{number}/comments   # inline review comments
+gh api repos/tazama-lf/{repo-name}/issues/{number}/comments  # PR-thread comments (author replies to reviews often land here)
 ```
 
-Read all comments, review threads, and inline code comments. The PR description, commit messages, and comment threads are all authoritative context — treat them that way.
+Read all comments, review threads, and inline code comments — treat the PR description, commit messages, and comment threads as authoritative context.
 
 ---
 
@@ -87,38 +91,29 @@ Before reading any code, ensure the local repo is synced with the remote `dev` b
   ```
   These SHAs must match. If they don't, delete the stale local branch and re-run `gh pr checkout`, or force-reset to the remote head. Do not proceed until they match.
 
-Only after the local repo is synced with `origin/dev` and the PR branch is checked out (with SHAs verified) may you proceed with the review. If any step fails (dirty working tree, diverged history, auth failure, PR branch conflicts), stop and report it — do not read stale code.
-
-**Source of truth once checked out.** After `gh pr checkout`, the working tree is authoritative for reading code. `gh pr diff` is a convenience for seeing the delta, but if it disagrees with the working tree (which can happen if the PR was updated between fetches), re-run the fetches and re-checkout — do not mix the two sources in a single review.
+Only proceed once the repo is synced with `origin/dev` and the PR branch is checked out with SHAs verified. If any step fails (dirty working tree, diverged history, auth failure, branch conflict), stop and report it. Once checked out, the working tree is authoritative — `gh pr diff` is a convenience, and if it disagrees with the working tree (which can happen if the PR was updated between fetches), re-run the fetches and re-checkout rather than mixing the two sources.
 
 If a security-relevant function is touched (auth guards, input handling, URL construction, HTML rendering), read enough surrounding code to understand the full data flow.
 
----
+### 3.1 How to hunt for issues
 
-## 4. Determine Review Rounds
+Before finalising Issues, run these hunts against the PR's touched files. The bugs they catch are *absence-of-line* defects — code that should have been added at a call site but wasn't, so the diff has no marker.
 
-A PR may have one or more review rounds if the author pushed additional commits after initial review. For each round, note:
-- The commit hash reviewed
-- Who reviewed (human and/or CodeRabbit)
-- What was requested
-- What was resolved or not resolved in the next push
+**Parallel-siblings check.** When a change introduces or modifies a shared value (a helper, filter object, scope variable, config, guard) that is applied at *multiple* call sites, enumerate every call site and confirm the value reaches each one. Grep the shared symbol across the touched function/module, list every consumer, and diff the consumers against each other. Ask "which siblings *don't* use this, and is that intentional?" — not just "does the diff apply this correctly where it changed lines?" Applies to shared filter objects reused across Prisma queries, auth guards applied to some routes but not others, config knobs consumed by some code paths but not others, and any "helper + N call sites" pattern. Typical failure: one query out of a group of siblings silently omits the shared scope object, producing internally inconsistent rows when the filter is exercised.
 
-Use this to structure the file as one section per round (Initial Review, Follow-up Review, Final Review, etc.).
+**Type/prop drift check.** When a shape (interface, prop type, function signature) is loosened, tightened, or renamed at one layer, grep every consumer of that shape for the *old* declaration and confirm each was updated in the same PR. Type changes propagate silently through TypeScript's structural compatibility — a prop typed `{ x: string }` still accepts a caller passing `{ x?: string }`, so the compiler won't flag the drift. Concretely: after seeing a type change in a hook or service, grep the pages/components/services that consume it and diff their local declarations against the new shape. Typical failure: the top-layer type is loosened but one or more consumer prop declarations retain the strict shape, forcing callers to satisfy both.
 
-**Handling force-pushed / rebased PRs.** If the author force-pushed and prior-round commit hashes no longer exist in the repo (`git cat-file -e {hash}` fails), do not silently produce broken commit citations. Instead:
+**Label/boundary drift check.** When a numeric boundary, threshold, or enumeration changes in code, grep for user-facing strings that describe the old boundary (labels, Swagger descriptions, tooltips, tick formatters, log messages, docs). Code and its display strings drift apart because the compiler doesn't check them. Typical failure: a bucket boundary is tightened (e.g. `>15 && <30`) but the display label still names the old range (e.g. `"16-30 days"`), so users read a claim the code no longer honours.
 
-1. Fetch prior review activity from GitHub's API — reviews and inline comments remain accessible by review ID even after force-push:
-   ```bash
-   gh api repos/tazama-lf/{repo-name}/pulls/{number}/reviews
-   gh api repos/tazama-lf/{repo-name}/pulls/{number}/comments
-   ```
-2. In the follow-up section, note the force-push explicitly: `**Note:** Prior round reviewed commit `{old-hash}` which no longer exists after force-push on {date}. Prior findings reconstructed from GitHub review API.`
-3. Reconcile each prior finding against the new HEAD by content (file + function + concern) rather than by commit range. Cite the current HEAD SHA for the new evidence.
-4. If the rewrite is extensive enough that prior findings cannot be mapped, treat this round as a fresh review and note the reason.
+**Guard/scope asymmetry check.** When a PR adds a new endpoint, route, mutation, or query in a group of siblings (a REST controller, a resolver file, a set of Prisma queries in one service), check that authorisation guards, tenant scoping, role-based filters, and rate limits applied to the existing siblings are also applied to the new one. New endpoints and new queries are the two most common places to leak data by accident. Ask for each new sibling: "which existing sibling is the closest analogue, and does the new one carry the same guards, decorators, and scope filters?"
+
+The four checks above are the **specific hunts**. Underlying them is one **mindset — absence-of-line reading**: after reading the `+` lines, read the *unchanged* code immediately adjacent to each hunk with the same care, and ask "given what the diff changed, what other line in this function should have been changed too?"
+
+**When each hunt applies.** Every specific hunt is a few greps and a visual diff of the results. Run all four specific hunts on any PR that touches shared filters, shared types, boundary constants, or endpoint groups. Skip only when the PR is genuinely narrow (a single lockfile bump, a single string change, a single test-only edit).
 
 ---
 
-## 5. File Format
+## 4. File Format
 
 The file is a single Markdown file. All sections must appear in the order below.
 
@@ -141,8 +136,16 @@ If the PR has only one review round, place these metadata fields immediately aft
 **Size:** +{additions} / -{deletions} lines across {N} files
 **Commits:** {N} ({hash1}, {hash2}, ...)
 **State:** OPEN / MERGED / CLOSED
-**Existing approvals:** {reviewer} — {status} ({date}) [if any]
+**HEAD SHA verified:** `{full-sha}`
+**Existing approvals:** {see field rule below}
 ```
+
+**`HEAD SHA verified:`** — record the full HEAD SHA of the commit you actually reviewed. This is the SHA you compared against `gh pr view --json headRefOid` at the end of Section 3. Prevents ambiguity if the PR is force-pushed between review and merge.
+
+**`Existing approvals:`** — one of:
+- `none` — no reviewer has approved yet. Note in-flight review state (e.g. `none — CodeRabbit COMMENTED, no human approval yet`).
+- `{reviewer} — APPROVED ({YYYY-MM-DD})` per approving reviewer.
+- `{reviewer} — CHANGES_REQUESTED ({YYYY-MM-DD})` if a prior review is outstanding.
 
 If the PR has multiple review rounds, omit the per-round metadata from the header and instead include it at the top of each review section.
 
@@ -200,6 +203,16 @@ Use the exact H1 anchor. For example:
 [↑ Back to top](#pr-review-cms-221--fix-transaction-history-graph-and-visualization)
 ```
 
+**Anchor-slug rules** (GitHub's algorithm for converting a heading to a fragment):
+
+- Lowercase everything.
+- Replace each space with a single `-`.
+- Drop punctuation entirely: em-dash (`—`), en-dash (`–`), colon, comma, period, apostrophe, quotes, parentheses, brackets. Do **not** substitute them with `-`.
+- An em-dash surrounded by spaces (` — `) collapses to `--` in the slug (the spaces on either side each become `-`, and the em-dash itself drops out — leaving two dashes back-to-back). This is why the example above has `--fix-transaction-history…`.
+- Preserve `#` numbers (`#221` → `221`) and letters as-is.
+
+If in doubt, view the rendered file on GitHub, hover the H1's link icon, and copy the fragment.
+
 Place the link after the section content and before the `---` separator.
 
 ---
@@ -208,7 +221,7 @@ Place the link after the section content and before the `---` separator.
 
 One to three paragraphs. State plainly: what the PR does, what files it touches, what problem it solves. If the PR description contains useful context, summarise it here. If the PR bundles unrelated changes (e.g., a feature + test expansion + lockfile churn), identify each distinct concern.
 
-**Always state the base branch explicitly** (e.g. "Targets `dev` — correct for this repo's flow" or "Targets `main` — **flag as potential blocker**, this repo's PRs normally target `dev`"). Also note any failing CI checks recorded in Preflight.
+**Always state the base branch explicitly** (e.g. "Targets `dev` — correct for this repo's flow"; if not, flag as a potential blocker). Also note any failing CI checks recorded in Preflight.
 
 Include a file-change summary table:
 
@@ -288,6 +301,16 @@ Always include this section. Use a table:
 | {concern} | {assessment} |
 ```
 
+**How to hunt for security issues on this PR** (in addition to the Section 3.1 hunts):
+
+- **Unvalidated input reaching a data or command layer.** For every new query parameter, request body field, or URL segment introduced or accepted by this PR, trace it from the entry point (controller / route handler) to where it lands (Prisma `where`, filesystem path, shell command, external HTTP call). Ask: is it validated against an enum, schema, or allowlist before use? A raw string reaching Prisma isn't a SQL injection (Prisma parameterises) but is an error-surface concern; a raw string reaching `child_process`, `fs`, or a URL constructor is a real vulnerability.
+- **Tenant / role scoping on new or modified queries.** For every new `findMany` / `count` / `groupBy` / `update` / `delete`, confirm the `where` clause includes the tenant scope from the auth token (never from a query param) and the role-based scope helper (e.g. `applyInvestigatorScope`). This overlaps with the Section 3.1 guard/scope asymmetry hunt but is severity-elevated in the Security section.
+- **Auth-guard decorators / middleware on new endpoints.** For every new route, confirm it carries the same auth guard, role guard, and rate limit as its siblings in the same controller. Missing decorators are the most common way this codebase leaks endpoints.
+- **URL construction / open-redirect / SSRF.** Any new `new URL(...)`, `fetch(...)`, `axios.get(...)`, `window.location.assign(...)`, `res.redirect(...)`, or href set from a variable — check that the source is either a compile-time constant, a validated allowlist, or a trusted server response. Untrusted-input URL construction is an SSRF or open-redirect.
+- **HTML rendering / XSS.** Any new `dangerouslySetInnerHTML`, `v-html`, `innerHTML`, `document.write`, or React string concatenation that ends up in the DOM — check the source is trusted or sanitised. In this codebase almost everything renders through React's escaping, so flag any escape from that path.
+- **Secrets / PII in logs, errors, and API responses.** Any new `console.log`, `logger.info`, error message, or response body — check it doesn't include tokens, session IDs, hashed credentials, or PII fields that weren't previously exposed. Also: validator errors that echo user-controlled input verbatim — usually fine, but note when present.
+- **CI security-scanner status.** Record the state of any security scanner in the PR's `statusCheckRollup` (CodeQL, njsscan, dependency-review) and note if any are failing or newly warning.
+
 If a security concern exists (XSS, injection, auth bypass, request timeout, claim mismatch), state it clearly, note whether it is new or pre-existing, and state whether this PR fixes or worsens it.
 
 If no new vulnerabilities are introduced, say: "No new security vulnerabilities introduced by this PR." Do not omit the section.
@@ -302,17 +325,31 @@ Always include this section. State:
 - Whether the PR checklist is completed (and which boxes are checked or unchecked)
 - Whether the coverage screenshot or CI evidence is present
 
+**How to hunt for test-coverage gaps on this PR:**
+
+- **Every `Major` in Issues must have a matching test.** If the PR fixes a Major (regression, filter bypass, boundary correction), a spec assertion must lock the fix in place. If not, that's a test-coverage gap of the same severity as the underlying issue — call it out in Blocking.
+- **New public surface must be tested.** Every new endpoint, new hook signature, new service method, new exported helper — grep for corresponding spec files. A public export with no direct test is a test-coverage gap.
+- **New branches must be tested.** For every new `if`, `try`, `throw`, or ternary in the diff, ask whether both branches are exercised. Validators that throw on bad input frequently have the *happy path* tested implicitly through higher-level tests but the *throw branch* uncovered.
+- **Every-mock-call assertions on shared filters.** If the PR modifies a filter helper applied across multiple Prisma calls (per the 3.1 parallel-siblings hunt), the spec must assert the filter on *every* mock call, not just one. A single `toHaveBeenCalledWith` match passes even if three sibling queries missed the filter.
+- **Client-side vs. backend parity.** If a client-side implementation mirrors a backend function, both paths need coverage — otherwise the two silently drift.
+- **Regression tests for prior bugs.** If the PR fixes a bug caught in a prior review (tooltip desync, filter bypass), the spec must include an assertion that would fail if the fix is removed. Not just "the new code has coverage" — "the old bug cannot come back."
+
 If the core functional change has no test, call it out explicitly — do not soften it.
 
 ---
 
 ### CodeRabbit Activity (include only if CodeRabbit reviewed this PR)
 
-**Reconcile CodeRabbit findings against your own.** Before writing this section, cross-check every CodeRabbit finding against your "Issues and Observations" list. For each CodeRabbit finding:
+**Treat CodeRabbit as a safety net, not a co-reviewer.** CodeRabbit is one input, not a substitute for the reviewer's own analysis. Two consequences:
+
+1. **Draft your own Issues and Observations *before* reading CodeRabbit's review.** If you read CodeRabbit first, its framing anchors your analysis and you will drift toward corroborating rather than hunting. Do the 3.1 hunts, write the Issues list, *then* open the CodeRabbit review to reconcile.
+2. **A CodeRabbit-caught `Major` that you missed is a signal, not a resolution.** Note the specific hunt from Section 3.1 that would have caught it, and widen that hunt on the next review. If the class isn't listed in 3.1, that's a gap in the instructions — flag it back to the user rather than absorbing it silently.
+
+**Reconcile CodeRabbit findings against your own.** For each CodeRabbit finding:
 - If you also flagged it independently, note it as **corroborated** in both sections.
-- If CodeRabbit caught something you missed, add it to your Issues list at the appropriate severity — do not leave it only in the CodeRabbit section.
+- If CodeRabbit caught something you missed, add it to your Issues list at the appropriate severity — do not leave it only in the CodeRabbit section. Also record which 3.1 hunt should have caught it (or that no hunt covers this class).
 - If you flagged something CodeRabbit missed, that's fine — do not remove it.
-- If you disagree with a CodeRabbit finding, state your reasoning explicitly. Do not silently omit it.
+- If you disagree with a CodeRabbit finding, state your reasoning explicitly. Verify the premise against current code — CodeRabbit sometimes reasons from a stale or hypothetical version of the surrounding code, and the disagreement should cite the current implementation. Do not silently omit the finding.
 
 One subsection per CodeRabbit pass. For each pass:
 
@@ -358,7 +395,7 @@ End with a summary table:
 Always the second-to-last section (before GitHub Review Comment). Structure:
 
 ```markdown
-**Verdict: {Approved / Approve with minor cleanup requested / Changes Requested / Request Changes}**
+**Verdict: {Approved / Changes Requested}**
 
 {One to two paragraphs summarising the overall quality of the PR and the reasoning behind the verdict.}
 
@@ -374,9 +411,10 @@ Always the second-to-last section (before GitHub Review Comment). Structure:
 If there are no blocking items, say so explicitly. Do not list non-blocking items as blocking.
 
 Verdict wording conventions:
-- `Approved` — all items resolved, ready to merge
-- `Approve with minor cleanup requested` — functionally correct, minor cosmetic/dead-code items remain
-- `Changes Requested` — one or more blocking items must be addressed before merge
+- `Approved` — no blocking items. Non-blocking items (Minor / Informational) may still be listed as recommendations; they do not gate merge.
+- `Changes Requested` — one or more blocking items must be addressed before merge.
+
+The verdict is strictly binary: an item either blocks merge or it does not. If you feel the need for a middle verdict ("approve but with cleanup"), reclassify the items — either they are blocking (verdict is `Changes Requested`) or they are not (verdict is `Approved` with a non-blocking list).
 
 ---
 
@@ -412,17 +450,23 @@ Always the last section. Contains ready-to-paste Markdown for posting directly a
 
 The comment must be self-contained — it should make sense to the PR author without needing to read the full review file. Include specific file paths, line references, and code examples in the comment itself.
 
+**Non-blocking cap:** at most three items by default (see Section 7, item 8, for the five-item stretch on very large PRs).
+
 **Backtick fence rule:** The outer fence wrapping the entire GitHub Review Comment block must use **at least one more backtick** than any fence inside it. If the comment body contains a ` ```diff ` or ` ```typescript ` block (3 backticks), the outer fence must use 4 backticks (` ```` `). If the body contains a 4-backtick fence, use 5 for the outer, and so on. Violating this causes the inner fence to close the outer one, breaking the raw-markdown display.
 
 ---
 
-## 6. Multi-Round PR Structure
+## 5. Multi-Round PR Structure
 
-If the PR has gone through one or more CHANGES_REQUESTED cycles, structure the file as multiple dated sections separated by triple `---` dividers:
+### 5.0 Identifying and structuring rounds
+
+A PR may have one or more review rounds if the author pushed additional commits after an initial review. Structure the file as one section per round (Initial Review, Follow-up Review, Final Review, etc.), separated by triple `---` dividers:
 
 ```
 ---
+
 ---
+
 ---
 
 ## Follow-up Review (YYYY-MM-DD)
@@ -434,9 +478,20 @@ If the PR has gone through one or more CHANGES_REQUESTED cycles, structure the f
 ...
 ```
 
-### 6.1 Read ALL comments before writing the follow-up
+**Handling force-pushed / rebased PRs.** If the author force-pushed and prior-round commit hashes no longer exist in the repo (`git cat-file -e {hash}` fails), do not silently produce broken commit citations. Instead:
 
-**Before drafting any follow-up review, re-fetch and re-read every comment on the PR — do not rely on the state captured in the previous round's review file.** Between rounds, authors and reviewers routinely post issue comments, inline review comments, and review-thread replies that resolve items *by explanation* rather than by code change. Missing these is the #1 cause of a follow-up incorrectly marking items NOT RESOLVED.
+1. Fetch prior review activity from GitHub's API — reviews and inline comments remain accessible by review ID even after force-push:
+   ```bash
+   gh api repos/tazama-lf/{repo-name}/pulls/{number}/reviews
+   gh api repos/tazama-lf/{repo-name}/pulls/{number}/comments
+   ```
+2. In the follow-up section, note the force-push explicitly: `**Note:** Prior round reviewed commit `{old-hash}` which no longer exists after force-push on {date}. Prior findings reconstructed from GitHub review API.`
+3. Reconcile each prior finding against the new HEAD by content (file + function + concern) rather than by commit range. Cite the current HEAD SHA for the new evidence.
+4. If the rewrite is extensive enough that prior findings cannot be mapped, treat this round as a fresh review and note the reason.
+
+### 5.1 Read ALL comments before writing the follow-up
+
+**Before drafting any follow-up review, re-fetch and re-read every comment on the PR — do not rely on the state captured in the previous round's review file.** Between rounds, authors and reviewers routinely post issue comments, inline review comments, and review-thread replies that resolve items *by explanation* rather than by code change.
 
 Concretely, run all four fetches again at the start of every follow-up round — not just the diff:
 
@@ -457,7 +512,7 @@ For every prior blocking or non-blocking item, check for author responses in *al
 
 Only mark an item `❌ Not resolved` after confirming there is no author response of any of the four kinds. If in doubt, quote the closest response verbatim and let the reader judge — don't silently assume silence.
 
-### 6.2 Follow-up section contents
+### 5.2 Follow-up section contents
 
 Each follow-up section contains:
 1. Resolution Status (one `### Item N` subsection per prior item) — every item must cite either the commit that fixed it OR the comment (with URL) that answered it OR an explicit `no author response` note. End with a summary table.
@@ -467,23 +522,21 @@ Each follow-up section contains:
 
 The Final Review section (only when the PR is closed out) replaces the Summary and Verdict section from the initial review and includes the definitive verdict with the complete resolution table.
 
-### 6.3 Append mode — do not rewrite prior rounds
+### 5.3 Append mode — do not rewrite prior rounds
 
 **When adding a follow-up round to an existing review file, append; never rewrite.** The prior round's Overview, What-Changed, Issues-and-Observations, Summary-and-Verdict, and GitHub-Review-Comment sections stay intact as the historical record — they capture what was known and posted at that time, and are the anchor for the author's follow-up response. Concretely:
 
 1. **Preserve everything above.** Do not edit prior-round headings, tables, verdict wording, or the initial GitHub Review Comment. If a prior-round claim turned out to be wrong, note the correction in the follow-up section rather than rewriting history.
 2. **Extend the Table of Contents.** Add nested entries for the new round (e.g. `- [Follow-up Review (YYYY-MM-DD)](#follow-up-review-yyyy-mm-dd)` with sub-entries for Resolution Status, New Issues, Updated Verdict, GitHub Review Comment). Do not remove the original single-round ToC entries.
-3. **Separator.** Insert a triple `---` divider (three `---` lines on their own with blank lines between, or run together — either is fine) between the previous round's final section and the new `## Follow-up Review (YYYY-MM-DD)` heading.
-4. **Header block for the new round.** Start with a metadata block covering: `Reviewed commit`, `Reviewed against` (which prior-round item set), `Delta reviewed` (`git diff prior..new --stat` one-liner), any force-push / rebase note per Section 4, and the `Developer response` quoted verbatim with a link to the issue-comment (`https://github.com/.../pull/{number}#issuecomment-{id}`).
-5. **Force-push handling.** If the branch was force-pushed and prior-round SHAs no longer exist on `origin`, follow Section 4's reconstruction rules — but still keep the prior round's SHA citations as-written. Note the force-push in the new round's metadata header.
+3. **Separator.** Insert a triple `---` divider (three `---` lines separated by blank lines) between the previous round's final section and the new `## Follow-up Review (YYYY-MM-DD)` heading.
+4. **Header block for the new round.** Start with a metadata block covering: `Reviewed commit`, `Reviewed against` (which prior-round item set), `Delta reviewed` (`git diff {prior-round-HEAD-SHA}..{new-HEAD-SHA} --stat` one-liner — note `prior` is the prior round's HEAD SHA, not the base branch), any force-push / rebase note per Section 5.0, and the `Developer response` quoted verbatim with a link to the issue-comment (`https://github.com/.../pull/{number}#issuecomment-{id}`).
+5. **Force-push handling.** If the branch was force-pushed and prior-round SHAs no longer exist on `origin`, follow Section 5.0's reconstruction rules — but still keep the prior round's SHA citations as-written. Note the force-push in the new round's metadata header.
 6. **One GitHub Review Comment per round.** Each round's `GitHub Review Comment` sub-section is independent. Do not merge or supersede the prior round's comment in-place. The reader can post the new comment on top of the prior thread; the historical comment stays in the file for reference.
-7. **Back-to-top links** still target the single H1 anchor at the top of the file, per Section 7.
-
-Result: a single file whose sections read top-to-bottom in chronological order, each round self-contained, with the newest round's GitHub Review Comment as the tail block.
+7. **Back-to-top links** still target the single H1 anchor at the top of the file, per Section 6.
 
 ---
 
-## 7. Quality Rules
+## 6. Quality Rules
 
 **Never speculate.** If you have not read the code, do not describe it. If the PR touches a file you cannot find in the cloned repos, say so.
 
@@ -493,16 +546,25 @@ Result: a single file whose sections read top-to-bottom in chronological order, 
 
 **Distinguish new from pre-existing.** If a problem exists in the codebase before this PR, say it is pre-existing. Do not ask authors to fix code they did not touch.
 
-**Severity is binary at the verdict level.** Either an item blocks merge or it does not. Do not leave ambiguity. Items with `Major` severity are blocking. Items with `Minor` or `Informational` severity are non-blocking recommendations.
-
 **Respect the PR scope.** Do not request refactors or cleanups that go beyond what the PR set out to do. Note out-of-scope concerns as observations, not blockers.
 
 **The GitHub Review Comment is the deliverable.** The full review file is the analysis. The GitHub comment is what the author sees. Make the comment actionable and self-contained.
 
-**Back-to-top links are required.** Every `##` section must have one. Use them consistently.
-
-**Section separators.** Use a single `---` between sections within a review round. Use triple `---` between review rounds (three `---` lines separated by blank lines, as shown in Section 6).
+**Section separators.** Use a single `---` between sections within a review round. Use triple `---` between review rounds (three `---` lines separated by blank lines, as shown in Section 5).
 
 **Back-to-top targets in multi-round files.** All back-to-top links point to the single H1 anchor at the very top of the file, regardless of which round the section belongs to. Do not create per-round back-to-top anchors — one file, one top.
 
-**Dates.** Use today's actual date for all review date fields (format: YYYY-MM-DD). Convert relative dates in PR comments to absolute dates before writing them.
+---
+
+## 7. Before You Submit — Self-Check
+
+Run through this list before writing the GitHub Review Comment. Each item takes seconds and catches a specific class of defect that has bitten reviews in this directory.
+
+1. **Verdict ↔ severity coherence.** Every `Major` in Issues and Observations must appear as a Blocking entry in Summary and Verdict, and vice versa. No `Minor`/`Informational` items sneak into Blocking. If the Blocking list is empty, the verdict is `Approved`, not `Changes Requested`.
+2. **Prior-round coverage (multi-round only).** Every item from the prior round has an explicit Resolution Status entry (RESOLVED / PARTIALLY RESOLVED / NOT RESOLVED / DECLINED / DEFERRED). No prior item is silently dropped.
+3. **Hunt coverage (Section 3.1).** Confirm you ran the four hunts — parallel-siblings, type/prop drift, label/boundary drift, guard/scope asymmetry. If CodeRabbit's review contains a `Major` you didn't independently catch, this check has failed; add the missed finding and record which hunt was skipped or is missing from 3.1.
+4. **Backtick-fence depth on the GitHub Review Comment.** Outer fence has strictly more backticks than any inner fence — see the Section 4 GitHub Review Comment rule.
+5. **Anchors resolve.** Every ToC entry corresponds to a real heading in the file; every back-to-top link targets the single H1 anchor.
+6. **Dates are absolute.** No relative dates ("yesterday", "last week", "Thursday") in the file — all converted to `YYYY-MM-DD` before writing. Get today's date from the environment (system context or `date` command) rather than guessing.
+7. **GitHub Review Comment is self-contained.** Cite file paths, line ranges, and short code examples in the comment body — the author must be able to act on the comment without opening the review file.
+8. **Non-blocking cap.** The GitHub Review Comment lists at most three non-blocking items by default. Bundle related trivia into one item, or leave them in the review file only. On very large PRs (~1500+ lines or ~30+ files) the cap may stretch to five if each remaining item represents a distinct defect class (type drift, label drift, dead code, test gap, etc.) — pick one representative per class and put the rest in the review file with a one-line pointer in the comment ("further minor observations are recorded in the review file"). The author reads the first three and skims the rest, so the cap protects actionability, not tidiness.
