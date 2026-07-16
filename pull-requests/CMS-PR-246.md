@@ -37,6 +37,11 @@
   - [New Issues Found in Updated Commits](#new-issues-found-in-updated-commits)
   - [Updated Verdict](#updated-verdict)
   - [GitHub Review Comment (Follow-up)](#github-review-comment-follow-up)
+- [Second Follow-up Review (2026-07-16)](#second-follow-up-review-2026-07-16)
+  - [Resolution Status (Round 2 items)](#resolution-status-round-2-items)
+  - [New Issues Found in Round 3 Commits](#new-issues-found-in-round-3-commits)
+  - [Final Verdict](#final-verdict)
+  - [GitHub Review Comment (Second Follow-up)](#github-review-comment-second-follow-up)
 
 ---
 
@@ -973,5 +978,264 @@ CodeRabbit's `exportUtils` finding (r3593362950) claims `getAssigneeFullName` re
 
 Great progress overall — the round-1 items look clean, and once (1) is patched with its test the rest is straightforward polish.
 ````
+
+[↑ Back to top](#pr-review-cms-246--feat-redesign-case-ageing-report-wire-report-filters-and-add-case-assignee-visibility)
+
+
+---
+
+---
+
+---
+
+## Second Follow-up Review (2026-07-16)
+
+**Reviewed commit:** `d81d1577` — *"fix: tooltip and investigatorWorkload fix"* (2026-07-16)
+**Reviewed against:** CHANGES_REQUESTED on commit `ab1dfe24` by `ahmad-paysys` (round-2: one blocking + eight non-blocking items) plus CodeRabbit's follow-up review on `ab1dfe24` (9 actionable + 3 nits).
+**Delta reviewed:** `git diff ab1dfe24..d81d1577 --stat` → 12 files, +56 / -22 across three commits (`416539fd`, `3f75ec16`, `d81d1577`).
+**HEAD SHA verified:** `d81d157740ad4c7868abf9924f331489034d671f`
+
+**Developer response** — round-2 → round-3 was driven entirely by inline replies on the CodeRabbit thread; the author annotated each item with either "fixed in the latest commit," "Not required," or "This is intentional." The relevant thread anchors:
+
+- Item F1 blocking (activeCases scopeFilters): `fixed in the latest commit` — [comment 3593554132](https://github.com/tazama-lf/case-management-system/pull/246#discussion_r3593554132) + spec extension [comment 3593553845](https://github.com/tazama-lf/case-management-system/pull/246#discussion_r3593553845).
+- Item F2 (page prop types): `fixed in the latest commit` — [comment 3593475099](https://github.com/tazama-lf/case-management-system/pull/246#discussion_r3593475099).
+- Item F3 ("16-30 days" label): `fixed in the latest commit` — [comment 3593519177](https://github.com/tazama-lf/case-management-system/pull/246#discussion_r3593519177) + service side [comment 3593519907](https://github.com/tazama-lf/case-management-system/pull/246#discussion_r3593519907).
+- Item F4 (caseDetails in Swagger): `fixed in the latest commit` — [comment 3593476146](https://github.com/tazama-lf/case-management-system/pull/246#discussion_r3593476146).
+- Item F5 (`mapEvidenceToTasks` fallback ID): `This is intentional` — [comment 3593393085](https://github.com/tazama-lf/case-management-system/pull/246#discussion_r3593393085). Author declines the fix.
+- Item F6 (tooltipType="none"): `fixed in the latest commit` — [comment 3593553582](https://github.com/tazama-lf/case-management-system/pull/246#discussion_r3593553582).
+- Item F7 (`??` → `||` in exportUtils): `Lint doesnt allow ||` / `Not required. the actual resolver never returns '' on this path` — [comment 3593385588](https://github.com/tazama-lf/case-management-system/pull/246#discussion_r3593385588) + [3593400219](https://github.com/tazama-lf/case-management-system/pull/246#discussion_r3593400219). CodeRabbit withdrew the finding.
+- Item F8 (CasesTable assignee `title`): no author response.
+- Item F9 (test-coverage nits): no author response.
+
+### Resolution Status (Round 2 items)
+
+#### Item F1 — `activeCases` in `getInvestigatorWorkload` bypasses `scopeFilters` *(BLOCKING)*
+
+**Status: RESOLVED**
+
+The one-line fix is in at [backend/src/modules/report/report.service.ts:713-722](repos/case-management-system/backend/src/modules/report/report.service.ts#L713-L722):
+
+```diff
+ this.prisma.case.count({
+   where: ReportsService.withNonContainerCaseFilter({
+     case_owner_user_id: caseOwnerUserId,
+     created_at: { gte: startDate, lte: endDate },
++    ...scopeFilters,
+     status: { notIn: [...ReportsService.CLOSED_STATUSES, CaseStatus.STATUS_00_DRAFT] },
+   }),
+ }),
+```
+
+The three siblings in the workload block (`activeCases` `case.count`, `pendingTasks` via `withNonContainerTaskCaseFilter(_, scopeFilters)`, and `efficiencyData` at line 759) now all share the same scope. The internal-consistency defect is closed.
+
+The requested spec assertion is at [backend/test/report.service.spec.ts:526-534](repos/case-management-system/backend/test/report.service.spec.ts#L526-L534):
+
+```typescript
+it('scopes the active-case count by tenant, case type, and priority', async () => {
+  await service.getInvestigatorWorkload('last30', { tenantId: 'tenant-123', caseType: 'AML', priority: 'HIGH' });
+
+  expect(prismaService.case.count).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: expect.objectContaining({ tenant_id: 'tenant-123', case_type: 'AML', priority: 'HIGH' }),
+    }),
+  );
+});
+```
+
+The test would fail if the spread ever regresses — exactly the coverage this class of bug needs. CodeRabbit confirmed at [comment 3593556620](https://github.com/tazama-lf/case-management-system/pull/246#discussion_r3593556620).
+
+#### Item F2 — Report-page prop types didn't get the `?` loosening
+
+**Status: RESOLVED**
+
+All three page prop declarations now match the round-1 hook/service shape:
+
+- [CaseAgeingReport.tsx:24](repos/case-management-system/frontend/src/features/reports/pages/CaseAgeingReport.tsx#L24)
+- [InvestigatorWorkloadReport.tsx:21](repos/case-management-system/frontend/src/features/reports/pages/InvestigatorWorkloadReport.tsx#L21)
+- [EvidenceFindingsReport.tsx:37](repos/case-management-system/frontend/src/features/reports/pages/EvidenceFindingsReport.tsx#L37)
+
+```diff
+- filters?: { caseType: string; priority: string; investigator: string };
++ filters?: { caseType?: string; priority?: string; investigator?: string };
+```
+
+Type honesty across every layer.
+
+#### Item F3 — Age-band label "16-30 days" doesn't match the `> 15 && < 30` boundary
+
+**Status: RESOLVED**
+
+Rename applied consistently across backend + Swagger + frontend + tests:
+
+- Backend: [report.service.ts:1181](repos/case-management-system/backend/src/modules/report/report.service.ts#L1181) — distribution label now `'16-29 days'`.
+- Swagger description: [report.controller.ts:453](repos/case-management-system/backend/src/modules/report/report.controller.ts#L453) — `casesOver15Days` description now `'open cases aged 16-29 days, non-overlapping with casesOver30Days'`.
+- Frontend components: [CaseAgeingBarChart.tsx](repos/case-management-system/frontend/src/features/reports/components/CaseAgeingBarChart.tsx#L23-L79) (AGE_BANDS + ChartRow + pct mapping — all three occurrences), [CaseAgeingPieChart.tsx](repos/case-management-system/frontend/src/features/reports/components/CaseAgeingPieChart.tsx#L15-L37) (`ageColors` + `allAgeRanges`), [CaseAgeingStatsCards.tsx:126](repos/case-management-system/frontend/src/features/reports/components/CaseAgeingStatsCards.tsx#L126) (`title="Cases 16-29 Days"`).
+- Type doc-string: [reports.types.ts:193](repos/case-management-system/frontend/src/features/reports/types/reports.types.ts#L193).
+- Tests updated: [CaseAgeingPieChart.test.tsx](repos/case-management-system/frontend/src/features/reports/components/__tests__/CaseAgeingPieChart.test.tsx) (fixture + legend assertion) and [CaseAgeingStatsCards.test.tsx](repos/case-management-system/frontend/src/features/reports/components/__tests__/CaseAgeingStatsCards.test.tsx) (describe title + card lookup + assertion). Backend spec comments also updated at [report.service.spec.ts:623 and 657](repos/case-management-system/backend/test/report.service.spec.ts).
+
+Internal keys (`age16to30`) intentionally preserved — this is a display-label change only, as recommended.
+
+**Note on completeness:** every `'16-30 days'` string literal touched in this PR was renamed; no callers of the old label remain in the tree.
+
+#### Item F4 — `caseDetails` missing from the Swagger response schema
+
+**Status: RESOLVED**
+
+New schema block at [report.controller.ts:511-531](repos/case-management-system/backend/src/modules/report/report.controller.ts#L511-L531) documents the array + item shape (`caseId`, `type`, `status`, `createdDate`, `ageDays`, `priority`, `investigatorId`), with a top-level description that names the open-backlog scope: *"Per-case rows backing the open-backlog table - same live, as-of-now snapshot as stats/ageingByStatus/ageingDistribution, ignores dateRange."* Generated clients now see the shape. The `investigatorId` field is documented as `nullable: true` with the "Unassigned" client-side note — consistent with the runtime.
+
+#### Item F5 — `mapEvidenceToTasks` fallback ID collision
+
+**Status: ➖ Declined by author**
+
+Author response at [comment 3593393085](https://github.com/tazama-lf/case-management-system/pull/246#discussion_r3593393085): *"This is intentional"*. CodeRabbit accepted the decision and moved on.
+
+I'd note this is only "safe" while upstream data hygiene guarantees at least one of `id`/`evidenceId`/`evidence_id` is present on every evidence item — a defensive `_${index}` costs nothing and locks the invariant into the code rather than the current state of the data. But it's a Minor and the author has weighed in; not blocking.
+
+#### Item F6 — `CaseAgeingBarChart` empty-helper bar in tooltip
+
+**Status: RESOLVED**
+
+One-line prop addition at [CaseAgeingBarChart.tsx:168](repos/case-management-system/frontend/src/features/reports/components/CaseAgeingBarChart.tsx#L168):
+
+```diff
+  fill="#e5e7eb"
+  barSize={18}
+  legendType="none"
++ tooltipType="none"
+  isAnimationActive={false}
+```
+
+Exact fix requested. CodeRabbit confirmed at [comment 3593556139](https://github.com/tazama-lf/case-management-system/pull/246#discussion_r3593556139).
+
+#### Item F7 — `exportUtils.ts` `??` vs `||`
+
+**Status: ➖ Declined by author (with valid reasoning)**
+
+Two responses at [3593385588](https://github.com/tazama-lf/case-management-system/pull/246#discussion_r3593385588) and [3593400219](https://github.com/tazama-lf/case-management-system/pull/246#discussion_r3593400219): the codebase has a lint rule blocking `||` in favour of `??` (CodeRabbit learned this and recorded a preference note), and the resolver actually never returns `''` on the live path — so the current `??` fallback is dead code and the swap wouldn't change behaviour. CodeRabbit explicitly withdrew the finding.
+
+Consistent with my round-2 partial-disagreement note.
+
+#### Item F8 — `CasesTable` assignee tooltip leaks raw user id
+
+**Status: NOT RESOLVED**
+
+No author response on this item, and the code is unchanged: [CasesTable.tsx:176](repos/case-management-system/frontend/src/features/cases/components/CasesTable.tsx#L176) still carries `<span title={c.assignee ?? ''}>`. The full display name is already visible in the cell, so the tooltip only surfaces the raw user id.
+
+This was Informational in round 2 (labelled "UX / Trivial") — carrying it forward as still-open Non-blocking; the author can address it here or in a follow-up. Not blocking.
+
+#### Item F9 — Test-coverage nits
+
+**Status: NOT RESOLVED**
+
+No changes to either test file since round 2:
+
+- [InvestigatorWorkloadReport.test.tsx](repos/case-management-system/frontend/src/features/reports/pages/__tests__/InvestigatorWorkloadReport.test.tsx) — still no explicit filters-forwarding test.
+- [reportsService.test.ts](repos/case-management-system/frontend/src/features/reports/services/__tests__/reportsService.test.ts) — the evidence-findings block still exercises a single all-filters-match fixture; a regression that broke exactly one of `caseType`/`priority`/`investigator` would still pass.
+
+Informational — carrying forward. Not blocking.
+
+| #  | Item                                                                          | Status                        |
+| -- | ----------------------------------------------------------------------------- | ----------------------------- |
+| F1 | `activeCases` in `getInvestigatorWorkload` bypasses `scopeFilters` (blocking) | ✅ Resolved                   |
+| F2 | Loosen the three report-page prop types                                       | ✅ Resolved                   |
+| F3 | Rename "16-30 days" → "16-29 days" everywhere                                 | ✅ Resolved                   |
+| F4 | Add `caseDetails` to Swagger response schema                                  | ✅ Resolved                   |
+| F5 | `mapEvidenceToTasks` fallback ID                                              | ➖ Declined by author          |
+| F6 | `CaseAgeingBarChart` empty-bar tooltip                                        | ✅ Resolved                   |
+| F7 | `exportUtils.ts` `??` → `||`                                                  | ➖ Declined (lint + dead path) |
+| F8 | Drop `CasesTable` assignee `title` attribute                                  | ❌ Not resolved (non-blocking) |
+| F9 | Two test-coverage nits                                                        | ❌ Not resolved (non-blocking) |
+
+### New Issues Found in Round 3 Commits
+
+Before writing this list I ran the Section 3.1 hunts against the round-3 delta:
+
+- **Parallel-siblings:** `scopeFilters` — now spread into `activeCases` (line 720), `pendingTasks` via helper (line 732), `efficiencyData` (line 759), and every other investigator-scoped `case.count`/`case.findMany` in the block (lines 792, 802, 813, 836, 845). No sibling is missed. ✅
+- **Type/prop drift:** `filters?` — the three page-level prop shapes are now all `{ caseType?: string; priority?: string; investigator?: string }`. `CaseStatusReport.tsx` (the parent) uses `useState({ caseType: '', priority: '', investigator: '' })`, which satisfies the loosened shape. `useReports.ts` and `reportsService.ts` already matched from round 2. No layer is out of sync. ✅
+- **Label/boundary drift:** `'16-30 days'` searched across the tree — no occurrences remain outside test comments that intentionally describe the old boundary as context. ✅
+- **Guard/scope asymmetry:** no new endpoints added in round 3. Existing endpoints unchanged. ✅
+
+No new blocking issues surfaced. Two very minor observations worth capturing:
+
+#### Issue R3-1 — `parseCaseType` / `parsePriority` now throw for `getInvestigatorWorkload`, changing error surface at that endpoint
+
+**Severity: Informational (Consistency)**
+
+The round-2 fix wired the validators through both `buildCommonCaseFilters` (case-ageing path) and `getInvestigatorWorkload` (line 685-686). So a call to `/investigator-workload?caseType=BOGUS` now surfaces a 400 `BadRequestException` where it previously would have returned an empty result set (because Prisma would filter by a value that doesn't exist as an enum). The behaviour is now consistent with case-ageing and is the desired shape, but if any monitoring/dashboard was previously eating a 200-with-empty-list for a bad query param, it will now see a 400. Worth calling out in the PR description or release notes so ops isn't surprised.
+
+Non-blocking observation, not a defect — this is exactly the tightening round-1 asked for, now uniformly applied.
+
+#### Issue R3-2 — `withNonContainerCaseFilter` composes `EXCLUDE_ABANDONED_FILTER` into a wrapping `AND` clause; a `status` key spread from `scopeFilters` would collide
+
+**Severity: Informational (Latent — no live defect)**
+
+Reading the round-3 diff at line 713-722 alongside the helper at [report.service.ts:130-136](repos/case-management-system/backend/src/modules/report/report.service.ts#L130-L136):
+
+```typescript
+private static withNonContainerCaseFilter(where: Prisma.CaseWhereInput = {}): Prisma.CaseWhereInput {
+  const andFilters = where.AND ? (Array.isArray(where.AND) ? where.AND : [where.AND]) : [];
+  return {
+    ...where,
+    AND: [...andFilters, ReportsService.NON_CONTAINER_CASE_FILTER, ReportsService.EXCLUDE_ABANDONED_FILTER],
+  };
+}
+```
+
+The helper spreads `where` first, then overwrites `AND`. If a future caller ever put a `status` key into `scopeFilters` (or, equivalently, a `case_id`/`tenant_id` collision with the wrapped filters), the outer object's key would take precedence over the inner `AND` — quiet, hard-to-notice behaviour. Currently `scopeFilters` only holds `case_type`/`priority`/`tenant_id`, none of which collide with `NON_CONTAINER_CASE_FILTER` or `EXCLUDE_ABANDONED_FILTER`, and the workload block also spreads `status: { notIn: [...] }` explicitly (line 721) — Prisma will accept multiple non-conflicting keys, but there's no defence against a future maintainer stuffing a status into `scopeFilters`.
+
+Purely an observation about the shape of the helper — nothing to fix in this PR. Flagging so it doesn't get lost.
+
+### Final Verdict
+
+**Verdict: Approved**
+
+Every blocking item from round 2 is cleanly resolved with the exact fix + spec assertion requested; four of the five Minor items are resolved as well; the remaining two Minor items (F8 assignee `title` and F9 test-coverage nits) are UX/coverage polish that I'm content to let ship or defer, and two are formally declined by the author with defensible reasons (F5 intentional, F7 blocked by codebase lint rule with a dead-code target anyway). The Round-3 delta itself is tight — 12 files, +56/-22, all mechanical follow-throughs of the round-2 items with no scope creep or side changes. Section 3.1 hunts across the delta surface no new defects.
+
+CI stays green (CodeQL, DCO, dependency-review, encoding, hadolint, node-ci build/style/tests, gpg-verify, njsscan, PR title validation) on the current HEAD `d81d1577`. CodeRabbit's confirmation replies on all resolved threads corroborate the fixes independently.
+
+### Blocking
+
+None.
+
+### Non-blocking (may be addressed in this PR or a follow-up)
+
+1. **`CasesTable` assignee `title` attribute** — drop the raw-id tooltip at [CasesTable.tsx:176](repos/case-management-system/frontend/src/features/cases/components/CasesTable.tsx#L176). One-line change.
+2. **Test-coverage nits** — filter-forwarding case in `InvestigatorWorkloadReport.test.tsx`; per-filter isolation in the evidence-findings block of `reportsService.test.ts`.
+3. **Release-note the `getInvestigatorWorkload` 400 shift** — bad `caseType`/`priority` query values now return `BadRequestException` where they previously returned an empty list (Issue R3-1).
+
+[↑ Back to top](#pr-review-cms-246--feat-redesign-case-ageing-report-wire-report-filters-and-add-case-assignee-visibility)
+
+---
+
+### GitHub Review Comment (Second Follow-up)
+
+`````markdown
+**Approved (second follow-up, HEAD `d81d1577`)**
+
+The blocking `activeCases` scope-filter fix is in cleanly — `...scopeFilters` is spread into the `case.count` at `backend/src/modules/report/report.service.ts:713-722` alongside its `pendingTasks` and `efficiencyData` siblings, and the new spec at `backend/test/report.service.spec.ts:526-534` asserts `tenant_id` + `case_type` + `priority` on that specific call, so the regression is locked in. Four of the five other round-2 items are also resolved (page prop types now optional, `16-29 days` label consistent across backend + Swagger + three frontend components + tests, `caseDetails` added to the Swagger response schema, `tooltipType="none"` on the empty helper `<Bar>`). The two declined items (`mapEvidenceToTasks` fallback ID = intentional; `??` → `||` = blocked by codebase lint rule with a dead-code target) are defensible calls — I'd have taken the defensive index-appending on the fallback ID, but not blocking on it. CI green.
+
+No new blocking issues introduced. Nothing else owed for this PR — the items below are nits and can land here or as a small follow-up PR.
+
+---
+
+### Non-blocking (optional cleanup)
+
+**1. Drop the raw-id `title` on the Cases dashboard assignee cell**
+
+`frontend/src/features/cases/components/CasesTable.tsx:176` — `<span title={c.assignee ?? ''}>` still shows the raw `case_owner_user_id` on hover. The full display name is already visible in the cell, so the tooltip adds nothing. Remove the `title` attribute.
+
+**2. Two small test-coverage nits**
+
+- `frontend/src/features/reports/pages/__tests__/InvestigatorWorkloadReport.test.tsx` — add a render-with-filters case to lock in `filters` prop forwarding (same pattern as the CaseAgeingReport test).
+- `frontend/src/features/reports/services/__tests__/reportsService.test.ts` — the evidence-findings block currently uses one all-filters-match fixture, so a regression that broke exactly one of `caseType`/`priority`/`investigator` would still pass. Add three fixtures where each differs from the match on exactly one filter.
+
+**3. Please mention the `getInvestigatorWorkload` error-shape change in the release notes**
+
+The round-1 `parseCaseType` / `parsePriority` validators now also fire from `getInvestigatorWorkload` (`backend/src/modules/report/report.service.ts:685-686`). A call to `/investigator-workload?caseType=BOGUS` now returns a `400 BadRequestException` where it previously returned an empty result set. This is the intended shape and consistent with the case-ageing endpoint, but it's a small breaking-for-clients change worth flagging so downstream monitoring isn't surprised.
+
+---
+
+Great progress across the three rounds — the discipline of spec-asserting the blocking fix (rather than just patching the code) is exactly right, and the label rename touched every consumer including the type doc-string and both test files. Nice work.
+`````
 
 [↑ Back to top](#pr-review-cms-246--feat-redesign-case-ageing-report-wire-report-filters-and-add-case-assignee-visibility)
