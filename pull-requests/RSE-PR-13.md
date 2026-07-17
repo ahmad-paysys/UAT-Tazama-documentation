@@ -29,6 +29,11 @@
 - [CodeRabbit Activity](#coderabbit-activity)
 - [Summary and Verdict](#summary-and-verdict)
 - [GitHub Review Comment](#github-review-comment)
+- [Follow-up Review (2026-07-17)](#follow-up-review-2026-07-17)
+  - [Changes Requested — Resolution Status](#changes-requested--resolution-status)
+  - [New Issues Found in Updated Commits](#new-issues-found-in-updated-commits)
+  - [Updated Verdict](#updated-verdict)
+  - [GitHub Review Comment (Follow-up)](#github-review-comment-follow-up)
 
 ---
 
@@ -354,6 +359,187 @@ Line 126: `docker build --build-arg GH_TOKEN=${GH_TOKEN} ...`. `docker history -
 **5. `frms-coe-lib` is pinned to `8.2.0-rc.6` — a release candidate.**
 
 Fine for the POC, but every new rule repo cloned from this template inherits an in-flight version. Follow up with a bump to GA once `8.2.0` lands.
+````
+
+[↑ Back to top](#pr-review-rse-13--feat-rule-deployment-workflow-updated)
+
+---
+
+---
+
+---
+
+## Follow-up Review (2026-07-17)
+
+**Reviewed commit:** `a5aedc0` — *"refactor: common variables targetted to 18 machine on default"* (2026-07-17)
+**Reviewed against:** CHANGES_REQUESTED on commit `81b43b3` by `ahmad-paysys` ([review 4722253769](https://github.com/tazama-lf/rule-studio-example/pull/13#pullrequestreview-4722253769), 2026-07-17)
+**Delta reviewed:** `81b43b3..a5aedc0` — 2 files changed, +57 / -28 lines (`deploy-to-uat.yml` +55/-27, `deploy.yml` +2/-2)
+**HEAD SHA verified:** `a5aedc04009e6515a3381f759f33540bc3c2de09`
+**New commits:** 2 (`09e15c9` "refactor: deploy to yat workflow made same", `a5aedc0` "refactor: common variables targetted to 18 machine on default")
+**Developer response:** No inline reply to the CHANGES_REQUESTED review itself; the two follow-up commits speak for the author. A separate reply on the new CodeRabbit nitpick pass says `"this is not applicable"` ([comment #5003810516](https://github.com/tazama-lf/rule-studio-example/pull/13#issuecomment-5003810516)) — that response applies to the Pass-2 CodeRabbit nitpicks, not to the prior blocking items.
+
+The delta is exactly the mirror-into-UAT that the initial review's Blocking (1) asked for, plus the defaults roll-back that Blocking (3) asked for. No new features, no scope expansion.
+
+[↑ Back to top](#pr-review-rse-13--feat-rule-deployment-workflow-updated)
+
+---
+
+### Changes Requested — Resolution Status
+
+#### Item 1 — `deploy-to-uat.yml` will fail `npm ci` with 401
+
+**Status: RESOLVED** (commit `09e15c9`)
+
+The `Modify Rule Executer Files` step is replaced by `Modify Rule Executer Dockerfile` ([`deploy-to-uat.yml:61-88`](repos/rule-studio-example/.github/workflows/deploy-to-uat.yml#L61-L88)) which now:
+
+- Runs under `shell: bash` with `set -euo pipefail`.
+- Prepends `# syntax=docker/dockerfile:1.4` (idempotently — deletes any prior syntax directive first).
+- Rewrites both the builder `RUN --mount=type=secret,id=GH_TOKEN,env=GH_TOKEN npm ci --ignore-scripts` and the production `RUN --mount=type=secret,id=GH_TOKEN,env=GH_TOKEN npm ci --omit=dev --ignore-scripts` lines to the stricter `required=true GH_TOKEN="$(cat /run/secrets/GH_TOKEN)"` form.
+- Ends with a `grep -n -A2 -B2 'npm ci' "$DOCKERFILE"` sanity print.
+
+Complementary changes:
+- `Configure npm for GitHub Packages` ([lines 105-119](repos/rule-studio-example/.github/workflows/deploy-to-uat.yml#L105-L119)) now uses a heredoc, `set -euo pipefail`, and `cp "$HOME/.npmrc" "rule-executer-$RULE_NAME/.npmrc"` — matching `deploy.yml`.
+- `Build Docker Image` ([lines 146-156](repos/rule-studio-example/.github/workflows/deploy-to-uat.yml#L146-L156)) switches to `docker build --secret id=GH_TOKEN,env=GH_TOKEN -t "$ORG/$RULE_NAME:latest" "rule-executer-$RULE_NAME"`.
+
+UAT is now structurally identical to prod for the clone + patch + npm + build chain. `npm ci` will authenticate correctly against `npm.pkg.github.com`.
+
+#### Item 2 — `deploy-to-uat.yml` still passes `GH_TOKEN` as `--build-arg`
+
+**Status: RESOLVED** (commit `09e15c9`)
+
+Same fix as Item 1. Line 152-155 now uses `docker build --secret id=GH_TOKEN,env=GH_TOKEN ...`. `GH_TOKEN` is no longer captured in Docker image history. Prod and UAT security posture are aligned.
+
+#### Item 3 — Silent default change for `RUNNER_LABEL` and `SERVER_IP`
+
+**Status: RESOLVED** (commit `a5aedc0`)
+
+`deploy.yml` line 19 now defaults to `server-18` (was `server-35` in the reviewed commit); line 23 defaults `SERVER_IP` to `10.10.80.18` (was `10.10.80.35`):
+
+```diff
+-    - ${{ vars.RUNNER_LABEL || 'server-35' }}
++    - ${{ vars.RUNNER_LABEL || 'server-18' }}
+...
+-      SERVER_IP: ${{ vars.SERVER_IP || '10.10.80.35' }}
++      SERVER_IP: ${{ vars.SERVER_IP || '10.10.80.18' }}
+```
+
+This restores the pre-PR runtime target for every rule repo that has not set `vars.RUNNER_LABEL` / `vars.SERVER_IP`. The variables remain overridable, so environments already opted-in to `server-35` / `10.10.80.35` (or any other host) can continue via repo/org vars. No silent breakage on merge.
+
+Note: `deploy-to-uat.yml` line 21 still defaults `SERVER_IP` to `10.10.80.37` — this matches the pre-PR hardcoded UAT host, so no behavioural change for UAT consumers.
+
+#### Item 4 — `deploy-to-uat.yml` `Update Rule Dependency Name` hardcodes `@psl-copilot`
+
+**Status: RESOLVED** (commit `09e15c9`)
+
+Every previously-hardcoded `@psl-copilot` in UAT is now `@$ORG` (with `ORG: ${{ github.repository_owner }}` added to the workflow env at line 20):
+
+- Line 92 (log): `@$ORG/$RULE_NAME@latest`.
+- Line 95 (`npm pkg set`): `dependencies.rule=npm:@$ORG/$RULE_NAME@latest`.
+- Line 133 (`npm install --save-exact`): `rule@npm:@$ORG/$RULE_NAME@latest`.
+- Line 154 (docker build tag): `"$ORG/$RULE_NAME:latest"`.
+- Line 192 (docker run image): `$ORG/$RULE_NAME:latest`.
+
+Template is now tenant-neutral for UAT as well as prod.
+
+#### Item 5 — `frms-coe-lib` pinned to `8.2.0-rc.6`
+
+**Status: ➖ Declined by author** (deferred to Justus / template maintainer)
+
+Per the initial review, this was flagged as non-blocking with an implicit "raise with maintainer" note. The author's initial GitHub Review Comment version of this item ([review 4722253769](https://github.com/tazama-lf/rule-studio-example/pull/13#pullrequestreview-4722253769)) rephrased it as *"This note is directly for Justus. The `frms-coe-lib` version management for rules needs a closer look here."* — i.e. the author agrees the RC pin is worth revisiting but treats it as out of scope for this PR. No code change. Acceptable — carry forward as a follow-up ticket rather than a merge blocker.
+
+#### Item 6 — `sed` `/g` vs no `/g` mismatch between `deploy.yml` and `deploy-to-uat.yml`
+
+**Status: RESOLVED** (commit `09e15c9`)
+
+UAT line 75 is now `sed -i "s/placeholder/$RULE_ID/g" "$DOCKERFILE"` — matches `deploy.yml`. The two workflows now use identical patch semantics.
+
+#### Summary table
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | `deploy-to-uat.yml` `npm ci` 401 (BuildKit patch + `.npmrc` copy + `--secret` build) | ✅ Resolved (`09e15c9`) |
+| 2 | `deploy-to-uat.yml` `--build-arg GH_TOKEN` leak to image history | ✅ Resolved (`09e15c9`) |
+| 3 | Silent default change `RUNNER_LABEL` / `SERVER_IP` in `deploy.yml` | ✅ Resolved (`a5aedc0`) |
+| 4 | UAT hardcodes `@psl-copilot` (should use `@$ORG`) | ✅ Resolved (`09e15c9`) |
+| 5 | `frms-coe-lib` pinned to `8.2.0-rc.6` (RC) | ➖ Declined — follow-up ticket for maintainer |
+| 6 | `sed` `/g` mismatch between prod and UAT | ✅ Resolved (`09e15c9`) |
+
+[↑ Back to top](#pr-review-rse-13--feat-rule-deployment-workflow-updated)
+
+---
+
+### New Issues Found in Updated Commits
+
+I ran the four Section 3.1 hunts (parallel-siblings, type/prop drift, label/boundary drift, guard/scope asymmetry) against the `81b43b3..a5aedc0` delta.
+
+- **Parallel-siblings.** The delta is *itself* the sibling alignment — every step in `deploy-to-uat.yml` that had drifted from `deploy.yml` is now in lockstep (Dockerfile patch, `.npmrc` generation, docker build, `$ORG` substitution, `/g` on `sed`). The two workflows are now materially identical for the clone + patch + build chain. No new asymmetry introduced.
+- **Type/prop drift.** N/A — pure workflow YAML, no shared types.
+- **Label/boundary drift.** The default `SERVER_IP` in `deploy.yml` changed from `10.10.80.35` back to `10.10.80.18`; the PR body ("Replaced hardcoded deployment server IPs with the configurable `SERVER_IP` variable") is still accurate for both values. No stale user-facing string to update.
+- **Guard/scope asymmetry.** New env var `ORG` and new `SERVER_IP` var are wired identically at every consumer in the UAT workflow. Nothing missed.
+
+**CodeRabbit Pass 2** (on `a5aedc0`, [review 4722514944](https://github.com/tazama-lf/rule-studio-example/pull/13#pullrequestreview-4722514944)) produced three nitpicks, all on `deploy-to-uat.yml`, all rated 🔵 Trivial:
+
+| Finding | Severity (CodeRabbit) | My assessment |
+|---------|----------------------|---------------|
+| Quote `$SERVER_IP`, `$RULE_NAME`, `$ORG` in the `docker run` block (lines 163-192) | 🔵 Trivial | Valid observation but low-value: `RULE_NAME` = `github.event.repository.name` (GitHub sanitises to `[A-Za-z0-9._-]`), `ORG` = `github.repository_owner` (same sanitisation), `SERVER_IP` comes from a workflow variable set by an operator. None can legitimately contain whitespace. **Informational — not new**; the same unquoted pattern exists in `deploy.yml` and was not flagged in the prior round. Author declined ("this is not applicable"). Agree with the author. |
+| Lowercase `ORG` for Docker/npm compatibility (`ORG=${ORG,,}`) | 🔵 Trivial | Real concern in theory — Docker image tags and npm scopes require lowercase. However, `github.repository_owner` for the actual consumer orgs (`tazama-lf`, `psl-copilot`) is already lowercase, so no runtime failure. **Informational — not new**; identical pattern in `deploy.yml` line 21 with the same lowercase-org assumption, and was not flagged in the prior round. Acceptable to defer. |
+| Consolidate `Update Rule Dependency Name` + `Generate package-lock.json` + `Install Latest Rule Version` into one `npm install --save-exact` step | 🔵 Trivial | The three-step sequence is redundant (the final `Install Latest Rule Version` step deletes + re-installs what the first step just wrote), but the wasted work is a few seconds and the split is arguably easier to reason about in the Actions log. **Informational — pre-existing**; the pattern was already present at HEAD `81b43b3` and not flagged in the prior round. Non-blocking. |
+
+None of the three rises to a new blocking or non-blocking item on top of what was already carried into round 1. Recording them here for the record; no action required for merge.
+
+[↑ Back to top](#pr-review-rse-13--feat-rule-deployment-workflow-updated)
+
+---
+
+### Updated Verdict
+
+**Verdict: Approved**
+
+All three round-1 blocking items are resolved by commits `09e15c9` and `a5aedc0`:
+
+- The UAT workflow is now a faithful mirror of `deploy.yml` for the Dockerfile-patch + `.npmrc` + BuildKit-secret build chain, so `npm ci` will authenticate correctly against the `dev`-branch `rule-executer` (Blocking 1), and `GH_TOKEN` no longer leaks to image history on UAT (Blocking 2).
+- `deploy.yml` defaults roll back to the pre-PR `server-18` / `10.10.80.18` targets, preserving behaviour for every rule repo that hasn't opted-in to a new host via `vars.RUNNER_LABEL` / `vars.SERVER_IP` (Blocking 3).
+
+Round-1 Non-blocking item 4 (UAT hardcodes `@psl-copilot`) is also fully resolved. Item 5 (`frms-coe-lib` RC pin) remains declined-and-deferred to the maintainer, which was already acceptable in round 1.
+
+Round-2 CodeRabbit nitpicks (unquoted vars, uppercase-`ORG` risk, redundant npm steps) are Informational, all present in `deploy.yml` since round 1, and the author has stated they are not applicable for this PR. Agree — none block merge.
+
+Recommend merge once a human reviewer approves.
+
+### Blocking
+
+_None._
+
+### Non-blocking follow-ups (post-merge)
+
+1. **`frms-coe-lib` GA bump.** When `8.2.0` GA lands, bump the template so new rule repos inherit a stable version rather than `-rc.6`. Track separately.
+2. **Reusable workflow.** `deploy.yml` and `deploy-to-uat.yml` are now materially identical for the clone + patch + npm + build chain. Extracting the shared logic into a composite action or reusable workflow would prevent future drift. Not urgent — track separately.
+
+[↑ Back to top](#pr-review-rse-13--feat-rule-deployment-workflow-updated)
+
+---
+
+### GitHub Review Comment (Follow-up)
+
+````markdown
+**Approved (follow-up, HEAD `a5aedc0`)**
+
+All three blocking items from the prior round are resolved:
+
+1. **UAT `npm ci` 401 — fixed** (commit `09e15c9`). `deploy-to-uat.yml` now mirrors `deploy.yml`: Dockerfile patched under `set -euo pipefail` to rewrite the `dev`-branch `RUN --mount=type=secret,id=GH_TOKEN,env=GH_TOKEN npm ci ...` lines into the `required=true GH_TOKEN="$(cat /run/secrets/GH_TOKEN)"` form; `.npmrc` copied into the build context; and the build switched to `docker build --secret id=GH_TOKEN,env=GH_TOKEN -t "$ORG/$RULE_NAME:latest" "rule-executer-$RULE_NAME"`.
+2. **UAT `--build-arg GH_TOKEN` leak — fixed** (commit `09e15c9`). Same treatment as (1); token no longer lands in image history.
+3. **Silent default host change — fixed** (commit `a5aedc0`). `deploy.yml` defaults are back to `server-18` / `10.10.80.18`, so rule repos without explicit `vars.RUNNER_LABEL` / `vars.SERVER_IP` retain their pre-PR targets. Env variables remain overridable for opting in to other hosts.
+
+Prior non-blocking (4) `@psl-copilot` hardcodes in UAT are also all replaced with `@$ORG`. Prior non-blocking (5) `frms-coe-lib` RC pin remains — carry forward as a follow-up when `8.2.0` GA lands, per the author's note to Justus.
+
+CodeRabbit's Pass-2 nitpicks (unquoted docker-run vars, uppercase-`ORG` risk, redundant npm steps) are Informational and the same patterns exist in `deploy.yml`; the author's *"this is not applicable"* reply is fine for this PR.
+
+### Post-merge follow-ups (non-blocking, track separately)
+
+- Bump `@tazama-lf/frms-coe-lib` to `8.2.0` GA when it lands and update the template pin.
+- Extract the now-identical clone + patch + npm + build chain from `deploy.yml` and `deploy-to-uat.yml` into a composite action / reusable workflow to prevent future drift.
+
+Recommend merge once a human reviewer signs off.
 ````
 
 [↑ Back to top](#pr-review-rse-13--feat-rule-deployment-workflow-updated)
