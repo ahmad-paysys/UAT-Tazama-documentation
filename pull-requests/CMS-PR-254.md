@@ -13,19 +13,31 @@
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [What Changed (Detailed)](#what-changed-detailed)
-  - [1. `backend/src/modules/gold-lakehouse/alerts-lakehouse.service.ts` — prefix-match EFRuP in SQL and TS](#1-backendsrcmodulesgold-lakehousealerts-lakehouseservicets--prefix-match-efrup-in-sql-and-ts)
-  - [2. `frontend/src/features/alerts/components/AlertsDetailModal.tsx` — prefix-match EFRuP in the modal extractor](#2-frontendsrcfeaturesalertscomponentsalertsdetailmodaltsx--prefix-match-efrup-in-the-modal-extractor)
-  - [3. Test additions — bumped version + weighted-EFRuP coverage](#3-test-additions--bumped-version--weighted-efrup-coverage)
-- [Code Quality Analysis](#code-quality-analysis)
-  - [Strengths](#strengths)
-  - [Issues and Observations](#issues-and-observations)
-- [Security Assessment](#security-assessment)
-- [Test Coverage](#test-coverage)
-- [CodeRabbit Activity](#coderabbit-activity)
-- [Summary and Verdict](#summary-and-verdict)
-- [GitHub Review Comment](#github-review-comment)
+- [Initial Review (2026-07-17)](#initial-review-2026-07-17)
+  - [Overview](#overview)
+  - [What Changed (Detailed)](#what-changed-detailed)
+    - [1. `backend/src/modules/gold-lakehouse/alerts-lakehouse.service.ts` — prefix-match EFRuP in SQL and TS](#1-backendsrcmodulesgold-lakehousealerts-lakehouseservicets--prefix-match-efrup-in-sql-and-ts)
+    - [2. `frontend/src/features/alerts/components/AlertsDetailModal.tsx` — prefix-match EFRuP in the modal extractor](#2-frontendsrcfeaturesalertscomponentsalertsdetailmodaltsx--prefix-match-efrup-in-the-modal-extractor)
+    - [3. Test additions — bumped version + weighted-EFRuP coverage](#3-test-additions--bumped-version--weighted-efrup-coverage)
+  - [Code Quality Analysis](#code-quality-analysis)
+    - [Strengths](#strengths)
+    - [Issues and Observations](#issues-and-observations)
+  - [Security Assessment](#security-assessment)
+  - [Test Coverage](#test-coverage)
+  - [CodeRabbit Activity](#coderabbit-activity)
+  - [Summary and Verdict](#summary-and-verdict)
+  - [GitHub Review Comment](#github-review-comment)
+- [Follow-up Review (2026-07-17)](#follow-up-review-2026-07-17)
+  - [Changes Requested — Resolution Status](#changes-requested--resolution-status)
+  - [New Issues Found in Updated Commits](#new-issues-found-in-updated-commits)
+  - [Updated Verdict](#updated-verdict)
+  - [GitHub Review Comment (Follow-up)](#github-review-comment-follow-up)
+
+---
+
+## Initial Review (2026-07-17)
+
+*(Original single-round content preserved verbatim below; the `##`-level section headings are kept as-is per Section 5.3 "append; never rewrite". Read them as sub-sections of this Initial Review.)*
 
 ---
 
@@ -263,5 +275,171 @@ export class AlertsLakehouseService extends GoldLakehouseService {
 
 The pre-existing negative test still reads `"does not display an EFRuP badge when no rule has id EFRuP@1.0.0"`. Under the new prefix semantics, `"...when no rule id starts with EFRuP@"` is more accurate. The test body is correct; only the title drifted.
 ````
+
+[↑ Back to top](#pr-review-cms-254--fix-match-efrup-rule-id-by-prefix-instead-of-pinning-to-efrup100)
+
+---
+
+---
+
+---
+
+## Follow-up Review (2026-07-17)
+
+**Reviewed commit:** `4f0758f0983f53c7c5af7068929dc395c56b26bc` — *"fix: prettier fix"* (2026-07-17)
+**Reviewed against:** `CHANGES_REQUESTED` on commit `f304ec9a` by `ahmad-paysys` (2026-07-17)
+**Delta reviewed:** `git diff f304ec9a..4f0758f0 --stat` → 4 files, +33 / -9 lines
+**Developer response:** No standalone written response in the PR thread; the author addressed both non-blocking items by code push (`d785f0c1` "fix: code rabbit fix", then `3b190d36` "fix: Assignee filter based on case owner", then `4f0758f0` "fix: prettier fix").
+**HEAD SHA verified:** `4f0758f0983f53c7c5af7068929dc395c56b26bc`
+**CI status:** All 15 checks `SUCCESS` on HEAD `4f0758f0` (CodeQL, njsscan, nodejsscan, dependency-review, node-ci build/style/tests, hadolint, encoding, DCO, GPG-verify, conventional-commit title, CodeRabbit).
+
+The follow-up commits do two things: (1) address both non-blocking items from the initial review, and (2) introduce a **new, unrelated bug fix** for the Assignee filter in `case-query.service.ts`. That second change is scope-expansion — it is a real bug fix (the assignee filter was being silently ignored for investigator-scoped listings), but it is orthogonal to the EFRuP prefix-matching subject of the PR. Assessed on merits below.
+
+[↑ Back to top](#pr-review-cms-254--fix-match-efrup-rule-id-by-prefix-instead-of-pinning-to-efrup100)
+
+---
+
+### Changes Requested — Resolution Status
+
+#### Item 1 — Lift `EFRUP_RULE_ID_PREFIX` to a class-level `private static readonly`
+
+**Status: RESOLVED**
+
+Fixed in commit `d785f0c1` ("fix: code rabbit fix"). The constant now lives at class scope:
+
+```ts
+@Injectable()
+export class AlertsLakehouseService extends GoldLakehouseService {
+  private static readonly EFRUP_RULE_ID_PREFIX = 'EFRuP@';
+  // ...
+}
+```
+
+All three call sites (SQL `LIKE`, `flowProcessorRule.find`, `triggeredRulesData.filter`) now reference `AlertsLakehouseService.EFRUP_RULE_ID_PREFIX`. Done exactly as requested — matches the `escapeSqlString` / `clampPositiveInteger` pattern, discoverable at the top of the class.
+
+#### Item 2 — Rename the stale test title in `AlertsDetailModal.test.tsx`
+
+**Status: RESOLVED**
+
+Fixed in the same commit. The `it(...)` title at line 457 now reads:
+
+```ts
+it("does not display an EFRuP badge when no rule id starts with EFRuP@", async () => {
+```
+
+Test body is unchanged (as expected — the body was already correct); only the title now matches the prefix semantics.
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | Lift `EFRUP_RULE_ID_PREFIX` to `private static readonly` on `AlertsLakehouseService` | ✅ Resolved (commit `d785f0c1`) |
+| 2 | Rename stale test title at `AlertsDetailModal.test.tsx:457` | ✅ Resolved (commit `d785f0c1`) |
+
+[↑ Back to top](#pr-review-cms-254--fix-match-efrup-rule-id-by-prefix-instead-of-pinning-to-efrup100)
+
+---
+
+### New Issues Found in Updated Commits
+
+Commit `3b190d36` ("fix: Assignee filter based on case owner") introduces a bug fix in `backend/src/modules/case/services/case-query.service.ts` that is unrelated to EFRuP prefix matching. The change moves the assignee filter application (`ownerId` / `unassignedOnly` → `case_owner_user_id`) out of the general-users `else` branch and up into the shared `baseFilters` block.
+
+#### Change summary — `case-query.service.ts`
+
+```diff
+   if (priority) baseFilters.priority = priority;
+   if (caseType) baseFilters.case_type = caseType;
+   if (tenantId) baseFilters.tenant_id = tenantId;
++  // Assignee filtering applies to every role.  Keeping it in the shared
++  // base filters ensures an investigator's selected assignee narrows the
++  // result set instead of being ignored by the investigator visibility
++  // branch below.
++  if (ownerId) baseFilters.case_owner_user_id = ownerId;
++  if (unassignedOnly) baseFilters.case_owner_user_id = null;
+   ...
+
+-  // Apply additional filters to baseFilters if needed
+-  if (ownerId) baseFilters.case_owner_user_id = ownerId;
+-  if (unassignedOnly) baseFilters.case_owner_user_id = null;
+```
+
+**Before:** the assignee filter lines sat inside the third branch (general users, after `else if (investigatorUserId)`), so the filter was silently ignored for investigator-scoped listings and for compliance-officer-scoped listings — a real bug because the frontend `useCaseDashboard` hook wires the `assigneeFilter` UI control into `ownerId` unconditionally (see `frontend/src/features/cases/hooks/useCaseDashboard.ts:219` — `ownerId: assigneeFilter || undefined`), so an investigator selecting an assignee had no effect.
+
+**After:** `baseFilters.case_owner_user_id` is set once before all three branches, so it AND-composes with each branch's role-based scope. In particular:
+
+- **Compliance officer branch** (line 587): now AND-narrows to cases owned by `ownerId` on top of `status = STATUS_82_CLOSED_CONFIRMED`.
+- **Investigator branch** (line 598): now AND-composes `baseFilters.case_owner_user_id = ownerId` with the investigator-visibility `OR` (self / self-assigned tasks / null / DRAFT-or-READY). The intersection means an investigator filtering by an assignee only sees cases where the assignee narrowing agrees with the visibility set — e.g. filtering by *another* investigator's id returns rows only if that investigator's ownership is also DRAFT / READY. The added test `applies an assignee filter to investigator-visible cases` locks this contract in place.
+- **General users** (line 649): unchanged effective behaviour — the filter was already applied there, just via a different line.
+
+#### Issue 4 — `unassignedOnly` still silently overrides `ownerId` if both are truthy (pre-existing, not touched by this PR)
+
+**Severity: Informational (Pre-existing)**
+
+The two lines are sequential unconditional assignments to the same key:
+
+```ts
+if (ownerId) baseFilters.case_owner_user_id = ownerId;
+if (unassignedOnly) baseFilters.case_owner_user_id = null;
+```
+
+If the caller passes both `ownerId = 'foo'` and `unassignedOnly = true`, the result is `case_owner_user_id: null` — `unassignedOnly` wins. This is the same behaviour as before the PR (the two lines are just relocated), so it is not a regression. Worth noting that the frontend appears to send these as mutually exclusive controls, so the practical exposure is low. Not blocking, not requested — flagging for future consideration only.
+
+#### Issue 5 — Compliance-officer branch of the ownerId fix is untested
+
+**Severity: Informational (Test Coverage)**
+
+The new test `applies an assignee filter to investigator-visible cases` (backend/test/case-query.service.spec.ts:571) covers the investigator branch. The commit's fix also newly benefits the compliance-officer branch (line 587 — an ownerId filter passed to a compliance officer will now narrow the `STATUS_82_CLOSED_CONFIRMED` result set). There is no matching test for that branch. The bug likelihood is low (compliance-officer flows typically use different filtering) and the fix is symmetric with the investigator case, so this is Informational, not blocking. If the assignee filter is exposed to compliance officers in the UI, a mirror-test would be valuable.
+
+#### Issue 6 — Scope-expansion: unrelated bug fix bundled into an EFRuP prefix-matching PR
+
+**Severity: Minor (Maintainability)**
+
+The PR title, description, and initial diff are all about EFRuP prefix matching. Commit `3b190d36` inserts an unrelated fix for the assignee filter in `case-query.service.ts`. This complicates future `git bisect` if a regression is later suspected — a bisecting engineer looking for "when did the EFRuP fix land?" will land on the same PR as the assignee fix. Two independent PRs would have been cleaner. Not blocking (the fix is correct and well-tested for the investigator path), but worth flagging so the pattern doesn't compound.
+
+[↑ Back to top](#pr-review-cms-254--fix-match-efrup-rule-id-by-prefix-instead-of-pinning-to-efrup100)
+
+---
+
+### Updated Verdict
+
+**Verdict: Approved**
+
+Both non-blocking items from the initial review are resolved (constant lifted to `private static readonly`; stale test title renamed). The scope-expansion commit (`3b190d36`) is a genuine, correctly-implemented bug fix for a silently-ignored assignee filter, with an accompanying investigator-branch test. Full-stack behaviour after the follow-up: EFRuP prefix matching at every layer, plus the assignee filter now honoured for investigators. All 15 CI checks pass on `4f0758f0`.
+
+#### Blocking
+
+None.
+
+#### Non-blocking but recommended
+
+1. **(Optional) Mirror the investigator-branch test for the compliance-officer branch.** The assignee filter fix now affects both branches; only the investigator path has coverage. Low priority — the fix is symmetric and the compliance-officer path is narrower.
+2. **(Optional) In future, keep bundled bug-fixes in separate PRs.** The EFRuP fix and the assignee-filter fix are logically independent; two PRs would have kept `git bisect` and the review history cleaner.
+
+[↑ Back to top](#pr-review-cms-254--fix-match-efrup-rule-id-by-prefix-instead-of-pinning-to-efrup100)
+
+---
+
+### GitHub Review Comment (Follow-up)
+
+`````markdown
+**Approved (follow-up, HEAD `4f0758f0`)**
+
+Both non-blocking items from the prior round are resolved:
+
+- ✅ `EFRUP_RULE_ID_PREFIX` is now a `private static readonly` on `AlertsLakehouseService` (commit `d785f0c1`).
+- ✅ Stale test title at `AlertsDetailModal.test.tsx:457` is renamed to `"...when no rule id starts with EFRuP@"` (same commit).
+
+The follow-up also bundles an unrelated but genuine bug fix in `backend/src/modules/case/services/case-query.service.ts` (commit `3b190d36`) that hoists the `ownerId` / `unassignedOnly` assignments into shared `baseFilters` so the assignee filter is no longer silently ignored for investigator-scoped listings. The new backend test `applies an assignee filter to investigator-visible cases` locks the investigator-branch contract in place. All 15 CI checks pass.
+
+---
+
+### Non-blocking (please address in this PR if possible)
+
+**1. Mirror the investigator-branch assignee-filter test for the compliance-officer branch**
+
+The `ownerId` hoist in `case-query.service.ts` now narrows both the investigator branch (line ~598) and the compliance-officer branch (line ~587). Only the investigator path is tested in `backend/test/case-query.service.spec.ts:571`. If the assignee filter is exposed to compliance officers in the UI, a mirror test would help lock in the symmetric behaviour. Low priority; the fix itself is correct.
+
+**2. In future, keep independent bug fixes in separate PRs**
+
+This PR's title and description are strictly about EFRuP prefix matching; the assignee-filter fix in `3b190d36` is orthogonal. Two PRs would keep `git bisect` and the review history cleaner if a regression is later suspected. Non-blocking for this merge — flagging for the next similar situation.
+`````
 
 [↑ Back to top](#pr-review-cms-254--fix-match-efrup-rule-id-by-prefix-instead-of-pinning-to-efrup100)
