@@ -15,27 +15,35 @@
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [What Changed (Detailed)](#what-changed-detailed)
-  - [1. backend/src/modules/report/report.service.ts — new scope helper, closed-throughput consolidation, resolutionByOutcome, dynamic trend, status formatter](#1-backendsrcmodulesreportreportservicets)
-  - [2. backend/src/modules/report/report.controller.ts — Swagger updates](#2-backendsrcmodulesreportreportcontrollerts)
-  - [3. backend/test/report.service.spec.ts — spec updates for the new shape](#3-backendtestreportservicespects)
-  - [4. frontend CaseAgeingStatsCards.tsx — rewrite atop shared StatsCard](#4-frontend-caseageingstatscardstsx)
-  - [5. frontend CaseAgeingReport.tsx — layout re-slot, wire up resolutionByOutcome](#5-frontend-caseageingreporttsx)
-  - [6. frontend ResolutionByOutcomeChart.tsx (new)](#6-frontend-resolutionbyoutcomecharttsx)
-  - [7. frontend CaseAgeingTable.tsx — drop User ID column](#7-frontend-caseageingtabletsx)
-  - [8. frontend PieChart.tsx — legend label collapsed to one span](#8-frontend-piecharttsx)
-  - [9. frontend types + service + tests](#9-frontend-types--service--tests)
-- [Code Quality Analysis](#code-quality-analysis)
-  - [Strengths](#strengths)
-  - [Issues and Observations](#issues-and-observations)
-- [Security Assessment](#security-assessment)
-- [Test Coverage](#test-coverage)
-- [CodeRabbit Activity](#coderabbit-activity)
-- [Summary and Verdict](#summary-and-verdict)
-- [GitHub Review Comment](#github-review-comment)
+- [Initial Review (2026-07-17)](#initial-review-2026-07-17)
+  - [Overview](#overview)
+  - [What Changed (Detailed)](#what-changed-detailed)
+    - [1. backend/src/modules/report/report.service.ts — new scope helper, closed-throughput consolidation, resolutionByOutcome, dynamic trend, status formatter](#1-backendsrcmodulesreportreportservicets)
+    - [2. backend/src/modules/report/report.controller.ts — Swagger updates](#2-backendsrcmodulesreportreportcontrollerts)
+    - [3. backend/test/report.service.spec.ts — spec updates for the new shape](#3-backendtestreportservicespects)
+    - [4. frontend CaseAgeingStatsCards.tsx — rewrite atop shared StatsCard](#4-frontend-caseageingstatscardstsx)
+    - [5. frontend CaseAgeingReport.tsx — layout re-slot, wire up resolutionByOutcome](#5-frontend-caseageingreporttsx)
+    - [6. frontend ResolutionByOutcomeChart.tsx (new)](#6-frontend-resolutionbyoutcomecharttsx)
+    - [7. frontend CaseAgeingTable.tsx — drop User ID column](#7-frontend-caseageingtabletsx)
+    - [8. frontend PieChart.tsx — legend label collapsed to one span](#8-frontend-piecharttsx)
+    - [9. frontend types + service + tests](#9-frontend-types--service--tests)
+  - [Code Quality Analysis](#code-quality-analysis)
+    - [Strengths](#strengths)
+    - [Issues and Observations](#issues-and-observations)
+  - [Security Assessment](#security-assessment)
+  - [Test Coverage](#test-coverage)
+  - [CodeRabbit Activity](#coderabbit-activity)
+  - [Summary and Verdict](#summary-and-verdict)
+  - [GitHub Review Comment](#github-review-comment)
+- [Follow-up Review (2026-07-17)](#follow-up-review-2026-07-17)
+  - [Changes Requested — Resolution Status](#changes-requested--resolution-status)
+  - [New Issues Found in Updated Commits](#new-issues-found-in-updated-commits)
+  - [Updated Verdict](#updated-verdict)
+  - [GitHub Review Comment (Follow-up)](#github-review-comment-follow-up)
 
 ---
+
+## Initial Review (2026-07-17)
 
 ## Overview
 
@@ -419,6 +427,179 @@ Also flagged in the review file (I keep a longer one locally):
 - The `PieChart` legend collapsed to a single bold span loses the muted-label / bold-percentage hierarchy the previous two-span layout had.
 
 Further minor observations are recorded in the review file.
+````
+
+[↑ Back to top](#pr-review-cms-262--fix-scope-case-ageing-report-to-ownedassigned-work-and-align-its-widgets-with-case-status)
+
+---
+
+---
+
+---
+
+## Follow-up Review (2026-07-17)
+
+**Reviewed commit:** `2ee227a9` — *"fix: Change request"* (2026-07-17)
+**Reviewed against:** CHANGES_REQUESTED on commit `12a0b20a` by `ahmad-paysys` ([review](https://github.com/tazama-lf/case-management-system/pull/262#pullrequestreview-4722676787))
+**Delta reviewed:** `git diff 12a0b20a..2ee227a9 --stat` → 2 files changed, 103 insertions(+), 29 deletions(-) — backend `report.service.ts` and `report.service.spec.ts` only.
+**HEAD SHA verified:** `2ee227a90afa682f67701b13555489929cff75e0`
+**CI:** All checks passing (`node-ci / check tests` still in-progress at fetch time — all other checks SUCCESS). CodeRabbit still rate-limited: it queued a review at 12:42:49 for the new HEAD but did not produce findings.
+**Developer response:** ([comment](https://github.com/tazama-lf/case-management-system/pull/262#issuecomment-5003394951))
+> 1) Pie Chart legends are set this way due to white space between both span issue.
+> 2) Different closure require different bars even if they are sibling cases.
+> 3) formatStatusName is as per the requirement of Case Ageing User Story provided on git.
+
+The developer's numbering is her own (not aligned to the review's Issue N ordering); mapping is inferred from wording — see each Item below.
+
+### Changes Requested — Resolution Status
+
+#### Item 1 — `resolutionTrend` still loads full-range `closedCases` on `dateRange=all`
+
+**Status: RESOLVED**
+
+Addressed via a *separate* bounded trend query rather than by narrowing the shared `closedCases` fetch. In [`backend/src/modules/report/report.service.ts:1310-1327`](repos/case-management-system/backend/src/modules/report/report.service.ts#L1310-L1327):
+
+```typescript
+const trendCases =
+  earliestTrendBucket > startDate
+    ? await this.prisma.case.findMany({
+        where: this.applyOwnedOrAssignedScope(
+          {
+            ...commonFilters,
+            status: { in: ReportsService.CLOSED_STATUSES },
+            updated_at: { gte: earliestTrendBucket, lte: endDate },
+          },
+          filters?.requestingUserId,
+        ),
+        select: { created_at: true, updated_at: true },
+      })
+    : closedCases;
+```
+
+`resolutionTrend` now iterates `trendCases`; `avgResolutionTime` and `resolutionByOutcome` still iterate the full-window `closedCases`. Net: on `dateRange=all` the trend payload is capped to the visible 24-month window instead of the tenant's full close history. Trade-off is one extra round-trip on `dateRange=all` (or any range >24 months); on ≤24-month ranges `trendCases = closedCases` (reference reuse, no extra query). Reasonable design choice.
+
+A new bucketing map (`trendDaysByMonth`) is introduced so the trend groups once instead of filtering every case per bucket — nice O(N) rewrite of a previously O(N·B) loop.
+
+Test coverage added at [`backend/test/report.service.spec.ts:752-773`](repos/case-management-system/backend/test/report.service.spec.ts#L752-L773): asserts the bounded trend query fires with `updated_at.gte = new Date(2024, 3, 1)` for `dateRange='all'`. Locks the fix in place.
+
+#### Item 2 — `ResolutionByOutcomeChart` re-runs `formatStatusName` on already-formatted server output
+
+**Status: ➖ Declined by author**
+
+Author response (quoting item 3 of the developer comment):
+> formatStatusName is as per the requirement of Case Ageing User Story provided on git.
+
+Reading this as a scope decision: the developer is treating the client-side `formatStatusName` as required by the user story spec, whether or not the backend also formats. The client-side function remains in place. Non-blocking to begin with, and pre-existing in `CaseAgeingBarChart.tsx:32` — leaving as declined.
+
+#### Item 3 — Sibling closed statuses render as separate bars in `resolutionByOutcome`
+
+**Status: ➖ Declined by author**
+
+Author response (item 2 of the developer comment):
+> Different closure require different bars even if they are sibling cases.
+
+Confirmed as intentional product decision — `STATUS_82_CLOSED_CONFIRMED` and `STATUS_71_AUTOCLOSED_CONFIRMED` remain separate bars by design. Widget behaviour unchanged.
+
+#### Item 4 (was non-blocking observation) — `PieChart` legend loses the muted-label visual hierarchy
+
+**Status: ➖ Declined by author**
+
+Author response (item 1 of the developer comment):
+> Pie Chart legends are set this way due to white space between both span issue.
+
+The single-span collapse was chosen to fix a whitespace-between-spans rendering artefact. Declined — accepted as a deliberate visual trade-off.
+
+#### Item 5 (was non-blocking observation) — `caseTypeResolution` re-runs the full `findMany` under a caseType filter
+
+**Status: ❌ Not resolved (no author response)**
+
+No comment addresses this observation; the code at [`backend/src/modules/report/report.service.ts:1298-1307`](repos/case-management-system/backend/src/modules/report/report.service.ts#L1298-L1307) is unchanged. It was Informational to begin with and non-blocking.
+
+#### Summary table
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | `resolutionTrend` loaded full-range `closedCases` on `dateRange=all` | ✅ Resolved (bounded trend query + regression test) |
+| 2 | Client-side `formatStatusName` no-op in `ResolutionByOutcomeChart` | ➖ Declined by author (per user story spec) |
+| 3 | Sibling closed statuses render as separate bars | ➖ Declined by author (intentional product decision) |
+| 4 | `PieChart` legend lost muted-label hierarchy | ➖ Declined by author (whitespace fix) |
+| 5 | `caseTypeResolution` extra `findMany` under caseType filter | ❌ Not resolved (no author response, Informational only) |
+
+### New Issues Found in Updated Commits
+
+The follow-up commit also introduced a **new behaviour change** beyond the requested items: unowned drafts are now excluded from the Case Ageing open backlog. The reviewer notes this because it isn't a fix to any prior comment — it's a scoping tightening. Analysing it on its own merits:
+
+#### Issue A — Unowned drafts excluded from open backlog (new scope narrowing)
+
+**Severity: Informational (Behavioural change, out-of-scope for this PR's stated goal but consistent with it)**
+
+In [`backend/src/modules/report/report.service.ts:1158-1170`](repos/case-management-system/backend/src/modules/report/report.service.ts#L1158-L1170):
+
+```typescript
+// An unowned draft is excluded too, alongside the closed/abandoned
+// statuses already excluded by CLOSED_STATUSES - nobody's actively
+// ageing a case that hasn't even been claimed yet. A draft that already
+// has an owner is real work-in-progress and still counts.
+const openWhere = this.applyOwnedOrAssignedScope(
+  {
+    ...commonFilters,
+    status: { notIn: ReportsService.CLOSED_STATUSES },
+    NOT: { status: CaseStatus.STATUS_00_DRAFT, case_owner_user_id: null },
+  },
+  filters?.requestingUserId,
+);
+```
+
+Prisma treats multiple fields inside a `NOT` object as an AND — so this excludes only rows where `status = STATUS_00_DRAFT` AND `case_owner_user_id IS NULL`. Owned drafts still land in `openCases`, and the pre-existing comment on `ageingByStatus` was updated to spell this out (an owned draft still gets a row).
+
+Semantically consistent with the PR's headline goal (Case Ageing is about the investigator's *own* backlog — an unowned draft has no investigator to age against). But this is a **product-facing decision** the reviewer didn't ask for: previously, `applyOwnedOrAssignedScope`'s OR clause already required a case be owned-by / assigned-to the investigator, so unowned drafts were already invisible per-investigator. The new `NOT` clause matters at the *tenant-admin* path (no `requestingUserId` → scope helper short-circuits, `openWhere` still applies the NOT), and at edge cases where a draft is owned but somehow reaches the OR clause.
+
+Non-blocking. Worth confirming with product that "tenant-admin views should not see unowned drafts in Case Ageing" is intentional — the reviewer reads the code as saying yes, but the PR description doesn't mention it.
+
+Test coverage added at [`backend/test/report.service.spec.ts:620-637`](repos/case-management-system/backend/test/report.service.spec.ts#L620-L637): asserts the `where.NOT` clause is issued and that an owned draft survives the mock. Locks the fix in place.
+
+### Updated Verdict
+
+**Verdict: Approved**
+
+The only blocking-tier concern from the initial round was flagged as non-blocking there too (Issue 1, Minor / Performance), and it was addressed with a targeted second query plus a regression test — the developer chose the alternative fix path (separate bounded query rather than narrowing the shared fetch), which is a defensible read of the two options I suggested. The remaining prior observations were declined with product-side rationale or left as informational-only.
+
+The new commit also introduced an unrelated tightening (unowned drafts excluded from open backlog) — non-blocking, code and comments are internally consistent, and coverage is in place. Worth flagging to product for confirmation, but does not gate merge.
+
+CI remained green throughout; `node-ci / check tests` was still in-progress at fetch time but every other check passed on the new HEAD.
+
+#### Blocking
+
+None.
+
+#### Non-blocking
+
+1. **Unowned-draft exclusion is a new scope decision not previewed in the PR description** — Issue A. Confirm with product owner that tenant-admin Case Ageing should also hide unowned drafts.
+
+[↑ Back to top](#pr-review-cms-262--fix-scope-case-ageing-report-to-ownedassigned-work-and-align-its-widgets-with-case-status)
+
+---
+
+## GitHub Review Comment (Follow-up)
+
+````markdown
+**Approved (follow-up, HEAD `2ee227a9`)**
+
+The perf floor on the trend query lands cleanly — you took the alternative option (separate bounded `findMany` for the trend when the trend window is narrower than the aggregate window) rather than narrowing the shared fetch, and added a regression test that asserts the `updated_at.gte` boundary. Nice touch also converting the per-bucket filter loop into a single group-by pass. The remaining prior comments (client-side `formatStatusName`, separate bars per closed status, PieChart legend) — all noted as intentional per your reply and the user story, leaving as declined.
+
+One new behaviour to double-check with product before merge (non-blocking):
+
+**Unowned drafts are now excluded from the Case Ageing open backlog**
+
+The new [`backend/src/modules/report/report.service.ts:1158-1170`](backend/src/modules/report/report.service.ts#L1158-L1170) adds `NOT: { status: CaseStatus.STATUS_00_DRAFT, case_owner_user_id: null }` to `openWhere`. Prisma treats that as `status = DRAFT AND owner IS NULL`, so unowned drafts are hidden while owned drafts still count — internally consistent with the `applyOwnedOrAssignedScope` narrowing and with the comment updates on `ageingByStatus`.
+
+Two things worth noting:
+- For per-investigator calls this is a no-op — `applyOwnedOrAssignedScope`'s OR clause already required the case be owned-by / assigned-to the investigator.
+- For **tenant-admin calls** (no `requestingUserId`) the scope helper short-circuits, so this `NOT` clause is the *only* thing hiding unowned drafts from the tenant-admin view of Case Ageing.
+
+That second behaviour isn't in the PR description. If product wants tenant-admin Case Ageing to hide unowned drafts, this is correct as-is. If tenant-admin should still see the pending claimable pool in Case Ageing, this is a regression. Worth a quick confirmation.
+
+No blocking items.
 ````
 
 [↑ Back to top](#pr-review-cms-262--fix-scope-case-ageing-report-to-ownedassigned-work-and-align-its-widgets-with-case-status)
