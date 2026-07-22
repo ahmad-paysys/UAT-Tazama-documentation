@@ -402,3 +402,9 @@ Short (under 70 characters).
 **Dates.** Use today's actual date for Report Date and Study Date fields.
 
 **Cross-issue dependencies.** If Track A or Track B touches a file that another open issue also modifies, call it out explicitly in the impact file and recommended sequencing. The Preflight step (Section 0) already covers the initial scan — revisit it once you know the full file list for both tracks and update the Cross-Issue Dependencies section accordingly.
+
+## 7. Committing your work
+
+`commits.md` at the repository root is the source of truth for how commits are made in this repo. After processing an issue — before you `git add` anything — read `commits.md` and follow it. Do this every time, even if you have processed issues in this repo before. The rules there override any general commit habits.
+
+In particular: one file per commit, never commit anything under `repos/`, `solutions/`, or `UAT-BOARD/`, never commit secrets, and never push to a remote.
