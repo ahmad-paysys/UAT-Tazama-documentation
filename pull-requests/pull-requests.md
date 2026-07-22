@@ -568,3 +568,9 @@ Run through this list before writing the GitHub Review Comment. Each item takes 
 6. **Dates are absolute.** No relative dates ("yesterday", "last week", "Thursday") in the file — all converted to `YYYY-MM-DD` before writing. Get today's date from the environment (system context or `date` command) rather than guessing.
 7. **GitHub Review Comment is self-contained.** Cite file paths, line ranges, and short code examples in the comment body — the author must be able to act on the comment without opening the review file.
 8. **Non-blocking cap.** The GitHub Review Comment lists at most three non-blocking items by default. Bundle related trivia into one item, or leave them in the review file only. On very large PRs (~1500+ lines or ~30+ files) the cap may stretch to five if each remaining item represents a distinct defect class (type drift, label drift, dead code, test gap, etc.) — pick one representative per class and put the rest in the review file with a one-line pointer in the comment ("further minor observations are recorded in the review file"). The author reads the first three and skims the rest, so the cap protects actionability, not tidiness.
+
+## 8. Committing your work
+
+`commits.md` at the repository root is the source of truth for how commits are made in this repo. After processing a PR — before you `git add` anything — read `commits.md` and follow it. Do this every time, even if you have processed PRs in this repo before. The rules there override any general commit habits.
+
+In particular: one file per commit, never commit anything under `repos/`, `solutions/`, or `UAT-BOARD/`, never commit secrets, and never push to a remote.
